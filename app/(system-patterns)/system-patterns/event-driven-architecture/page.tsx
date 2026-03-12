@@ -1,224 +1,567 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { ServerNode } from "@/components/server-node";
-import { BeforeAfter } from "@/components/before-after";
-import { InteractiveDemo } from "@/components/interactive-demo";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
+import { BeforeAfter } from "@/components/before-after";
+import { Playground } from "@/components/playground";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Radio, Zap, ArrowRight, Inbox, Send, CheckCircle2 } from "lucide-react";
+import { Zap, Plus, Minus, Clock, ArrowRight, RotateCcw } from "lucide-react";
+import { MarkerType } from "@xyflow/react";
 
-function EventBusViz() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 10), 900);
-    return () => clearInterval(t);
-  }, []);
+type Subscriber = { id: string; label: string; speed: number; status: "healthy" | "warning" | "idle" };
 
-  const producers = [
-    { name: "Order Svc", event: "OrderPlaced" },
-    { name: "Payment Svc", event: "PaymentProcessed" },
-  ];
+const DEFAULT_SUBSCRIBERS: Subscriber[] = [
+  { id: "email", label: "Email Service", speed: 80, status: "idle" },
+  { id: "inventory", label: "Inventory Service", speed: 200, status: "idle" },
+  { id: "analytics", label: "Analytics Service", speed: 400, status: "idle" },
+];
 
-  const consumers = [
-    { name: "Email", subscribedTo: "OrderPlaced" },
-    { name: "Analytics", subscribedTo: "OrderPlaced" },
-    { name: "Shipping", subscribedTo: "PaymentProcessed" },
-    { name: "Receipts", subscribedTo: "PaymentProcessed" },
-  ];
+const EXTRA_SUBSCRIBERS: Subscriber[] = [{ id: "shipping", label: "Shipping Service", speed: 150, status: "idle" }, { id: "loyalty", label: "Loyalty Service", speed: 300, status: "idle" }];
 
-  const activeProducer = tick < 5 ? 0 : 1;
-  const eventInFlight = tick % 5 >= 1 && tick % 5 <= 3;
-  const eventDelivered = tick % 5 >= 4;
-  const activeEvent = producers[activeProducer].event;
+function EventBusPlayground() {
+  const [subscribers, setSubscribers] = useState<Subscriber[]>(DEFAULT_SUBSCRIBERS);
+  const [eventPhase, setEventPhase] = useState<"idle" | "publishing" | "routing" | "processing" | "done">("idle");
+  const [processingProgress, setProcessingProgress] = useState<Record<string, number>>({});
+  const [latencyData, setLatencyData] = useState<Record<string, number>[]>([]);
+  const [eventCount, setEventCount] = useState(0);
+
+  const placeOrder = useCallback(() => {
+    if (eventPhase !== "idle" && eventPhase !== "done") return;
+    setEventPhase("publishing");
+    setProcessingProgress({});
+
+    setTimeout(() => {
+      setEventPhase("routing");
+      setTimeout(() => {
+        setEventPhase("processing");
+        const startTime = Date.now();
+
+        subscribers.forEach((sub) => {
+          const interval = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(100, (elapsed / sub.speed) * 100);
+            setProcessingProgress((prev) => ({ ...prev, [sub.id]: progress }));
+            if (progress >= 100) clearInterval(interval);
+          }, 50);
+
+          setTimeout(() => {
+            clearInterval(interval);
+            setProcessingProgress((prev) => ({ ...prev, [sub.id]: 100 }));
+          }, sub.speed);
+        });
+
+        const maxSpeed = Math.max(...subscribers.map((s) => s.speed));
+        setTimeout(() => {
+          setEventPhase("done");
+          setEventCount((c) => c + 1);
+          const newPoint: Record<string, number> = { event: eventCount + 1 };
+          subscribers.forEach((sub) => {
+            newPoint[sub.label] = sub.speed + Math.round(Math.random() * 30 - 15);
+          });
+          setLatencyData((prev) => [...prev.slice(-7), newPoint]);
+        }, maxSpeed + 100);
+      }, 400);
+    }, 500);
+  }, [eventPhase, subscribers, eventCount]);
+
+  const addSubscriber = useCallback(() => {
+    const available = EXTRA_SUBSCRIBERS.filter(
+      (es) => !subscribers.find((s) => s.id === es.id)
+    );
+    if (available.length > 0) {
+      setSubscribers((prev) => [...prev, available[0]]);
+    }
+  }, [subscribers]);
+
+  const removeSubscriber = useCallback(() => {
+    if (subscribers.length > 1) {
+      setSubscribers((prev) => prev.slice(0, -1));
+    }
+  }, [subscribers]);
+
+  const subscriberStatuses = subscribers.map((sub) => {
+    const progress = processingProgress[sub.id] ?? 0;
+    if (eventPhase === "processing" && progress < 100) return "warning";
+    if (eventPhase === "done" || progress >= 100) return "healthy";
+    return "idle";
+  });
+
+  const nodes: FlowNode[] = useMemo(() => {
+    const subNodes: FlowNode[] = subscribers.map((sub, i) => ({
+      id: sub.id,
+      type: "serverNode",
+      position: { x: 420, y: 20 + i * 90 },
+      data: {
+        label: sub.label,
+        sublabel: processingProgress[sub.id] !== undefined
+          ? `${Math.round(processingProgress[sub.id])}%`
+          : `${sub.speed}ms`,
+        status: subscriberStatuses[i],
+        handles: { left: true, right: false, top: false, bottom: false },
+      },
+    }));
+
+    return [
+      {
+        id: "order",
+        type: "clientNode",
+        position: { x: 0, y: (subscribers.length * 90) / 2 - 30 },
+        data: {
+          label: "Order Service",
+          sublabel: eventPhase === "publishing" ? "Publishing..." : "Producer",
+          status: eventPhase === "publishing" ? "warning" : "healthy",
+          handles: { right: true, left: false, top: false, bottom: false },
+        },
+      },
+      {
+        id: "bus",
+        type: "queueNode",
+        position: { x: 210, y: (subscribers.length * 90) / 2 - 30 },
+        data: {
+          label: "Event Bus",
+          sublabel: eventPhase === "routing" ? "Routing..." : "Kafka",
+          status: eventPhase === "routing" ? "warning" : "healthy",
+          handles: { left: true, right: true, top: false, bottom: false },
+        },
+      },
+      ...subNodes,
+    ];
+  }, [subscribers, eventPhase, processingProgress, subscriberStatuses]);
+
+  const edges: FlowEdge[] = useMemo(() => {
+    const orderToBus: FlowEdge = {
+      id: "order-bus",
+      source: "order",
+      target: "bus",
+      animated: eventPhase === "publishing" || eventPhase === "routing",
+      style: eventPhase === "publishing" || eventPhase === "routing"
+        ? { stroke: "#8b5cf6", strokeWidth: 2 }
+        : { stroke: "#6b7280", strokeWidth: 1.5 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: eventPhase === "publishing" ? "#8b5cf6" : "#6b7280" },
+    };
+
+    const busToSubs: FlowEdge[] = subscribers.map((sub) => {
+      const progress = processingProgress[sub.id] ?? 0;
+      const isActive = eventPhase === "routing" || (eventPhase === "processing" && progress < 100);
+      const isDone = progress >= 100;
+      return {
+        id: `bus-${sub.id}`,
+        source: "bus",
+        target: sub.id,
+        animated: isActive,
+        style: {
+          stroke: isDone ? "#10b981" : isActive ? "#8b5cf6" : "#6b7280",
+          strokeWidth: isActive || isDone ? 2 : 1.5,
+        },
+        markerEnd: { type: MarkerType.ArrowClosed, color: isDone ? "#10b981" : isActive ? "#8b5cf6" : "#6b7280" },
+      };
+    });
+
+    return [orderToBus, ...busToSubs];
+  }, [subscribers, eventPhase, processingProgress]);
+
+  const chartKeys = subscribers.map((s) => s.label);
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
-        {/* Producers */}
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/50 text-center mb-1">Producers</div>
-          {producers.map((p, i) => (
-            <div
-              key={p.name}
+    <Playground
+      title="Event Bus Playground"
+      canvasHeight="min-h-[340px]"
+      controls={false}
+      canvas={
+        <div className="p-2 h-full">
+          <FlowDiagram
+            nodes={nodes}
+            edges={edges}
+            fitView
+            interactive={false}
+            allowDrag={false}
+            minHeight={300}
+          />
+        </div>
+      }
+      explanation={
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={placeOrder}
+              disabled={eventPhase === "publishing" || eventPhase === "routing" || eventPhase === "processing"}
               className={cn(
-                "rounded-lg border px-3 py-2 text-center transition-all duration-500",
-                activeProducer === i && tick % 5 >= 1
-                  ? "border-blue-500/30 bg-blue-500/10"
-                  : "border-border/30 bg-muted/20"
+                "rounded-lg px-4 py-2 text-sm font-medium transition-all",
+                eventPhase === "idle" || eventPhase === "done"
+                  ? "bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 border border-violet-500/30"
+                  : "bg-muted/30 text-muted-foreground/40 border border-border/30 cursor-not-allowed"
               )}
             >
-              <div className="text-xs font-semibold">{p.name}</div>
-              <div className={cn(
-                "text-[10px] font-mono mt-0.5 transition-all duration-300",
-                activeProducer === i && tick % 5 >= 1
-                  ? "text-blue-400 opacity-100"
-                  : "text-muted-foreground/30 opacity-50"
-              )}>
-                {p.event}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Event Bus */}
-        <div className="flex flex-col items-center gap-2">
-          <div className={cn(
-            "rounded-xl border-2 px-4 py-6 flex flex-col items-center gap-1.5 transition-all duration-500",
-            eventInFlight
-              ? "border-violet-500/40 bg-violet-500/10 shadow-lg shadow-violet-500/5"
-              : "border-border/40 bg-muted/20"
-          )}>
-            <Radio className={cn(
-              "size-5 transition-colors",
-              eventInFlight ? "text-violet-400" : "text-muted-foreground/40"
-            )} />
-            <span className="text-[10px] font-semibold">Event Bus</span>
-            <span className="text-[9px] text-muted-foreground/50">Kafka</span>
+              <Zap className="size-4 inline mr-1.5" />
+              Place Order
+            </button>
+            <button
+              onClick={addSubscriber}
+              disabled={subscribers.length >= DEFAULT_SUBSCRIBERS.length + EXTRA_SUBSCRIBERS.length}
+              className="rounded-lg px-3 py-2 text-sm border border-border/30 bg-muted/20 text-muted-foreground hover:bg-muted/40 disabled:opacity-30 transition-all"
+            >
+              <Plus className="size-4 inline mr-1" />
+              Add
+            </button>
+            <button
+              onClick={removeSubscriber}
+              disabled={subscribers.length <= 1}
+              className="rounded-lg px-3 py-2 text-sm border border-border/30 bg-muted/20 text-muted-foreground hover:bg-muted/40 disabled:opacity-30 transition-all"
+            >
+              <Minus className="size-4 inline mr-1" />
+              Remove
+            </button>
           </div>
-          {eventInFlight && (
-            <div className="text-[10px] font-mono text-violet-400 animate-pulse">
-              routing...
+
+          <p className={cn("text-xs", eventPhase === "publishing" || eventPhase === "routing" ? "text-violet-400" : eventPhase === "processing" ? "text-amber-400" : eventPhase === "done" ? "text-emerald-400" : "text-muted-foreground")}>
+            {eventPhase === "idle" && "Click \"Place Order\" to publish an OrderPlaced event to the bus."}
+            {eventPhase === "publishing" && "Order Service is publishing an event..."}
+            {eventPhase === "routing" && "Event Bus routing to all subscribers..."}
+            {eventPhase === "processing" && "Subscribers processing at their own speeds..."}
+            {eventPhase === "done" && "All processed! Try adding a subscriber, then sending another."}
+          </p>
+
+          {latencyData.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Processing Latency per Subscriber</p>
+              <LiveChart
+                type="latency"
+                data={latencyData}
+                dataKeys={{
+                  x: "event",
+                  y: chartKeys,
+                  label: chartKeys,
+                }}
+                height={160}
+                showLegend
+              />
             </div>
           )}
         </div>
-
-        {/* Consumers */}
-        <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/50 text-center mb-1">Consumers</div>
-          {consumers.map((c) => {
-            const isTarget = c.subscribedTo === activeEvent;
-            const isLit = isTarget && eventDelivered;
-            return (
-              <div
-                key={c.name}
-                className={cn(
-                  "rounded-lg border px-2.5 py-1.5 text-center transition-all duration-500",
-                  isLit
-                    ? "border-emerald-500/30 bg-emerald-500/10"
-                    : isTarget && eventInFlight
-                    ? "border-yellow-500/20 bg-yellow-500/5"
-                    : "border-border/20 bg-muted/10"
-                )}
-              >
-                <div className={cn(
-                  "text-xs font-medium transition-colors",
-                  isLit ? "text-emerald-400" : "text-muted-foreground/60"
-                )}>{c.name}</div>
-                <div className="text-[9px] text-muted-foreground/30">{c.subscribedTo}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <p className="text-[11px] text-muted-foreground/60 text-center">
-        {tick % 5 === 0 && `${producers[activeProducer].name} about to publish...`}
-        {tick % 5 === 1 && `Publishing "${activeEvent}" to the event bus`}
-        {tick % 5 === 2 && "Event bus receives and persists the event"}
-        {tick % 5 === 3 && `Routing to all subscribers of "${activeEvent}"`}
-        {tick % 5 === 4 && "Each consumer processes independently, at its own pace"}
-      </p>
-    </div>
+      }
+    />
   );
 }
 
-function ChoreographyVsOrchestrationViz() {
-  const [mode, setMode] = useState<"choreography" | "orchestration">("choreography");
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 6), 1200);
-    return () => clearInterval(t);
-  }, []);
+function SyncVsAsyncComparison() {
+  const sim = useSimulation({ intervalMs: 600, maxSteps: 12 });
 
-  const choreoSteps = [
-    { from: "Order", event: "OrderPlaced", to: "Payment" },
-    { from: "Payment", event: "PaymentDone", to: "Inventory" },
-    { from: "Inventory", event: "Reserved", to: "Shipping" },
-    { from: "Shipping", event: "Shipped", to: "Email" },
-  ];
+  const syncServices = ["Order", "Inventory", "Email", "Response"];
+  const asyncServices = ["Order", "Inventory", "Email", "Analytics"];
 
-  const orchSteps = [
-    { from: "Saga", action: "ProcessPayment", to: "Payment" },
-    { from: "Saga", action: "ReserveStock", to: "Inventory" },
-    { from: "Saga", action: "ScheduleShip", to: "Shipping" },
-    { from: "Saga", action: "SendEmail", to: "Email" },
-  ];
+  const syncPhase = sim.tick;
+  const asyncPhase = sim.tick;
 
-  const steps = mode === "choreography" ? choreoSteps : orchSteps;
+  const syncTotalMs = 120 + 200 + 150;
+  const asyncTotalMs = 120;
+
+  const syncMsgs = ["Order receives request", "Order calls Inventory (blocking)...", "Inventory calls Email (blocking)...", "Inventory calls Email (blocking)...", "Email processing (blocking)...", "Email processing (blocking)...", "Email done, unwinds...", "Inventory done, unwinds...", "Order responds. Total: 470ms"];
+  const asyncMsgs = ["Order receives request", "Order publishes OrderPlaced event", "Order responds immediately: 120ms", "Inventory processes...", "Email processes...", "Analytics processes...", "All done independently!"];
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-center gap-2">
-        <button
-          onClick={() => { setMode("choreography"); setStep(0); }}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-[11px] font-medium transition-all border",
-            mode === "choreography"
-              ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-              : "bg-muted/20 border-border/30 text-muted-foreground/50 hover:text-muted-foreground"
-          )}
-        >
-          Choreography
-        </button>
-        <button
-          onClick={() => { setMode("orchestration"); setStep(0); }}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-[11px] font-medium transition-all border",
-            mode === "orchestration"
-              ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
-              : "bg-muted/20 border-border/30 text-muted-foreground/50 hover:text-muted-foreground"
-          )}
-        >
-          Orchestration
-        </button>
-      </div>
-
-      <div className="space-y-1.5 px-2">
-        {steps.map((s, i) => (
-          <div
-            key={`${mode}-${i}`}
-            className={cn(
-              "flex items-center gap-2 rounded-md border px-3 py-1.5 transition-all duration-500",
-              step > i
-                ? mode === "choreography"
-                  ? "bg-blue-500/8 border-blue-500/20"
-                  : "bg-violet-500/8 border-violet-500/20"
-                : step === i
-                ? "bg-muted/30 border-border/40 ring-1 ring-blue-500/15"
-                : "bg-muted/10 border-border/20 opacity-40"
-            )}
-          >
-            <span className="text-[11px] font-semibold w-14 shrink-0">{s.from}</span>
-            <ArrowRight className="size-3 text-muted-foreground/40 shrink-0" />
-            <span className={cn(
-              "text-[10px] font-mono flex-1",
-              step >= i
-                ? mode === "choreography" ? "text-blue-400" : "text-violet-400"
-                : "text-muted-foreground/30"
-            )}>
-              {mode === "choreography" ? (s as typeof choreoSteps[0]).event : (s as typeof orchSteps[0]).action}
-            </span>
-            <ArrowRight className="size-3 text-muted-foreground/40 shrink-0" />
-            <span className="text-[11px] w-14 text-right shrink-0">{s.to}</span>
+    <Playground
+      title="Sync vs Async: Side by Side"
+      simulation={sim}
+      canvasHeight="min-h-[320px]"
+      canvas={
+        <div className="grid grid-cols-2 gap-4 p-4 h-full">
+          {/* Sync side */}
+          <div className="space-y-3">
+            <div className="text-center">
+              <span className="text-xs font-semibold text-red-400">Synchronous (Coupled)</span>
+            </div>
+            <div className="space-y-1.5">
+              {syncServices.map((svc, i) => {
+                const isActive = syncPhase >= i * 2 && syncPhase < (i + 1) * 2 + 1;
+                const isDone = syncPhase > (i + 1) * 2;
+                const isWaiting = syncPhase >= i * 2 + 1 && syncPhase < (i + 1) * 2 && i < 3;
+                return (
+                  <div key={svc} className="flex items-center gap-2">
+                    {i > 0 && <ArrowRight className="size-3 text-muted-foreground/40 shrink-0" />}
+                    <div
+                      className={cn(
+                        "flex-1 rounded-lg border px-3 py-2 text-center transition-all duration-500",
+                        isActive ? "border-amber-500/40 bg-amber-500/10" :
+                        isDone ? "border-emerald-500/30 bg-emerald-500/5" :
+                        "border-border/30 bg-muted/10"
+                      )}
+                    >
+                      <span className={cn(
+                        "text-xs font-medium",
+                        isActive ? "text-amber-400" : isDone ? "text-emerald-400" : "text-muted-foreground/50"
+                      )}>
+                        {svc}
+                      </span>
+                      {isActive && <span className="block text-[9px] text-amber-400/70 animate-pulse">blocking...</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-center">
+              <span className={cn(
+                "text-xs font-mono",
+                syncPhase >= 8 ? "text-red-400" : "text-muted-foreground/40"
+              )}>
+                {syncPhase >= 8 ? `${syncTotalMs}ms total` : "waiting..."}
+              </span>
+            </div>
           </div>
-        ))}
-      </div>
 
-      <p className="text-[11px] text-muted-foreground/60 text-center px-4">
-        {mode === "choreography"
-          ? "Each service reacts to events and emits its own. No central coordinator. More decoupled, harder to trace."
-          : "A central Saga orchestrator tells each service what to do and handles failures. Easier to debug, more coupled."}
-      </p>
-    </div>
+          {/* Async side */}
+          <div className="space-y-3">
+            <div className="text-center">
+              <span className="text-xs font-semibold text-emerald-400">Async (Event-Driven)</span>
+            </div>
+            <div className="space-y-1.5">
+              {asyncServices.map((svc, i) => {
+                const isPublisher = i === 0;
+                const publishDone = asyncPhase >= 2;
+                const subscriberActive = !isPublisher && asyncPhase >= i + 2;
+                const subscriberDone = !isPublisher && asyncPhase >= i + 3;
+                return (
+                  <div key={svc} className="flex items-center gap-2">
+                    {i > 0 && <Zap className="size-3 text-violet-400/40 shrink-0" />}
+                    <div
+                      className={cn(
+                        "flex-1 rounded-lg border px-3 py-2 text-center transition-all duration-500",
+                        isPublisher && publishDone ? "border-emerald-500/30 bg-emerald-500/5" :
+                        isPublisher && asyncPhase >= 1 ? "border-violet-500/30 bg-violet-500/10" :
+                        subscriberDone ? "border-emerald-500/30 bg-emerald-500/5" :
+                        subscriberActive ? "border-violet-500/30 bg-violet-500/10" :
+                        "border-border/30 bg-muted/10"
+                      )}
+                    >
+                      <span className={cn(
+                        "text-xs font-medium",
+                        (isPublisher && publishDone) || subscriberDone ? "text-emerald-400" :
+                        (isPublisher && asyncPhase >= 1) || subscriberActive ? "text-violet-400" :
+                        "text-muted-foreground/50"
+                      )}>
+                        {svc}
+                      </span>
+                      {!isPublisher && subscriberActive && !subscriberDone && (
+                        <span className="block text-[9px] text-violet-400/70">parallel</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="text-center">
+              <span className={cn(
+                "text-xs font-mono",
+                asyncPhase >= 2 ? "text-emerald-400" : "text-muted-foreground/40"
+              )}>
+                {asyncPhase >= 2 ? `${asyncTotalMs}ms response` : "waiting..."}
+              </span>
+            </div>
+          </div>
+        </div>
+      }
+      explanation={(state) => (
+        <div className="space-y-3">
+          <p className="text-xs font-medium">{syncMsgs[Math.min(state.tick, 8)] ?? syncMsgs[8]}</p>
+          <p className="text-xs font-medium">{asyncMsgs[Math.min(state.tick, 6)] ?? asyncMsgs[6]}</p>
+          <p className="text-xs text-muted-foreground">
+            Sync waits for every downstream service. Async publishes an event and responds immediately while subscribers work in parallel.
+          </p>
+          {state.tick >= 8 && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <p className="text-xs text-emerald-400 font-medium">Async: {asyncTotalMs}ms vs Sync: {syncTotalMs}ms</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{Math.round(((syncTotalMs - asyncTotalMs) / syncTotalMs) * 100)}% faster perceived latency</p>
+            </div>
+          )}
+        </div>
+      )}
+    />
+  );
+}
+
+type DomainEvent = { id: number; type: string; payload: string; color: string };
+
+const EVENT_LOG: DomainEvent[] = [
+  { id: 1, type: "OrderCreated", payload: "cart: empty", color: "text-blue-400" },
+  { id: 2, type: "ItemAdded", payload: "Laptop ($999)", color: "text-emerald-400" },
+  { id: 3, type: "ItemAdded", payload: "Mouse ($29)", color: "text-emerald-400" },
+  { id: 4, type: "ItemRemoved", payload: "Mouse ($29)", color: "text-red-400" },
+  { id: 5, type: "CouponApplied", payload: "SAVE10 (-10%)", color: "text-violet-400" },
+  { id: 6, type: "OrderCompleted", payload: "$899.10", color: "text-amber-400" },
+];
+
+function computeState(upToIndex: number) {
+  const items: string[] = [];
+  let total = 0;
+  let status = "pending";
+  let coupon = "";
+
+  for (let i = 0; i <= upToIndex && i < EVENT_LOG.length; i++) {
+    const evt = EVENT_LOG[i];
+    switch (evt.type) {
+      case "OrderCreated":
+        break;
+      case "ItemAdded":
+        if (evt.payload.includes("Laptop")) { items.push("Laptop"); total += 999; }
+        if (evt.payload.includes("Mouse")) { items.push("Mouse"); total += 29; }
+        break;
+      case "ItemRemoved":
+        if (evt.payload.includes("Mouse")) {
+          const idx = items.indexOf("Mouse");
+          if (idx >= 0) items.splice(idx, 1);
+          total -= 29;
+        }
+        break;
+      case "CouponApplied":
+        coupon = "SAVE10 (-10%)";
+        total = Math.round(total * 0.9 * 100) / 100;
+        break;
+      case "OrderCompleted":
+        status = "completed";
+        break;
+    }
+  }
+
+  return { items, total, status, coupon };
+}
+
+function EventSourcingDemo() {
+  const [replayIndex, setReplayIndex] = useState(-1);
+  const [isReplaying, setIsReplaying] = useState(false);
+
+  const replay = useCallback(() => {
+    setReplayIndex(-1);
+    setIsReplaying(true);
+    let idx = 0;
+    const interval = setInterval(() => {
+      setReplayIndex(idx);
+      idx++;
+      if (idx >= EVENT_LOG.length) {
+        clearInterval(interval);
+        setIsReplaying(false);
+      }
+    }, 700);
+  }, []);
+
+  const currentState = replayIndex >= 0 ? computeState(replayIndex) : null;
+
+  return (
+    <Playground
+      title="Event Sourcing: Time Travel"
+      controls={false}
+      canvasHeight="min-h-[300px]"
+      canvas={
+        <div className="p-4 h-full flex flex-col">
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              onClick={replay}
+              disabled={isReplaying}
+              className={cn(
+                "rounded-lg px-4 py-2 text-sm font-medium transition-all border",
+                isReplaying
+                  ? "bg-muted/30 text-muted-foreground/40 border-border/30 cursor-not-allowed"
+                  : "bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 border-violet-500/30"
+              )}
+            >
+              <RotateCcw className="size-4 inline mr-1.5" />
+              Replay Events
+            </button>
+            {!isReplaying && replayIndex < 0 && (
+              <span className="text-xs text-muted-foreground">Click to see state built from events</span>
+            )}
+          </div>
+
+          {/* Event log */}
+          <div className="space-y-1.5 flex-1 overflow-y-auto">
+            {EVENT_LOG.map((evt, i) => {
+              const isReached = i <= replayIndex;
+              const isCurrent = i === replayIndex;
+              return (
+                <button
+                  key={evt.id}
+                  onClick={() => { if (!isReplaying) setReplayIndex(i); }}
+                  className={cn(
+                    "w-full flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition-all duration-400",
+                    isCurrent ? "border-violet-500/40 bg-violet-500/10 ring-1 ring-violet-500/20" :
+                    isReached ? "border-emerald-500/20 bg-emerald-500/5" :
+                    "border-border/20 bg-muted/10 opacity-40"
+                  )}
+                >
+                  <span className={cn(
+                    "text-[10px] font-mono w-6 shrink-0 text-center",
+                    isReached ? "text-violet-400" : "text-muted-foreground/30"
+                  )}>
+                    #{evt.id}
+                  </span>
+                  <span className={cn(
+                    "text-xs font-semibold flex-1",
+                    isReached ? evt.color : "text-muted-foreground/40"
+                  )}>
+                    {evt.type}
+                  </span>
+                  <span className={cn(
+                    "text-[10px] font-mono",
+                    isReached ? "text-muted-foreground" : "text-muted-foreground/20"
+                  )}>
+                    {evt.payload}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      }
+      explanation={
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-xs font-semibold text-violet-400 mb-2">Current State (Projection)</h4>
+            {currentState ? (
+              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Items:</span>
+                  <span className="font-mono">{currentState.items.length > 0 ? currentState.items.join(", ") : "(empty)"}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Total:</span>
+                  <span className="font-mono text-emerald-400">${currentState.total.toFixed(2)}</span>
+                </div>
+                {currentState.coupon && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Coupon:</span>
+                    <span className="font-mono text-violet-400">{currentState.coupon}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className={cn(
+                    "font-mono",
+                    currentState.status === "completed" ? "text-amber-400" : "text-blue-400"
+                  )}>
+                    {currentState.status}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border/20 bg-muted/10 p-3">
+                <p className="text-xs text-muted-foreground/50 text-center">No events replayed yet</p>
+              </div>
+            )}
+          </div>
+
+          <div className="h-px bg-border/30" />
+
+          <p className="text-xs text-muted-foreground">
+            Event sourcing stores every change as an immutable event. Current state is derived by replaying them.
+            Click any event to &quot;time travel.&quot; This is how banking ledgers, Git, and Redux work.
+          </p>
+        </div>
+      }
+    />
   );
 }
 
@@ -231,91 +574,46 @@ export default function EventDrivenArchitecturePage() {
         difficulty="intermediate"
       />
 
-      <FailureScenario title="Adding notifications means modifying 5 existing services">
+      {/* Section 1: The problem */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">The Coupling Problem</h2>
         <p className="text-sm text-muted-foreground">
-          Your product manager wants email notifications when an order ships. Sounds simple. But in
-          your request-driven architecture, the Order service calls the Shipping service, which calls
-          the Inventory service, which... none of them know about notifications. You end up modifying
-          <strong className="text-red-400"> 5 existing services</strong> to thread a notification call through the chain. Each
-          change requires coordinated deploys across teams.
+          Your PM wants email notifications when an order ships. In a request-driven architecture,
+          the Order service calls Shipping, which calls Inventory, which... none of them know about
+          notifications. You end up modifying <strong className="text-red-400">5 existing services</strong> to
+          thread a notification call through the chain. Each change requires coordinated deploys across teams.
         </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          This exact problem is why LinkedIn built Apache Kafka in 2011. They had hundreds of
-          point-to-point service integrations that became impossible to maintain. Kafka turned
-          their architecture from a tangled web into a clean event backbone. Over 150,000
-          organizations now use Kafka for this same reason.
-        </p>
-        <div className="flex items-center justify-center gap-3 py-4 flex-wrap">
-          <ServerNode type="server" label="Order" sublabel="modified" status="warning" />
-          <span className="text-muted-foreground">--&gt;</span>
-          <ServerNode type="server" label="Payment" sublabel="modified" status="warning" />
-          <span className="text-muted-foreground">--&gt;</span>
-          <ServerNode type="server" label="Shipping" sublabel="modified" status="warning" />
-          <span className="text-muted-foreground">--&gt;</span>
-          <ServerNode type="server" label="Inventory" sublabel="modified" status="warning" />
-          <span className="text-muted-foreground">--&gt;</span>
-          <ServerNode type="server" label="Notification" sublabel="new" status="healthy" />
-        </div>
-      </FailureScenario>
-
-      <WhyItBreaks title="Direct coupling creates a web of dependencies">
-        <p className="text-sm text-muted-foreground">
-          In request-driven architecture, each service must know the address and API contract of
-          every service it calls. Adding a new downstream consumer means modifying the upstream
-          producer. This creates tight coupling that compounds over time:
-        </p>
-        <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
-          <li><strong>Every new feature requires modifying existing services</strong> -- the producer must learn about each new consumer</li>
-          <li><strong>Chain failures cascade</strong> -- if Notification is slow, it slows Order through the entire call chain</li>
-          <li><strong>Deployment coordination</strong> -- producer and consumer must be deployed together to stay compatible</li>
-          <li><strong>Knowledge leaks everywhere</strong> -- the Order service should not need to know that analytics wants order data</li>
-          <li><strong>Temporal coupling</strong> -- both producer and consumer must be online at the same time</li>
-        </ul>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="The Event Bus — Decoupling in Action">
-        <p className="text-sm text-muted-foreground mb-4">
-          Producers publish events describing what happened. The event bus (Kafka, RabbitMQ, or
-          SNS) routes them to all interested subscribers. Each subscriber processes independently.
-          Adding a new consumer is a configuration change, not a code change.
-        </p>
-        <EventBusViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Request-Driven vs Event-Driven">
         <BeforeAfter
           before={{
-            title: "Request-Driven (coupled)",
+            title: "Request-Driven (Coupled)",
             content: (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-[11px] text-muted-foreground">
-                  Order service directly calls each downstream service. N services = N calls to maintain.
+                  Order service directly calls each downstream service. Adding a consumer means changing the producer.
                 </p>
                 <div className="space-y-1">
-                  {["Payment", "Shipping", "Analytics", "??? (next feature)"].map((svc, i) => (
-                    <div key={svc} className="flex items-center gap-2 text-[11px]">
-                      <Send className="size-3 text-orange-400/60" />
-                      <span className={cn(
-                        "font-mono",
-                        i === 3 ? "text-red-400" : "text-muted-foreground"
-                      )}>
-                        Order --&gt; {svc}
-                      </span>
-                    </div>
-                  ))}
+                  {["Payment", "Shipping", "Analytics", "??? (next feature)"].map((svc, i) => {
+                    const colorMap: Record<number, string> = { 0: "text-muted-foreground", 1: "text-muted-foreground", 2: "text-muted-foreground", 3: "text-red-400" };
+                    return (
+                      <div key={svc} className="flex items-center gap-2 text-[11px]">
+                        <ArrowRight className="size-3 text-orange-400/60" />
+                        <span className={cn("font-mono", colorMap[i] ?? "text-muted-foreground")}>
+                          Order --&gt; {svc}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-                <p className="text-[10px] text-red-400/60">
-                  Order service must change every time a consumer is added
-                </p>
+                <p className="text-[10px] text-red-400/60">Order service must change every time a consumer is added</p>
               </div>
             ),
           }}
           after={{
-            title: "Event-Driven (decoupled)",
+            title: "Event-Driven (Decoupled)",
             content: (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-[11px] text-muted-foreground">
-                  Order service publishes once. Zero knowledge of who listens.
+                  Order publishes once. Zero knowledge of who listens.
                 </p>
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-[11px]">
@@ -324,173 +622,98 @@ export default function EventDrivenArchitecturePage() {
                   </div>
                   {["Payment", "Shipping", "Analytics", "New Feature"].map((svc) => (
                     <div key={svc} className="flex items-center gap-2 text-[11px] pl-5">
-                      <Inbox className="size-3 text-muted-foreground/40" />
+                      <Clock className="size-3 text-muted-foreground/40" />
                       <span className="font-mono text-muted-foreground/60">{svc} subscribes</span>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-emerald-400/60">
-                  Order service never changes
-                </p>
+                <p className="text-[10px] text-emerald-400/60">Order service never changes</p>
               </div>
             ),
           }}
         />
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="How Event Propagation Works">
-        <p className="text-sm text-muted-foreground mb-4">
-          In Kafka, producers write events to topics. Each topic can have multiple partitions for
-          parallel processing. Consumer groups ensure each event is processed exactly once per group,
-          while multiple groups each get their own copy. Kafka achieved 605 MB/s throughput in
-          recent benchmarks.
+      {/* Section 2: Event Bus Playground */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Event Bus in Action</h2>
+        <p className="text-sm text-muted-foreground">
+          Producers publish events describing what happened. The event bus (Kafka, RabbitMQ, SNS)
+          routes them to all interested subscribers. Each subscriber processes independently.
+          Try adding and removing subscribers, then place an order to see fan-out in action.
         </p>
-        <AnimatedFlow
-          steps={[
-            { id: "produce", label: "Produce Event", description: "Service publishes an immutable fact", icon: <Send className="size-4" /> },
-            { id: "topic", label: "Topic + Partition", description: "Event lands in an ordered, durable log", icon: <Radio className="size-4" /> },
-            { id: "route", label: "Fan Out", description: "Each consumer group gets its own copy", icon: <Zap className="size-4" /> },
-            { id: "consume", label: "Process", description: "Each consumer processes at its own pace", icon: <Inbox className="size-4" /> },
-            { id: "ack", label: "Commit Offset", description: "Consumer confirms progress; can resume from here", icon: <CheckCircle2 className="size-4" /> },
-          ]}
-          interval={1800}
-        />
-      </ConceptVisualizer>
+        <EventBusPlayground />
+      </section>
 
-      <CorrectApproach title="Choreography vs Orchestration">
-        <p className="text-sm text-muted-foreground mb-4">
-          When multiple services must coordinate, you have two patterns. Toggle between them
-          to see the difference in how an order flows through your system.
+      <AhaMoment
+        question="Why do different subscribers take different amounts of time?"
+        answer={
+          <p>
+            That is the beauty of decoupling. Each subscriber processes at its own pace.
+            The Email Service just fires off an email (fast). Inventory checks stock levels
+            and reserves items (medium). Analytics crunches numbers and updates dashboards
+            (slow). None of them block each other. If Analytics falls behind, orders still
+            flow and emails still send.
+          </p>
+        }
+      />
+
+      {/* Section 3: Sync vs Async */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Synchronous vs Asynchronous</h2>
+        <p className="text-sm text-muted-foreground">
+          Watch both architectures process the same order simultaneously. The synchronous chain
+          blocks at each step. The async version publishes an event and responds immediately
+          while subscribers work in parallel.
         </p>
-        <ChoreographyVsOrchestrationViz />
-        <div className="grid grid-cols-2 gap-3 mt-4">
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <h4 className="text-xs font-semibold text-blue-400 mb-1">Choreography</h4>
-            <ul className="text-[11px] text-muted-foreground space-y-1">
-              <li>No single point of failure</li>
-              <li>Services are truly independent</li>
-              <li>Harder to see the full workflow</li>
-              <li>Good for simple event chains</li>
-            </ul>
-          </div>
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <h4 className="text-xs font-semibold text-violet-400 mb-1">Orchestration</h4>
-            <ul className="text-[11px] text-muted-foreground space-y-1">
-              <li>Central view of the workflow</li>
-              <li>Easier to handle compensation</li>
-              <li>Orchestrator is a coupling point</li>
-              <li>Good for complex business processes</li>
-            </ul>
-          </div>
-        </div>
-      </CorrectApproach>
+        <SyncVsAsyncComparison />
+      </section>
 
-      <InteractiveDemo title="Event Flow Tracer">
-        {({ isPlaying, tick }) => {
-          const events = [
-            { time: "10:00:01.123", event: "OrderPlaced", producer: "Order", consumers: ["Payment", "Analytics", "Search"] },
-            { time: "10:00:01.456", event: "PaymentProcessed", producer: "Payment", consumers: ["Shipping", "Email"] },
-            { time: "10:00:02.789", event: "InventoryReserved", producer: "Inventory", consumers: ["Shipping"] },
-            { time: "10:00:03.012", event: "ShipmentCreated", producer: "Shipping", consumers: ["Email", "Tracking"] },
-          ];
-          const active = isPlaying ? Math.min(tick % 6, events.length) : 0;
+      <ConversationalCallout type="tip">
+        A good rule of thumb: use synchronous calls when the caller needs an immediate response
+        (user login, payment validation). Use events when the caller does not need to wait
+        (send notification, update analytics, sync search index). Most real systems use both --
+        even Netflix combines synchronous API calls with event streaming.
+      </ConversationalCallout>
 
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to trace an order through the event-driven pipeline.
-                Each event carries a correlation ID (<code className="text-[10px] bg-muted px-1 rounded font-mono">ord-7f3a</code>) for distributed tracing.
-              </p>
-              <div className="space-y-1.5">
-                {events.map((e, i) => (
-                  <div
-                    key={e.event}
-                    className={cn(
-                      "rounded-lg border px-3 py-2 transition-all duration-500",
-                      i < active
-                        ? "bg-emerald-500/8 border-emerald-500/20"
-                        : i === active && isPlaying
-                        ? "bg-blue-500/8 border-blue-500/20 ring-1 ring-blue-500/15"
-                        : "bg-muted/10 border-border/30 opacity-40"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={cn(
-                        "text-[10px] font-mono w-24 shrink-0",
-                        i < active ? "text-muted-foreground" : "text-transparent"
-                      )}>
-                        {e.time}
-                      </span>
-                      <span className={cn(
-                        "text-xs font-semibold flex-1",
-                        i < active ? "text-emerald-400" : i === active && isPlaying ? "text-blue-400" : ""
-                      )}>
-                        {e.event}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/50">
-                        {e.producer}
-                      </span>
-                    </div>
-                    {i < active && (
-                      <div className="flex gap-1.5 mt-1 pl-[108px]">
-                        {e.consumers.map((c) => (
-                          <span key={c} className="text-[9px] rounded bg-emerald-500/10 text-emerald-400/70 px-1.5 py-0.5">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {active >= events.length && (
-                <ConversationalCallout type="question">
-                  Notice how each event triggered independent downstream processing? The Order
-                  service never waited for Email or Analytics. If Email was down, orders would
-                  still flow. That is the power of decoupling.
-                </ConversationalCallout>
-              )}
-            </div>
-          );
-        }}
-      </InteractiveDemo>
+      {/* Section 4: Event Sourcing */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Event Sourcing: The Immutable Log</h2>
+        <p className="text-sm text-muted-foreground">
+          Instead of storing just the current state, event sourcing stores every change as an
+          immutable event. The current state is a projection derived by replaying events.
+          Click &quot;Replay Events&quot; to watch state being rebuilt, or click any event to time-travel.
+        </p>
+        <EventSourcingDemo />
+      </section>
+
+      <ConversationalCallout type="warning">
+        Event-driven does not mean &quot;fire and forget.&quot; You still need dead-letter queues for
+        unprocessable events, idempotent consumers for duplicate delivery, and monitoring for
+        consumer lag. Kafka retains events on disk, but a consumer that crashes without
+        committing its offset will re-process messages -- your consumers must handle duplicates.
+      </ConversationalCallout>
 
       <AhaMoment
         question="If services are decoupled, how do you debug a failed order?"
         answer={
           <p>
-            This is the real tradeoff. In request-driven systems, you get a stack trace. In event-driven
-            systems, you need distributed tracing tools like Jaeger, Zipkin, or Datadog. Every event
-            carries a correlation ID so you can reconstruct the full journey across services. The
-            debugging tooling is different, not absent -- but you must invest in it upfront or you
-            will be flying blind. LinkedIn, which created Kafka, also built extensive tracing
-            infrastructure to make event flows observable.
+            This is the real tradeoff. In request-driven systems, you get a stack trace. In
+            event-driven systems, you need distributed tracing (Jaeger, Zipkin, Datadog). Every
+            event carries a correlation ID so you can reconstruct the full journey. The debugging
+            tooling is different, not absent -- but you must invest in it upfront or you will
+            be flying blind.
           </p>
         }
       />
 
-      <ConversationalCallout type="warning">
-        Event-driven does not mean &quot;fire and forget.&quot; You still need to handle failures:
-        dead-letter queues for events that cannot be processed, idempotent consumers for duplicate
-        delivery, and monitoring for consumer lag. Ignoring these leads to silent data loss.
-        Kafka retains events on disk by default, but a consumer that crashes without committing
-        its offset will re-process messages -- your consumers must handle duplicates gracefully.
-      </ConversationalCallout>
-
-      <ConversationalCallout type="tip">
-        A good rule of thumb: use synchronous calls when the caller needs an immediate response
-        (user login, payment validation). Use events when the caller does not need to wait for the
-        result (send notification, update analytics, sync search index). Most real systems
-        use a mix of both -- even Netflix combines synchronous API calls with event streaming.
-      </ConversationalCallout>
-
       <KeyTakeaway
         points={[
           "Event-driven architecture decouples producers from consumers -- adding a new consumer requires zero changes to the producer.",
-          "Apache Kafka, used by 150,000+ organizations, stores events as an immutable log that consumers read at their own pace.",
-          "Choreography (each service reacts to events) gives maximum decoupling. Orchestration (a central saga coordinator) gives easier debugging and compensation.",
-          "The tradeoff is observability: you need distributed tracing, correlation IDs, and dead-letter queues to debug event flows.",
-          "Use synchronous calls when the caller needs an immediate response; use events when it does not. Most systems use a mix of both.",
+          "The event bus (Kafka, RabbitMQ, SNS) fans out events to all subscribers, each processing at their own pace.",
+          "Synchronous calls block the caller; async events let it respond immediately. Use sync when you need the answer now, async when you do not.",
+          "Event sourcing stores every change as an immutable event. Current state is a projection you can rebuild or time-travel through.",
+          "The tradeoff is observability: invest in distributed tracing, correlation IDs, dead-letter queues, and idempotent consumers.",
         ]}
       />
     </div>

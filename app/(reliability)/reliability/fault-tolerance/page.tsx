@@ -1,339 +1,557 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { BeforeAfter } from "@/components/before-after";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { ServerNode } from "@/components/server-node";
-import { InteractiveDemo } from "@/components/interactive-demo";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
-import { MetricCounter } from "@/components/metric-counter";
+import { BeforeAfter } from "@/components/before-after";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { Playground } from "@/components/playground";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Shield, Zap, Server, AlertTriangle, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
 
-function FailoverAnimation() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 1500);
-    return () => clearInterval(t);
+/* ------------------------------------------------------------------ */
+/*  Static class maps (no Tailwind dynamic interpolation)             */
+/* ------------------------------------------------------------------ */
+
+const statusColors: Record<string, string> = {
+  healthy: "text-emerald-400",
+  unhealthy: "text-red-400",
+  warning: "text-amber-400",
+  idle: "text-muted-foreground",
+};
+
+const statusBg: Record<string, string> = {
+  healthy: "bg-emerald-500/10 border-emerald-500/30",
+  unhealthy: "bg-red-500/10 border-red-500/30",
+  warning: "bg-amber-500/10 border-amber-500/30",
+  idle: "bg-muted/20 border-border",
+};
+
+const strategyBtnActive = "bg-violet-500/20 text-violet-400 border-violet-500/30";
+const strategyBtnInactive = "bg-muted/10 text-muted-foreground border-border hover:bg-muted/20";
+
+/* ------------------------------------------------------------------ */
+/*  1. Redundancy Playground                                          */
+/* ------------------------------------------------------------------ */
+
+type ServerState = "healthy" | "unhealthy";
+type DbRole = "primary" | "replica" | "promoted";
+
+function RedundancyPlayground() {
+  const [servers, setServers] = useState<ServerState[]>(["healthy", "healthy", "healthy"]);
+  const [dbPrimary, setDbPrimary] = useState<ServerState>("healthy");
+  const [dbReplicaRole, setDbReplicaRole] = useState<DbRole>("replica");
+  const [lbAlive, setLbAlive] = useState(true);
+  const [message, setMessage] = useState("All systems operational. Try killing components!");
+
+  const aliveServers = servers.filter((s) => s === "healthy").length;
+  const systemUp = lbAlive && aliveServers > 0 && (dbPrimary === "healthy" || dbReplicaRole === "promoted");
+
+  const redundancyLabel = aliveServers === 3 ? "N+2" : aliveServers === 2 ? "N+1" : aliveServers === 1 ? "N+0" : "DOWN";
+
+  const killServer = useCallback((idx: number) => setServers((prev) => {
+    const next = [...prev];
+    next[idx] = next[idx] === "healthy" ? "unhealthy" : "healthy";
+    const alive = next.filter((s) => s === "healthy").length;
+    setMessage(alive === 0 ? "All servers dead! No capacity to serve requests."
+      : next[idx] === "unhealthy" ? `Server ${idx + 1} killed. LB redistributes to ${alive} remaining.`
+      : `Server ${idx + 1} recovered. ${alive} servers handling traffic.`);
+    return next;
+  }), []);
+
+  const killPrimaryDb = useCallback(() => {
+    if (dbPrimary === "healthy") {
+      setDbPrimary("unhealthy");
+      setDbReplicaRole("promoted");
+      setMessage("Primary DB crashed! Replica promoted to primary. Data safe.");
+    } else {
+      setDbPrimary("healthy");
+      setDbReplicaRole("replica");
+      setMessage("Primary DB recovered and resumed its role.");
+    }
+  }, [dbPrimary]);
+
+  const killLb = useCallback(() => setLbAlive((prev) => {
+    setMessage(prev ? "Load Balancer down! SPOF -- entire system unreachable!" : "Load Balancer restored. Traffic flowing.");
+    return !prev;
+  }), []);
+
+  const resetAll = useCallback(() => {
+    setServers(["healthy", "healthy", "healthy"]);
+    setDbPrimary("healthy");
+    setDbReplicaRole("replica");
+    setLbAlive(true);
+    setMessage("All systems operational. Try killing components!");
   }, []);
 
-  const primaryDead = step >= 2;
-  const failoverStarted = step >= 3;
-  const standbyPromoted = step >= 4;
-  const trafficRerouted = step >= 5;
-  const oldPrimaryRecovering = step >= 6;
-  const oldPrimaryRejoined = step >= 7;
+  const promoted = dbReplicaRole === "promoted";
+  const nodes: FlowNode[] = useMemo(() => [
+    { id: "lb", type: "loadBalancerNode", position: { x: 250, y: 0 },
+      data: { label: "Load Balancer", sublabel: lbAlive ? `${aliveServers} targets` : "DOWN",
+        status: lbAlive ? "healthy" : "unhealthy", handles: { bottom: true, top: true } } },
+    ...servers.map((s, i) => ({ id: `srv-${i}`, type: "serverNode" as const,
+      position: { x: 80 + i * 170, y: 130 },
+      data: { label: `Server ${i + 1}`, sublabel: s === "healthy" ? "Serving" : "DEAD",
+        status: (s === "healthy" ? "healthy" : "unhealthy") as "healthy" | "unhealthy",
+        handles: { top: true, bottom: true } } })),
+    { id: "db-primary", type: "databaseNode", position: { x: 150, y: 260 },
+      data: { label: promoted ? "Old Primary" : "Primary DB", sublabel: dbPrimary === "healthy" ? "Read/Write" : "CRASHED",
+        status: dbPrimary === "healthy" ? "healthy" : "unhealthy", handles: { top: true, right: true } } },
+    { id: "db-replica", type: "databaseNode", position: { x: 370, y: 260 },
+      data: { label: promoted ? "Promoted Primary" : "Replica DB", sublabel: promoted ? "Read/Write" : "Syncing",
+        status: promoted ? "warning" : "idle", handles: { top: true, left: true } } },
+  ], [servers, dbPrimary, promoted, lbAlive, aliveServers]);
+
+  const edges: FlowEdge[] = useMemo(() => {
+    const e: FlowEdge[] = [];
+    servers.forEach((s, i) => {
+      if (s === "healthy" && lbAlive) {
+        e.push({ id: `lb-srv${i}`, source: "lb", target: `srv-${i}`, animated: true });
+      }
+    });
+    if (aliveServers > 0) {
+      e.push({ id: "srv-db", source: "srv-0", target: "db-primary", animated: dbPrimary === "healthy" });
+      e.push({ id: "srv-dbrep", source: "srv-2", target: "db-replica", animated: true });
+    }
+    e.push({ id: "db-repl", source: "db-primary", target: "db-replica", animated: dbPrimary === "healthy" });
+    return e;
+  }, [servers, dbPrimary, lbAlive, aliveServers]);
+
+  const availabilityData = [{ config: "N+0", availability: 99.0 }, { config: "N+1", availability: 99.9 },
+    { config: "N+2", availability: 99.99 }, { config: "N+3", availability: 99.999 }];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-        <div className="text-center space-y-1.5">
-          <div className={cn(
-            "size-14 rounded-xl border-2 flex items-center justify-center transition-all duration-500",
-            primaryDead && !oldPrimaryRejoined
-              ? "bg-red-500/10 border-red-500/40 animate-pulse"
-              : oldPrimaryRejoined
-              ? "bg-blue-500/10 border-blue-500/30"
-              : "bg-emerald-500/10 border-emerald-500/30"
-          )}>
-            <Server className={cn(
-              "size-6 transition-colors",
-              primaryDead && !oldPrimaryRejoined ? "text-red-400" : oldPrimaryRejoined ? "text-blue-400" : "text-emerald-400"
-            )} />
+    <Playground
+      title="Redundancy Playground"
+      controls={false}
+      canvas={
+        <div className="p-4 space-y-4">
+          <FlowDiagram nodes={nodes} edges={edges} minHeight={340} interactive={false} allowDrag={false} />
+          <div className="flex flex-wrap gap-2 justify-center">
+            {[
+              ...servers.map((s, i) => ({ alive: s === "healthy", killLabel: `Kill Server ${i + 1}`, reviveLabel: `Revive Server ${i + 1}`, action: () => killServer(i) })),
+              { alive: dbPrimary === "healthy", killLabel: "Kill Primary DB", reviveLabel: "Revive Primary DB", action: killPrimaryDb },
+              { alive: lbAlive, killLabel: "Kill Load Balancer", reviveLabel: "Revive Load Balancer", action: killLb },
+            ].map((btn) => (
+              <button key={btn.killLabel} onClick={btn.action} className={cn("text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                btn.alive ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
+                  : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20")}>
+                {btn.alive ? btn.killLabel : btn.reviveLabel}
+              </button>
+            ))}
+            <button onClick={resetAll} className="text-xs px-3 py-1.5 rounded-lg border bg-muted/20 border-border text-muted-foreground hover:bg-muted/40 transition-colors">
+              Reset All
+            </button>
           </div>
-          <p className="text-[11px] font-medium">
-            {oldPrimaryRejoined ? "Standby" : "Primary"}
-          </p>
-          <p className={cn(
-            "text-[10px] transition-colors",
-            primaryDead && !oldPrimaryRecovering ? "text-red-400" : oldPrimaryRecovering && !oldPrimaryRejoined ? "text-yellow-400" : oldPrimaryRejoined ? "text-blue-400" : "text-emerald-400"
-          )}>
-            {primaryDead && !oldPrimaryRecovering ? "CRASHED" : oldPrimaryRecovering && !oldPrimaryRejoined ? "Restarting..." : oldPrimaryRejoined ? "Idle, ready" : "Serving traffic"}
-          </p>
         </div>
-
-        <div className="flex-1 px-4 space-y-1">
-          {step >= 1 && step < 3 && (
-            <div className="flex items-center gap-1 text-[10px] text-amber-400 justify-center animate-pulse">
-              <AlertTriangle className="size-3" />
-              Health check failing...
-            </div>
-          )}
-          {failoverStarted && !trafficRerouted && (
-            <div className="flex items-center gap-1 text-[10px] text-blue-400 justify-center">
-              <ArrowRight className="size-3" />
-              Failover in progress...
-            </div>
-          )}
-          {trafficRerouted && (
-            <div className="flex items-center gap-1 text-[10px] text-emerald-400 justify-center">
-              <CheckCircle2 className="size-3" />
-              Traffic rerouted
-            </div>
-          )}
+      }
+      explanation={
+        <div className="space-y-4">
           <div className={cn(
-            "h-[2px] rounded-full transition-all duration-500",
-            trafficRerouted ? "bg-emerald-500/40" : primaryDead ? "bg-red-500/30" : "bg-muted-foreground/20"
-          )} />
-        </div>
-
-        <div className="text-center space-y-1.5">
-          <div className={cn(
-            "size-14 rounded-xl border-2 flex items-center justify-center transition-all duration-500",
-            standbyPromoted
-              ? "bg-emerald-500/10 border-emerald-500/30"
-              : "bg-muted/30 border-border"
+            "rounded-lg border px-3 py-2 text-sm font-medium",
+            systemUp ? statusBg["healthy"] : statusBg["unhealthy"]
           )}>
-            <Server className={cn(
-              "size-6 transition-colors",
-              standbyPromoted ? "text-emerald-400" : "text-muted-foreground/40"
-            )} />
+            <span className={systemUp ? statusColors["healthy"] : statusColors["unhealthy"]}>
+              System: {systemUp ? "OPERATIONAL" : "DOWN"}
+            </span>
+            <span className="ml-2 text-xs text-muted-foreground">Redundancy: {redundancyLabel}</span>
           </div>
-          <p className="text-[11px] font-medium">
-            {standbyPromoted ? "New Primary" : "Standby"}
-          </p>
-          <p className={cn(
-            "text-[10px] transition-colors",
-            standbyPromoted ? "text-emerald-400" : "text-muted-foreground/50"
-          )}>
-            {standbyPromoted ? "Serving traffic" : "Idle, syncing"}
-          </p>
+          <p className="text-xs">{message}</p>
+          <div className="text-xs font-semibold mb-1">Availability vs Redundancy</div>
+          <LiveChart
+            type="bar"
+            data={availabilityData}
+            dataKeys={{ x: "config", y: "availability", label: "Availability %" }}
+            height={150}
+            unit="%"
+            referenceLines={[{ y: 99.9, label: "Three 9s", color: "#f59e0b" }]}
+          />
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 px-2">
-        <div className={cn(
-          "flex-1 h-1.5 rounded-full transition-all duration-500",
-          step === 0 ? "bg-emerald-500/30" : step < 3 ? "bg-amber-500/30" : step < 5 ? "bg-blue-500/30" : "bg-emerald-500/30"
-        )} />
-        <span className="text-[10px] font-mono text-muted-foreground/60">
-          {step === 0 ? "Normal operation" : step < 3 ? "Failure detected" : step < 5 ? "Failover..." : step < 7 ? "Service restored" : "Fully recovered"}
-        </span>
-      </div>
-    </div>
+      }
+    />
   );
 }
 
-function ActiveActiveAnimation() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 6), 1800);
-    return () => clearInterval(t);
+/* ------------------------------------------------------------------ */
+/*  2. Failover Strategies                                            */
+/* ------------------------------------------------------------------ */
+
+function FailoverStrategies() {
+  const [strategy, setStrategy] = useState<"active-passive" | "active-active">("active-passive");
+  const sim = useSimulation({ intervalMs: 800, maxSteps: 12 });
+
+  const step = sim.step;
+  const failureHappened = step >= 3;
+  const failoverComplete = step >= 6;
+  const recovered = step >= 9;
+
+  const failed = failureHappened && !recovered;
+  const apNodes: FlowNode[] = useMemo(() => [
+    { id: "client", type: "clientNode", position: { x: 220, y: 0 },
+      data: { label: "Clients", status: "healthy", handles: { bottom: true } } },
+    { id: "primary", type: "serverNode", position: { x: 100, y: 120 },
+      data: { label: "Primary", sublabel: failed ? "CRASHED" : "Active",
+        status: failed ? "unhealthy" : "healthy", handles: { top: true, right: true } } },
+    { id: "standby", type: "serverNode", position: { x: 340, y: 120 },
+      data: { label: failoverComplete && !recovered ? "New Primary" : "Standby",
+        sublabel: failoverComplete && !recovered ? "Promoted" : "Idle",
+        status: failoverComplete && !recovered ? "warning" : "idle", handles: { top: true, left: true } } },
+  ], [failed, failoverComplete, recovered]);
+
+  const apEdges: FlowEdge[] = useMemo(() => {
+    const e: FlowEdge[] = [{ id: "repl", source: "primary", target: "standby", animated: !failed, label: "sync" }];
+    if (!failed) e.push({ id: "c-p", source: "client", target: "primary", animated: true });
+    else if (failoverComplete) e.push({ id: "c-s", source: "client", target: "standby", animated: true });
+    return e;
+  }, [failed, failoverComplete]);
+
+  const aaNodes: FlowNode[] = useMemo(() => [
+    { id: "lb", type: "loadBalancerNode", position: { x: 220, y: 0 },
+      data: { label: "Load Balancer", status: "healthy", handles: { bottom: true } } },
+    ...["A", "B", "C"].map((name, i) => {
+      const dead = i === 0 && failed;
+      return { id: `aa-${i}`, type: "serverNode" as const, position: { x: 60 + i * 170, y: 130 },
+        data: { label: `Server ${name}`, sublabel: dead ? "DOWN" : failed ? "50% load" : "33% load",
+          status: (dead ? "unhealthy" : failed ? "warning" : "healthy") as "healthy" | "warning" | "unhealthy",
+          handles: { top: true } } };
+    }),
+  ], [failed]);
+
+  const aaEdges: FlowEdge[] = useMemo(() =>
+    [0, 1, 2].filter((i) => !(i === 0 && failed)).map((i) => ({ id: `lb-aa${i}`, source: "lb", target: `aa-${i}`, animated: true })),
+  [failed]);
+
+  const isAP = strategy === "active-passive";
+
+  return (
+    <Playground
+      title="Failover Strategies"
+      simulation={sim}
+      canvas={
+        <div className="p-4">
+          <div className="flex gap-2 mb-4 justify-center">
+            <button
+              onClick={() => { setStrategy("active-passive"); sim.reset(); }}
+              className={cn("text-xs px-3 py-1.5 rounded-lg border transition-colors", isAP ? strategyBtnActive : strategyBtnInactive)}
+            >
+              Active-Passive
+            </button>
+            <button
+              onClick={() => { setStrategy("active-active"); sim.reset(); }}
+              className={cn("text-xs px-3 py-1.5 rounded-lg border transition-colors", !isAP ? strategyBtnActive : strategyBtnInactive)}
+            >
+              Active-Active
+            </button>
+          </div>
+          <FlowDiagram
+            nodes={isAP ? apNodes : aaNodes}
+            edges={isAP ? apEdges : aaEdges}
+            minHeight={240}
+            interactive={false}
+            allowDrag={false}
+          />
+          <div className="mt-3 text-center text-xs text-muted-foreground">
+            {!failureHappened && "Press play. A failure will occur at step 3."}
+            {failureHappened && !failoverComplete && (isAP
+              ? "Primary crashed! Detecting failure and promoting standby..."
+              : "Server A crashed! Load Balancer re-routes to B and C instantly."
+            )}
+            {failoverComplete && !recovered && (isAP
+              ? "Standby promoted to primary. Failover took ~30s."
+              : "Traffic absorbed by remaining servers. Zero downtime."
+            )}
+            {recovered && "All nodes recovered. System back to full capacity."}
+          </div>
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold">{isAP ? "Active-Passive" : "Active-Active"}</h4>
+          {isAP ? (
+            <ul className="text-xs space-y-1.5 list-disc list-inside">
+              <li>One server handles all traffic; standby stays idle</li>
+              <li>Failover takes 15-60 seconds (health check interval)</li>
+              <li>Simpler -- no split-brain risk for stateful services</li>
+              <li>Good for: databases, coordination services</li>
+              <li>Downside: wasted capacity while standby is idle</li>
+            </ul>
+          ) : (
+            <ul className="text-xs space-y-1.5 list-disc list-inside">
+              <li>All servers handle traffic simultaneously</li>
+              <li>Failover is instant -- LB just stops sending to dead node</li>
+              <li>Better resource utilization, no idle servers</li>
+              <li>Good for: stateless web servers, API gateways</li>
+              <li>Downside: needs conflict resolution for writes</li>
+            </ul>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  3. Retry with Exponential Backoff                                 */
+/* ------------------------------------------------------------------ */
+
+type RetryStrategy = "none" | "simple" | "exponential" | "jitter";
+
+const retryStrategyLabel: Record<RetryStrategy, string> = {
+  none: "No Retry",
+  simple: "Simple Retry",
+  exponential: "Exp. Backoff",
+  jitter: "Backoff + Jitter",
+};
+
+function RetryPlayground() {
+  const [activeStrategy, setActiveStrategy] = useState<RetryStrategy>("exponential");
+  const sim = useSimulation({ intervalMs: 700, maxSteps: 20 });
+
+  const step = sim.step;
+
+  const getRetryTiming = useCallback((s: RetryStrategy, attempt: number): number => {
+    if (s === "none") return -1;
+    if (s === "simple") return 1;
+    if (s === "exponential") return Math.pow(2, attempt);
+    // jitter: add some pseudo-random offset
+    return Math.pow(2, attempt) * (0.5 + (((attempt * 7 + 3) % 10) / 20));
   }, []);
 
-  const nodes = [
-    { label: "Server A", load: step >= 2 && step < 5 ? 0 : 33 },
-    { label: "Server B", load: step >= 2 && step < 5 ? 50 : 33 },
-    { label: "Server C", load: step >= 2 && step < 5 ? 50 : 33 },
+  const maxAttempts = activeStrategy === "none" ? 0 : 5;
+  const currentAttempt = Math.min(step, maxAttempts);
+  const serverRecoversAt = 3;
+  const succeeded = activeStrategy !== "none" && currentAttempt >= serverRecoversAt;
+
+  const retryTimeline = useMemo(() => {
+    const timeline: { attempt: number; delay: string; cumulative: number; success: boolean }[] = [];
+    let total = 0;
+    for (let i = 0; i <= maxAttempts; i++) {
+      const delay = i === 0 ? 0 : getRetryTiming(activeStrategy, i - 1);
+      total += delay;
+      timeline.push({
+        attempt: i,
+        delay: i === 0 ? "initial" : `${delay.toFixed(1)}s`,
+        cumulative: Math.round(total * 10) / 10,
+        success: i >= serverRecoversAt,
+      });
+    }
+    return timeline;
+  }, [activeStrategy, maxAttempts, getRetryTiming]);
+
+  const chartData = [
+    { strategy: "No Retry", successRate: 20, serverLoad: 10 },
+    { strategy: "Simple", successRate: 70, serverLoad: 85 },
+    { strategy: "Exp. Backoff", successRate: 95, serverLoad: 35 },
+    { strategy: "w/ Jitter", successRate: 97, serverLoad: 30 },
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-center gap-3">
-        {nodes.map((node, i) => {
-          const isDead = i === 0 && step >= 2 && step < 5;
-          const isOverloaded = i > 0 && step >= 2 && step < 5;
-          return (
-            <div key={node.label} className="text-center space-y-1.5">
-              <div className={cn(
-                "size-12 rounded-xl border flex items-center justify-center transition-all duration-500",
-                isDead
-                  ? "bg-red-500/10 border-red-500/30"
-                  : isOverloaded
-                  ? "bg-amber-500/10 border-amber-500/30"
-                  : "bg-emerald-500/10 border-emerald-500/30"
-              )}>
-                <Server className={cn(
-                  "size-5 transition-colors",
-                  isDead ? "text-red-400" : isOverloaded ? "text-amber-400" : "text-emerald-400"
-                )} />
-              </div>
-              <p className="text-[10px] font-medium">{node.label}</p>
-              <div className="w-12 h-1.5 rounded-full bg-muted/30 overflow-hidden mx-auto">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all duration-700",
-                    isDead ? "bg-red-500/50" : isOverloaded ? "bg-amber-500" : "bg-emerald-500"
-                  )}
-                  style={{ width: `${isDead ? 0 : node.load}%` }}
-                />
-              </div>
-              <p className="text-[9px] text-muted-foreground font-mono">
-                {isDead ? "DOWN" : `${node.load}%`}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-[11px] text-muted-foreground/60 text-center">
-        {step < 2 ? "All nodes serving traffic equally" : step < 5 ? "Server A fails — B and C absorb its load automatically" : "Server A recovers and rejoins the pool"}
-      </p>
-    </div>
+    <Playground
+      title="Retry with Exponential Backoff"
+      simulation={sim}
+      canvas={
+        <div className="p-4 space-y-4">
+          <div className="flex flex-wrap gap-2 justify-center">
+            {(["none", "simple", "exponential", "jitter"] as RetryStrategy[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => { setActiveStrategy(s); sim.reset(); }}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                  activeStrategy === s ? strategyBtnActive : strategyBtnInactive
+                )}
+              >
+                {retryStrategyLabel[s]}
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-border/50 bg-muted/10 p-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-muted-foreground border-b border-border/30">
+                  <th className="pb-1.5 text-left font-medium">Attempt</th>
+                  <th className="pb-1.5 text-left font-medium">Delay</th>
+                  <th className="pb-1.5 text-left font-medium">Total Wait</th>
+                  <th className="pb-1.5 text-left font-medium">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                {retryTimeline.map((row, idx) => {
+                  const isActive = idx <= currentAttempt;
+                  const isCurrent = idx === currentAttempt;
+                  return (
+                    <tr
+                      key={idx}
+                      className={cn(
+                        "transition-opacity border-b border-border/10",
+                        isActive ? "opacity-100" : "opacity-30"
+                      )}
+                    >
+                      <td className="py-1 font-mono">{row.attempt}</td>
+                      <td className="py-1 font-mono">{row.delay}</td>
+                      <td className="py-1 font-mono">{row.cumulative}s</td>
+                      <td className="py-1">
+                        {isActive && (
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-medium",
+                            row.success
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : isCurrent
+                              ? "bg-amber-500/10 text-amber-400"
+                              : "bg-red-500/10 text-red-400"
+                          )}>
+                            {row.success ? "OK" : isCurrent ? "WAITING" : "FAIL"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {activeStrategy === "none" && step > 0 && (
+            <p className="text-xs text-red-400 text-center">No retry -- the request simply fails. User sees an error.</p>
+          )}
+          {succeeded && (
+            <p className="text-xs text-emerald-400 text-center">Request succeeded on attempt {serverRecoversAt}! Server recovered just in time.</p>
+          )}
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold">Success Rate vs Server Load</h4>
+          <LiveChart
+            type="bar"
+            data={chartData}
+            dataKeys={{ x: "strategy", y: ["successRate", "serverLoad"], label: ["Success %", "Server Load %"] }}
+            height={180}
+            unit="%"
+            showLegend
+          />
+          <p className="text-xs">
+            Simple retries flood the server (retry storm). Exponential backoff gives it breathing room.
+            Adding jitter prevents synchronized retries from multiple clients hitting at the same instant.
+          </p>
+        </div>
+      }
+    />
   );
 }
 
-function BlastRadiusViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 6), 2000);
-    return () => clearInterval(t);
-  }, []);
+/* ------------------------------------------------------------------ */
+/*  4. SLA Calculator                                                 */
+/* ------------------------------------------------------------------ */
 
-  const zones = [
-    {
-      name: "Checkout",
-      services: ["Payment", "Cart", "Orders"],
-      affected: step >= 1 && step < 4,
-      critical: true,
-    },
-    {
-      name: "Catalog",
-      services: ["Search", "Products", "Reviews"],
-      affected: step >= 2 && step < 3,
-      critical: false,
-    },
-    {
-      name: "User",
-      services: ["Auth", "Profile", "Notifications"],
-      affected: false,
-      critical: false,
-    },
+function SlaCalculator() {
+  const [nines, setNines] = useState(3);
+  const [depA, setDepA] = useState(99.9);
+  const [depB, setDepB] = useState(99.9);
+
+  const availability = useMemo(() => Math.round((100 - 100 / Math.pow(10, nines)) * 10000) / 10000, [nines]);
+
+  const fmtDown = (totalMin: number) => {
+    if (totalMin >= 60) return `${(totalMin / 60).toFixed(1)} hours`;
+    if (totalMin >= 1) return `${totalMin.toFixed(1)} minutes`;
+    return `${(totalMin * 60).toFixed(0)} seconds`;
+  };
+  const fraction = 1 - availability / 100;
+  const downtimePerYear = fmtDown(525960 * fraction);
+  const downtimePerMonth = fmtDown(43830 * fraction);
+  const downtimePerDay = fmtDown(1440 * fraction);
+
+  const combined = Math.round(depA * depB) / 100;
+
+  const ninesData = [
+    { level: "Two 9s", downtime: 87.6 },
+    { level: "Three 9s", downtime: 8.8 },
+    { level: "Four 9s", downtime: 0.88 },
+    { level: "Five 9s", downtime: 0.088 },
   ];
 
-  const withBulkheads = step >= 3;
+  const ninesSliderLabel: Record<number, string> = { 1: "90%", 2: "99%", 3: "99.9%", 4: "99.99%", 5: "99.999%" };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-2">
-        <span className={cn(
-          "text-[10px] font-mono px-2 py-0.5 rounded-full border transition-all",
-          withBulkheads
-            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-            : "bg-red-500/10 border-red-500/30 text-red-400"
-        )}>
-          {withBulkheads ? "WITH BULKHEADS" : "WITHOUT BULKHEADS"}
-        </span>
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.02] overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-violet-500/20 bg-violet-500/[0.04] px-4 py-2">
+        <div className="size-2 rounded-full bg-violet-500/50" />
+        <span className="text-sm font-medium text-violet-400">SLA Calculator</span>
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        {zones.map((zone) => {
-          const isContained = withBulkheads && zone.name === "Checkout" && step >= 3 && step < 5;
-          const isSpreading = !withBulkheads && zone.affected;
-          return (
-            <div
-              key={zone.name}
-              className={cn(
-                "rounded-lg border p-3 transition-all duration-500",
-                isSpreading
-                  ? "border-red-500/40 bg-red-500/10"
-                  : isContained
-                  ? "border-amber-500/30 bg-amber-500/5"
-                  : "border-border/50 bg-muted/10"
-              )}
-            >
-              <p className={cn(
-                "text-[11px] font-semibold mb-2 transition-colors",
-                isSpreading ? "text-red-400" : isContained ? "text-amber-400" : "text-foreground"
-              )}>
-                {zone.name}
-              </p>
-              {zone.services.map((svc) => (
-                <div key={svc} className="flex items-center gap-1.5 mb-1">
-                  <div className={cn(
-                    "size-1.5 rounded-full transition-colors",
-                    isSpreading ? "bg-red-500" : isContained && zone.name === "Checkout" ? "bg-amber-500" : "bg-emerald-500"
-                  )} />
-                  <span className="text-[10px] text-muted-foreground">{svc}</span>
-                </div>
-              ))}
+
+      <div className="p-4 space-y-6">
+        {/* Nines selector */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium">Number of 9s</label>
+            <span className="text-sm font-mono font-bold text-violet-400">{ninesSliderLabel[nines] ?? `${availability}%`}</span>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={5}
+            value={nines}
+            onChange={(e) => setNines(Number(e.target.value))}
+            className="w-full h-1.5 rounded-full accent-violet-500 cursor-pointer"
+          />
+          <div className="grid grid-cols-3 gap-3">
+            {[["Per Year", downtimePerYear], ["Per Month", downtimePerMonth], ["Per Day", downtimePerDay]].map(([label, val]) => (
+              <div key={label} className="rounded-lg bg-muted/20 border border-border/30 p-2.5 text-center">
+                <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+                <p className="text-sm font-mono font-semibold">{val}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Dependency chain */}
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold">Dependency Chain</h4>
+          <p className="text-xs text-muted-foreground">
+            When services are chained, their availabilities multiply. Two services at 99.9% each
+            give you only {combined}% combined.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            {[{ label: "Service A", val: depA, set: setDepA }, { label: "Service B", val: depB, set: setDepB }].map((svc) => (
+              <div key={svc.label} className="space-y-1">
+                <label className="text-[10px] text-muted-foreground">{svc.label}</label>
+                <select value={svc.val} onChange={(e) => svc.set(Number(e.target.value))}
+                  className="block text-xs bg-muted/20 border border-border rounded px-2 py-1">
+                  {[99, 99.9, 99.99, 99.999].map((v) => <option key={v} value={v}>{v}%</option>)}
+                </select>
+              </div>
+            )).reduce<React.ReactNode[]>((acc, el, i) => [...acc, ...(i > 0 ? [<span key={`x${i}`} className="text-muted-foreground text-lg font-mono mt-4">x</span>] : []), el], [])}
+            <span className="text-muted-foreground text-lg font-mono mt-4">=</span>
+            <div className="space-y-1">
+              <label className="text-[10px] text-muted-foreground">Combined</label>
+              <div className={cn("text-sm font-mono font-bold px-3 py-1 rounded border",
+                combined >= 99.9 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+                  : combined >= 99 ? "text-amber-400 bg-amber-500/10 border-amber-500/30"
+                  : "text-red-400 bg-red-500/10 border-red-500/30")}>{combined}%</div>
             </div>
-          );
-        })}
+          </div>
+        </div>
+
+        {/* Downtime chart */}
+        <LiveChart
+          type="bar"
+          data={ninesData}
+          dataKeys={{ x: "level", y: "downtime", label: "Downtime (hrs/yr)" }}
+          height={160}
+          unit="hrs"
+        />
       </div>
-      <p className="text-[11px] text-muted-foreground/60">
-        {step < 1
-          ? "Normal operation — all services healthy"
-          : step < 3
-          ? "Payment service fails. Without bulkheads, the failure cascades to Catalog zone..."
-          : step < 5
-          ? "With bulkheads: failure contained to Checkout zone. Catalog and User zones unaffected."
-          : "Failure resolved — all zones restored"}
-      </p>
     </div>
   );
 }
 
-function ChaosMonkeyViz() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 12), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const servers = Array.from({ length: 8 }, (_, i) => ({
-    id: i,
-    label: `svc-${String(i + 1).padStart(2, "0")}`,
-  }));
-
-  const killedIndex = tick >= 3 && tick < 9 ? Math.floor(tick / 3) % 8 : -1;
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-2">
-        {servers.map((srv) => {
-          const isKilled = srv.id === killedIndex;
-          const wasKilled = tick >= 9 && srv.id === Math.floor(6 / 3) % 8;
-          return (
-            <div
-              key={srv.id}
-              className={cn(
-                "flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition-all duration-300",
-                isKilled
-                  ? "bg-red-500/10 border-red-500/30"
-                  : wasKilled
-                  ? "bg-emerald-500/10 border-emerald-500/20"
-                  : "bg-muted/20 border-border/40"
-              )}
-            >
-              <div className={cn(
-                "size-1.5 rounded-full transition-colors",
-                isKilled ? "bg-red-500 animate-pulse" : "bg-emerald-500"
-              )} />
-              <span className={cn(
-                "text-[10px] font-mono transition-colors",
-                isKilled ? "text-red-400" : "text-muted-foreground"
-              )}>
-                {srv.label}
-              </span>
-              {isKilled && (
-                <XCircle className="size-3 text-red-400 ml-auto" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-muted-foreground/50">chaos-monkey:</span>
-        <span className={cn(
-          "text-[10px] font-mono",
-          killedIndex >= 0 ? "text-red-400" : "text-emerald-400"
-        )}>
-          {killedIndex >= 0
-            ? `Terminated svc-${String(killedIndex + 1).padStart(2, "0")} — testing resilience...`
-            : tick >= 9
-            ? "All instances recovered. System resilient."
-            : "Scanning for targets..."}
-        </span>
-      </div>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/*  Main Page                                                         */
+/* ------------------------------------------------------------------ */
 
 export default function FaultTolerancePage() {
   return (
@@ -344,299 +562,129 @@ export default function FaultTolerancePage() {
         difficulty="intermediate"
       />
 
-      <FailureScenario title="Black Friday goes dark">
+      <ConversationalCallout type="question">
+        What happens when a single server dies in your architecture? If the answer is &quot;everything
+        goes down,&quot; you have a Single Point of Failure (SPOF). Fault tolerance means designing
+        systems that keep working when individual components fail.
+      </ConversationalCallout>
+
+      {/* 1. Redundancy Playground */}
+      <section className="space-y-3">
+        <h2 className="text-xl font-bold">Redundancy</h2>
         <p className="text-sm text-muted-foreground">
-          Black Friday. Your e-commerce site is handling 10x normal traffic. At 2:47 PM, the single
-          application server runs out of memory and crashes. <strong className="text-red-400">Your entire store goes offline.</strong>{" "}
-          10,000 customers see a blank page. You lose $40,000 in revenue per minute while your
-          on-call engineer frantically SSHs into the box to restart the process. By the time it&apos;s back,
-          customers have moved to competitors. The damage isn&apos;t just the lost sales — it&apos;s the
-          trust you&apos;ll never recover.
+          The core idea is simple: duplicate critical components so that when one fails, another takes
+          over. Click the buttons below to kill servers, databases, and the load balancer. Watch how
+          the system responds -- and notice what component, when killed, brings everything down.
         </p>
-        <div className="flex justify-center gap-3 pt-4">
-          <ServerNode type="client" label="Customers" sublabel="10,000 active" status="healthy" />
-          <span className="text-red-500 text-lg font-mono self-center">---✕---</span>
-          <ServerNode type="server" label="App Server" sublabel="OOM KILLED" status="unhealthy" />
-          <ServerNode type="database" label="Database" sublabel="Healthy" status="healthy" />
-        </div>
-      </FailureScenario>
-
-      <WhyItBreaks title="Single points of failure are ticking time bombs">
-        <p className="text-sm text-muted-foreground">
-          A single server is a <strong>single point of failure</strong> (SPOF). No matter how powerful
-          the machine is, it will eventually fail. Hardware degrades (the annualized failure rate for
-          hard drives is 2-9%). Software has bugs. Networks partition. Power grids go down.
-          Fault tolerance means designing your system so that when (not if) a component fails,
-          the system continues operating — possibly at reduced capacity, but never at zero.
-        </p>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { n: "1", label: "Hardware Failure", desc: "Disk, RAM, CPU, NIC — everything degrades" },
-            { n: "2", label: "Software Bugs", desc: "Memory leaks, deadlocks, unhandled exceptions" },
-            { n: "3", label: "Network Partitions", desc: "Links between nodes drop packets or die" },
-            { n: "4", label: "Human Error", desc: "Bad deploys, config changes, accidental deletes" },
-          ].map((item) => (
-            <div key={item.n} className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-3">
-              <span className="text-xs font-mono font-bold text-red-400 bg-red-500/10 rounded-md size-6 flex items-center justify-center shrink-0">
-                {item.n}
-              </span>
-              <div>
-                <p className="text-xs font-semibold">{item.label}</p>
-                <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="Active-Passive Failover">
-        <p className="text-sm text-muted-foreground mb-4">
-          The simplest redundancy pattern: one server handles all traffic while a standby replica
-          stays synchronized and ready to take over. When the primary fails, the standby is promoted
-          automatically. Typical failover time: 15-60 seconds depending on health check intervals.
-        </p>
-        <FailoverAnimation />
-        <ConversationalCallout type="tip">
-          Active-passive is the go-to pattern for stateful services like databases. PostgreSQL streaming
-          replication, MySQL Group Replication, and Redis Sentinel all use this pattern. The standby
-          continuously replays the primary&apos;s write-ahead log so it&apos;s always nearly up-to-date.
-        </ConversationalCallout>
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Active-Active — All Nodes Serve Traffic">
-        <p className="text-sm text-muted-foreground mb-4">
-          Every node handles requests simultaneously. A load balancer distributes traffic across all nodes.
-          When one dies, the others absorb its share. No idle resources, no wasted capacity — but you need
-          stateless services or a conflict resolution strategy for writes.
-        </p>
-        <ActiveActiveAnimation />
+        <RedundancyPlayground />
         <AhaMoment
-          question="Active-passive wastes a server sitting idle. Why not always use active-active?"
+          question="You added redundancy to every server and database. Why does killing the Load Balancer still take down the whole system?"
           answer={
             <p>
-              Active-active is harder to implement correctly for stateful services. When two database nodes
-              accept writes simultaneously, you need conflict resolution — what happens when User A updates
-              a row on Node 1 while User B updates the same row on Node 2? You get a &quot;split-brain&quot;
-              conflict. Use active-active for <em>stateless</em> services (web servers, API gateways) and
-              active-passive for <em>stateful</em> ones (primary databases, coordination services like ZooKeeper).
+              Because the Load Balancer itself is a Single Point of Failure! You need redundancy at
+              every layer -- including the LB. In practice, cloud providers use anycast IPs and
+              multiple LB instances. The lesson: walk through every component and ask &quot;what
+              happens if this dies?&quot;
             </p>
           }
         />
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="Blast Radius Containment with Bulkheads">
-        <p className="text-sm text-muted-foreground mb-4">
-          Named after the watertight compartments in ship hulls, the <strong>bulkhead pattern</strong> isolates
-          failures so they can&apos;t spread. Each subsystem gets its own thread pool, connection pool, or even
-          separate service. If the payment service exhausts its connections, the catalog service is unaffected
-          because it uses a completely separate pool.
+      {/* 2. Failover Strategies */}
+      <section className="space-y-3">
+        <h2 className="text-xl font-bold">Failover Strategies</h2>
+        <p className="text-sm text-muted-foreground">
+          Redundancy alone is not enough -- you need a strategy for how traffic moves when a node
+          dies. Toggle between Active-Passive and Active-Active to see the tradeoffs in action.
         </p>
-        <BlastRadiusViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Chaos Engineering — Netflix's Chaos Monkey">
-        <p className="text-sm text-muted-foreground mb-4">
-          Netflix pioneered chaos engineering with Chaos Monkey, a tool that randomly terminates production
-          instances during business hours. The philosophy: <em>&quot;The best way to avoid failure is to
-          fail constantly.&quot;</em> If your system can&apos;t survive a random instance dying, you find out
-          at 2 PM on a Tuesday — not 2 AM during a real outage.
-        </p>
-        <ChaosMonkeyViz />
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[
-            { name: "Chaos Monkey", desc: "Kills random instances in production to verify redundancy" },
-            { name: "Chaos Gorilla", desc: "Simulates entire AWS Availability Zone failures" },
-            { name: "ChAP", desc: "Chaos Automation Platform — runs targeted experiments with blast radius controls" },
-          ].map((tool) => (
-            <div key={tool.name} className="rounded-lg border border-border/50 bg-muted/10 p-3">
-              <p className="text-xs font-semibold mb-1">{tool.name}</p>
-              <p className="text-[11px] text-muted-foreground">{tool.desc}</p>
-            </div>
-          ))}
-        </div>
-        <ConversationalCallout type="question">
-          Chaos engineering isn&apos;t just about killing servers. It&apos;s about forming a hypothesis
-          (&quot;our system will continue serving requests if we lose one node&quot;), running the
-          experiment, and verifying the hypothesis. If it fails, you&apos;ve found a vulnerability
-          before your users did.
+        <FailoverStrategies />
+        <ConversationalCallout type="tip">
+          Use Active-Passive for stateful services (databases, ZooKeeper) where split-brain is
+          dangerous. Use Active-Active for stateless services (web servers, API gateways) where
+          every node can handle any request independently.
         </ConversationalCallout>
-      </ConceptVisualizer>
+      </section>
 
-      <CorrectApproach title="Graceful Degradation — Bend, Don't Break">
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Fault tolerance isn&apos;t just about keeping the lights on — it&apos;s about deciding what to
-            sacrifice when things go wrong. A well-designed system degrades gracefully instead of
-            collapsing entirely.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-lg border bg-muted/10 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Shield className="size-4 text-blue-400" />
-                <h4 className="text-xs font-semibold">Shed non-critical features</h4>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                If the recommendation engine is down, show bestsellers instead. If real-time inventory
-                is unavailable, show &quot;usually in stock&quot; and handle oversells later.
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/10 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Zap className="size-4 text-amber-400" />
-                <h4 className="text-xs font-semibold">Timeouts and fallbacks</h4>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Every network call should have a timeout and a fallback response. A 2-second timeout
-                returning cached data beats a 30-second hang returning nothing.
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/10 p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Server className="size-4 text-emerald-400" />
-                <h4 className="text-xs font-semibold">Bulkhead isolation</h4>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Separate critical paths (checkout) from non-critical ones (reviews). Use different
-                thread pools so a failure in one can&apos;t starve resources from another.
-              </p>
-            </div>
-          </div>
-        </div>
-      </CorrectApproach>
+      {/* 3. Retry with Backoff */}
+      <section className="space-y-3">
+        <h2 className="text-xl font-bold">Retry with Exponential Backoff</h2>
+        <p className="text-sm text-muted-foreground">
+          When a request fails, should you retry immediately? That can overwhelm an already-struggling
+          server. Exponential backoff waits longer between each retry: 1s, 2s, 4s, 8s, 16s. Adding
+          jitter randomizes the delay so thousands of clients do not all retry at the same instant.
+        </p>
+        <RetryPlayground />
+        <ConversationalCallout type="warning">
+          Simple retries without backoff can cause a &quot;retry storm&quot; that keeps the server
+          overloaded. Always use exponential backoff with jitter in production. Most HTTP client
+          libraries and SDKs have this built in.
+        </ConversationalCallout>
+      </section>
 
-      <AnimatedFlow
-        steps={[
-          { id: "detect", label: "Detect Failure", description: "Health check fails for primary node", icon: <AlertTriangle className="size-4" /> },
-          { id: "route", label: "Reroute Traffic", description: "Load balancer marks node unhealthy", icon: <ArrowRight className="size-4" /> },
-          { id: "promote", label: "Promote Standby", description: "Standby becomes the new primary", icon: <Server className="size-4" /> },
-          { id: "recover", label: "Recover", description: "Old primary restarts, rejoins as standby", icon: <CheckCircle2 className="size-4" /> },
-        ]}
-        interval={2000}
-      />
-
-      <InteractiveDemo title="Fault Tolerance Impact Calculator">
-        {({ isPlaying, tick }) => {
-          const scenarios = [
-            { name: "No redundancy", servers: 1, failoverTime: "15 min", availability: "99.0%", costPerHour: 100, annualDowntime: "87.6 hrs" },
-            { name: "Active-passive", servers: 2, failoverTime: "30 sec", availability: "99.95%", costPerHour: 200, annualDowntime: "4.4 hrs" },
-            { name: "Active-active (2)", servers: 2, failoverTime: "~0 sec", availability: "99.99%", costPerHour: 200, annualDowntime: "52.6 min" },
-            { name: "Active-active (3)", servers: 3, failoverTime: "~0 sec", availability: "99.999%", costPerHour: 300, annualDowntime: "5.3 min" },
-          ];
-          const active = isPlaying ? Math.min(tick % 5, scenarios.length) : 0;
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to compare fault tolerance strategies. Each additional layer of redundancy
-                trades cost for uptime.
-              </p>
-              <div className="space-y-1.5">
-                {scenarios.map((s, i) => (
-                  <div
-                    key={s.name}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-all duration-400",
-                      i < active
-                        ? "bg-emerald-500/8 border-emerald-500/20"
-                        : i === active && isPlaying
-                        ? "bg-blue-500/8 border-blue-500/20 ring-1 ring-blue-500/15"
-                        : "bg-muted/10 border-border/30 text-muted-foreground/40"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-xs font-medium w-32",
-                      i < active ? "text-emerald-400" : i === active && isPlaying ? "text-blue-400" : ""
-                    )}>
-                      {s.name}
-                    </span>
-                    <div className="flex-1 grid grid-cols-3 gap-2 text-[10px] font-mono">
-                      <span className={cn(i <= active && isPlaying ? "text-muted-foreground" : "text-transparent")}>
-                        Failover: {s.failoverTime}
-                      </span>
-                      <span className={cn(i <= active && isPlaying ? "text-muted-foreground" : "text-transparent")}>
-                        SLA: {s.availability}
-                      </span>
-                      <span className={cn(i <= active && isPlaying ? "text-muted-foreground" : "text-transparent")}>
-                        Downtime/yr: {s.annualDowntime}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {active >= scenarios.length && (
-                <ConversationalCallout type="tip">
-                  Going from 99.9% to 99.99% availability means reducing annual downtime from 8.8 hours
-                  to 52 minutes. But each additional &quot;nine&quot; costs exponentially more in infrastructure
-                  and engineering complexity.
-                </ConversationalCallout>
-              )}
-            </div>
-          );
-        }}
-      </InteractiveDemo>
+      {/* 4. SLA Calculator */}
+      <section className="space-y-3">
+        <h2 className="text-xl font-bold">SLA and the Nines</h2>
+        <p className="text-sm text-muted-foreground">
+          &quot;Five nines&quot; (99.999%) sounds impressive, but it means only 5 minutes of allowed
+          downtime per year. Each additional nine costs exponentially more in engineering effort and
+          infrastructure. Use the calculator below to explore the tradeoffs.
+        </p>
+        <SlaCalculator />
+        <AhaMoment
+          question="If Service A is 99.9% and Service B is 99.9%, why isn't the combined availability also 99.9%?"
+          answer={
+            <p>
+              Because availabilities multiply, they do not average! 99.9% x 99.9% = 99.8%. Each
+              dependency in your chain makes the overall system less reliable. This is why
+              microservices architectures need careful SLA planning -- a request touching 10 services
+              each at 99.9% gives you only 99% overall.
+            </p>
+          }
+        />
+      </section>
 
       <BeforeAfter
         before={{
-          title: "No Redundancy",
+          title: "No Fault Tolerance",
           content: (
-            <div className="space-y-3">
-              <div className="flex justify-center">
-                <ServerNode type="server" label="Solo Server" sublabel="SPOF" status="unhealthy" />
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>- Server crash = total outage</li>
-                <li>- Manual restart takes 5-15 minutes</li>
-                <li>- 87.6 hours downtime per year (99% SLA)</li>
-                <li>- Zero capacity during failure</li>
-                <li>- Cascading failures destroy everything</li>
-              </ul>
-            </div>
+            <ul className="text-xs text-muted-foreground space-y-1.5">
+              <li>- Single server = total outage on crash</li>
+              <li>- Manual restart takes 5-15 minutes</li>
+              <li>- No retries; users see raw errors</li>
+              <li>- 87.6 hours downtime per year (99% SLA)</li>
+              <li>- One bad deploy takes everything down</li>
+            </ul>
           ),
         }}
         after={{
           title: "With Fault Tolerance",
           content: (
-            <div className="space-y-3">
-              <div className="flex justify-center gap-2">
-                <ServerNode type="loadbalancer" label="LB" status="healthy" />
-                <ServerNode type="server" label="S1" status="healthy" />
-                <ServerNode type="server" label="S2" status="healthy" />
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>+ One server crash = no user impact</li>
-                <li>+ Automatic failover in seconds</li>
-                <li>+ 4.4 hours downtime per year (99.95% SLA)</li>
-                <li>+ Remaining servers absorb load</li>
-                <li>+ Bulkheads contain blast radius</li>
-              </ul>
-            </div>
+            <ul className="text-xs text-muted-foreground space-y-1.5">
+              <li>+ Redundant servers with auto-failover</li>
+              <li>+ Recovery in seconds, not minutes</li>
+              <li>+ Exponential backoff protects the server</li>
+              <li>+ 5.3 minutes downtime per year (99.999%)</li>
+              <li>+ Bulkheads contain blast radius</li>
+            </ul>
           ),
         }}
       />
 
-      <ConversationalCallout type="warning">
-        Redundancy has a cost: more servers, more complexity, more synchronization overhead. Don&apos;t
-        over-engineer. A side project doesn&apos;t need multi-region failover. Match your fault tolerance
-        to your actual availability requirements (SLA). A 99.9% SLA (8.8 hours downtime/year) is
-        perfectly fine for most applications.
-      </ConversationalCallout>
-
       <ConversationalCallout type="tip">
-        In interviews, always identify SPOFs. Walk through every component — server, database, load
-        balancer, DNS, network link — and ask &quot;what happens if this dies?&quot; If the answer is
-        &quot;the system goes down,&quot; you need redundancy there. Then discuss the tradeoff between
-        active-passive (simpler, good for stateful services) and active-active (better utilization,
-        good for stateless services).
+        In system design interviews, always identify SPOFs first. Walk through every component --
+        server, database, load balancer, DNS, network link -- and ask &quot;what happens if this
+        dies?&quot; Then discuss the cost-availability tradeoff: a 99.9% SLA (8.8 hours downtime per
+        year) is perfectly fine for most applications. Do not over-engineer.
       </ConversationalCallout>
 
       <KeyTakeaway
         points={[
-          "Fault tolerance means your system keeps working when individual components fail — the goal is zero user-visible impact.",
-          "Active-passive failover is simpler and avoids split-brain conflicts; active-active provides better resource utilization for stateless services.",
-          "The bulkhead pattern isolates failures into compartments so a crash in one subsystem can't cascade to the entire application.",
-          "Chaos engineering (Netflix's Chaos Monkey) proactively tests resilience by randomly killing production instances during business hours.",
-          "Graceful degradation preserves core functionality by shedding non-critical features — show bestsellers when recommendations are down.",
-          "Every single point of failure in your architecture is a ticking time bomb — identify and eliminate them systematically.",
+          "Fault tolerance means your system keeps working when individual components fail -- zero user-visible impact is the goal.",
+          "Active-passive failover is simpler and avoids split-brain; active-active provides better utilization for stateless services.",
+          "Exponential backoff with jitter prevents retry storms from overwhelming recovering servers.",
+          "SLA nines multiply across dependencies: two 99.9% services in series give you only 99.8% combined availability.",
+          "Every single point of failure is a ticking time bomb -- identify and eliminate them systematically.",
+          "Match your fault tolerance investment to your actual SLA needs. Not every service needs five nines.",
         ]}
       />
     </div>

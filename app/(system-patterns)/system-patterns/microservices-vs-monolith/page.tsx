@@ -1,226 +1,630 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { ServerNode } from "@/components/server-node";
-import { BeforeAfter } from "@/components/before-after";
-import { InteractiveDemo } from "@/components/interactive-demo";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { Playground } from "@/components/playground";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Box, Boxes, ArrowRight, GitBranch, Rocket, Users } from "lucide-react";
 
-const moduleActiveStyles: Record<string, string> = {
-  blue: "border-dashed border-blue-500/40 bg-blue-500/10 text-blue-400",
-  emerald: "border-dashed border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
-  violet: "border-dashed border-violet-500/40 bg-violet-500/10 text-violet-400",
-  orange: "border-dashed border-orange-500/40 bg-orange-500/10 text-orange-400",
-};
+// ─── Playground 1: Architecture Comparison ──────────────────────────────────
 
-const moduleBorderColors: Record<string, string> = {
-  blue: "var(--color-blue-500)",
-  emerald: "var(--color-emerald-500)",
-  violet: "var(--color-violet-500)",
-  orange: "var(--color-orange-500)",
-};
+function ArchitecturePlayground() {
+  const [view, setView] = useState<"monolith" | "microservices">("monolith");
 
-function MonolithSplitViz() {
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setPhase((p) => (p + 1) % 5), 2200);
-    return () => clearInterval(t);
-  }, []);
+  const sim = useSimulation({ intervalMs: 600, maxSteps: 12 });
 
-  const modules = [
-    { name: "Auth", color: "blue", team: "A" },
-    { name: "Orders", color: "emerald", team: "B" },
-    { name: "Payments", color: "violet", team: "C" },
-    { name: "Notifications", color: "orange", team: "D" },
+  const step = sim.step;
+
+  // Monolith: single server with all modules
+  const monolithNodes: FlowNode[] = [
+    {
+      id: "client",
+      type: "clientNode",
+      position: { x: 60, y: 120 },
+      data: {
+        label: "Client",
+        sublabel: step >= 1 ? "Sending request..." : "Idle",
+        status: step >= 1 && step < 5 ? "healthy" : "idle",
+        handles: { right: true },
+      },
+    },
+    {
+      id: "monolith",
+      type: "serverNode",
+      position: { x: 300, y: 60 },
+      data: {
+        label: "Monolith Server",
+        sublabel: "User + Product + Order + Payment",
+        status: step >= 3 ? "healthy" : step >= 2 ? "warning" : "idle",
+        metrics: [
+          { label: "Modules", value: "4" },
+          { label: "Latency", value: step >= 4 ? "12ms" : "--" },
+        ],
+        handles: { left: true, right: true },
+      },
+    },
+    {
+      id: "db",
+      type: "databaseNode",
+      position: { x: 560, y: 120 },
+      data: {
+        label: "Shared DB",
+        sublabel: "All tables",
+        status: step >= 3 ? "healthy" : "idle",
+        handles: { left: true },
+      },
+    },
   ];
+
+  const monolithEdges: FlowEdge[] = [
+    { id: "c-m", source: "client", target: "monolith", animated: step >= 1 && step < 5 },
+    { id: "m-d", source: "monolith", target: "db", animated: step >= 2 && step < 5 },
+  ];
+
+  // Microservices: gateway + individual services
+  const microNodes: FlowNode[] = [
+    {
+      id: "client",
+      type: "clientNode",
+      position: { x: 20, y: 140 },
+      data: {
+        label: "Client",
+        sublabel: step >= 1 ? "Sending request..." : "Idle",
+        status: step >= 1 && step < 10 ? "healthy" : "idle",
+        handles: { right: true },
+      },
+    },
+    {
+      id: "gateway",
+      type: "gatewayNode",
+      position: { x: 180, y: 130 },
+      data: {
+        label: "API Gateway",
+        sublabel: step >= 2 ? "Routing..." : "Ready",
+        status: step >= 2 ? "healthy" : "idle",
+        handles: { left: true, right: true },
+      },
+    },
+    {
+      id: "user-svc",
+      type: "serverNode",
+      position: { x: 380, y: 10 },
+      data: {
+        label: "User Service",
+        status: step >= 3 && step <= 4 ? "healthy" : "idle",
+        handles: { left: true, right: true },
+      },
+    },
+    {
+      id: "product-svc",
+      type: "serverNode",
+      position: { x: 380, y: 100 },
+      data: {
+        label: "Product Service",
+        status: step >= 5 && step <= 6 ? "healthy" : "idle",
+        handles: { left: true, right: true },
+      },
+    },
+    {
+      id: "order-svc",
+      type: "serverNode",
+      position: { x: 380, y: 190 },
+      data: {
+        label: "Order Service",
+        status: step >= 7 && step <= 8 ? "healthy" : "idle",
+        handles: { left: true, right: true },
+      },
+    },
+    {
+      id: "payment-svc",
+      type: "serverNode",
+      position: { x: 380, y: 280 },
+      data: {
+        label: "Payment Service",
+        status: step >= 9 ? "healthy" : "idle",
+        handles: { left: true, right: true },
+      },
+    },
+    {
+      id: "user-db",
+      type: "databaseNode",
+      position: { x: 590, y: 10 },
+      data: { label: "User DB", status: step >= 3 && step <= 4 ? "healthy" : "idle", handles: { left: true } },
+    },
+    {
+      id: "product-db",
+      type: "databaseNode",
+      position: { x: 590, y: 100 },
+      data: { label: "Product DB", status: step >= 5 && step <= 6 ? "healthy" : "idle", handles: { left: true } },
+    },
+    {
+      id: "order-db",
+      type: "databaseNode",
+      position: { x: 590, y: 190 },
+      data: { label: "Order DB", status: step >= 7 && step <= 8 ? "healthy" : "idle", handles: { left: true } },
+    },
+    {
+      id: "payment-db",
+      type: "databaseNode",
+      position: { x: 590, y: 280 },
+      data: { label: "Payment DB", status: step >= 9 ? "healthy" : "idle", handles: { left: true } },
+    },
+  ];
+
+  const microEdges: FlowEdge[] = [
+    { id: "c-gw", source: "client", target: "gateway", animated: step >= 1 && step < 10 },
+    { id: "gw-u", source: "gateway", target: "user-svc", animated: step >= 3 && step <= 4 },
+    { id: "gw-p", source: "gateway", target: "product-svc", animated: step >= 5 && step <= 6 },
+    { id: "gw-o", source: "gateway", target: "order-svc", animated: step >= 7 && step <= 8 },
+    { id: "gw-pay", source: "gateway", target: "payment-svc", animated: step >= 9 },
+    { id: "u-db", source: "user-svc", target: "user-db", animated: step >= 3 && step <= 4 },
+    { id: "p-db", source: "product-svc", target: "product-db", animated: step >= 5 && step <= 6 },
+    { id: "o-db", source: "order-svc", target: "order-db", animated: step >= 7 && step <= 8 },
+    { id: "pay-db", source: "payment-svc", target: "payment-db", animated: step >= 9 },
+  ];
+
+  const latencyData = useMemo(() => {
+    const points = [];
+    for (let i = 1; i <= Math.min(step, 12); i++) {
+      points.push({
+        step: `T${i}`,
+        monolith: Math.round(10 + Math.random() * 5),
+        microservices: Math.round(25 + i * 2 + Math.random() * 8),
+      });
+    }
+    return points;
+  }, [step]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-center gap-2 text-[11px] font-medium text-muted-foreground">
-        {["Monolith", "Identify Seams", "Extract First", "Extract More", "Independent"].map((label, i) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div className={cn(
-              "size-2 rounded-full transition-all duration-500",
-              phase >= i ? "bg-emerald-500 scale-110" : "bg-muted-foreground/20"
-            )} />
-            <span className={cn(
-              "transition-colors duration-300 hidden sm:inline",
-              phase === i ? "text-foreground" : "text-muted-foreground/50"
-            )}>{label}</span>
-          </div>
-        ))}
+      {/* Toggle */}
+      <div className="flex items-center justify-center gap-2">
+        <button
+          onClick={() => setView("monolith")}
+          className={cn(
+            "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+            view === "monolith"
+              ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+              : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+          )}
+        >
+          Monolith
+        </button>
+        <button
+          onClick={() => setView("microservices")}
+          className={cn(
+            "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+            view === "microservices"
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+          )}
+        >
+          Microservices
+        </button>
       </div>
 
-      <div className="relative flex items-center justify-center py-6">
-        {phase < 2 ? (
-          <div className={cn(
-            "rounded-xl border-2 p-4 transition-all duration-700 w-full max-w-xs",
-            phase === 0 ? "border-border bg-muted/20" : "border-dashed border-orange-500/40 bg-orange-500/5"
-          )}>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-2 text-center">
-              Single Deployable Unit
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {modules.map((m, i) => (
-                <div
-                  key={m.name}
-                  className={cn(
-                    "rounded-md border px-2.5 py-1.5 text-xs font-medium text-center transition-all duration-500",
-                    phase === 1
-                      ? moduleActiveStyles[m.color]
-                      : "border-border/50 bg-muted/30 text-muted-foreground"
-                  )}
-                  style={phase === 1 ? {
-                    borderColor: moduleBorderColors[m.color],
-                    opacity: 0.8 + i * 0.05,
-                  } : {}}
-                >
-                  <div>{m.name}</div>
-                  <div className="text-[9px] text-muted-foreground/50">Team {m.team}</div>
-                </div>
-              ))}
-            </div>
-            {phase === 0 && (
-              <div className="text-[10px] text-center text-muted-foreground/50 mt-2">
-                1 repo, 1 database, 1 deploy pipeline
-              </div>
+      <Playground
+        title={view === "monolith" ? "Monolith: Single Hop Request" : "Microservices: Multi-Hop Request"}
+        simulation={sim}
+        canvasHeight="min-h-[380px]"
+        canvas={
+          <FlowDiagram
+            nodes={view === "monolith" ? monolithNodes : microNodes}
+            edges={view === "monolith" ? monolithEdges : microEdges}
+            minHeight={370}
+            interactive
+          />
+        }
+        explanation={(state) => (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              {view === "monolith" ? "Single process, single hop" : "Multiple services, multiple hops"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {view === "monolith"
+                ? "The client sends a request to one server. All modules (User, Product, Order, Payment) run in the same process sharing one database. Fast, simple, but tightly coupled."
+                : "The client hits the API Gateway, which routes to each service. Each service has its own database. More network hops, but services are independently deployable and scalable."}
+            </p>
+            {step > 2 && latencyData.length > 0 && (
+              <>
+                <p className="text-xs font-medium text-muted-foreground mt-2">Latency comparison:</p>
+                <LiveChart
+                  type="latency"
+                  data={latencyData}
+                  dataKeys={{ x: "step", y: ["monolith", "microservices"], label: ["Monolith", "Microservices"] }}
+                  height={140}
+                  showLegend
+                />
+              </>
             )}
-            {phase === 1 && (
-              <div className="text-[10px] text-center text-orange-400/70 mt-2">
-                Dashed lines = domain boundaries found
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-start gap-3 flex-wrap justify-center">
-            {modules.map((m, i) => {
-              const extracted = phase === 2 ? i === 0 : phase === 3 ? i < 3 : true;
-              return (
-                <div
-                  key={m.name}
-                  className={cn(
-                    "flex flex-col items-center gap-1.5 transition-all duration-700",
-                    extracted ? "opacity-100 translate-y-0" : "opacity-40 translate-y-1"
-                  )}
-                >
-                  <div className={cn(
-                    "rounded-lg border px-3 py-2 text-center transition-all duration-500",
-                    extracted
-                      ? "border-emerald-500/30 bg-emerald-500/10"
-                      : "border-border/30 bg-muted/20"
-                  )}>
-                    <div className="text-xs font-semibold">{m.name}</div>
-                    <div className="text-[9px] text-muted-foreground/60">Team {m.team}</div>
-                  </div>
-                  {extracted && (
-                    <div className={cn(
-                      "rounded border px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground/60 transition-all",
-                      "bg-muted/30 border-border/30"
-                    )}>
-                      own DB
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
         )}
-      </div>
-
-      <p className="text-[11px] text-muted-foreground/60 text-center">
-        {phase === 0 && "All modules share one codebase, one database, one deploy pipeline."}
-        {phase === 1 && "Domain-driven design reveals natural service boundaries."}
-        {phase === 2 && "Extract the most painful module first. Auth gets its own repo and database."}
-        {phase === 3 && "Three services extracted. Notifications still lives in the remaining monolith."}
-        {phase === 4 && "Each service deploys independently. Teams own their service end-to-end."}
-      </p>
+      />
     </div>
   );
 }
 
-function DeploymentComparisonViz() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 12), 800);
-    return () => clearInterval(t);
-  }, []);
+// ─── Playground 2: Failure Cascade Demo ─────────────────────────────────────
 
-  const monoStages = [
-    { label: "Merge all PRs", done: tick >= 2 },
-    { label: "Run full test suite", done: tick >= 5 },
-    { label: "Build monolith", done: tick >= 7 },
-    { label: "Deploy everything", done: tick >= 9 },
+function FailureCascadePlayground() {
+  const [brokenService, setBrokenService] = useState<string | null>(null);
+
+  const services = ["User", "Product", "Order", "Payment"];
+
+  const statusMap: Record<string, string> = {
+    healthy: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    unhealthy: "bg-red-500/20 text-red-400 border-red-500/30",
+    idle: "bg-muted/30 text-muted-foreground border-border/30",
+  };
+
+  // Monolith: if any module breaks, everything is down
+  const monolithStatus = brokenService ? "unhealthy" : "healthy";
+
+  // Microservices: only the broken service is down
+  const getServiceStatus = (svc: string) => {
+    if (!brokenService) return "healthy";
+    return svc === brokenService ? "unhealthy" : "healthy";
+  };
+
+  const microNodes: FlowNode[] = [
+    {
+      id: "gateway",
+      type: "gatewayNode",
+      position: { x: 30, y: 120 },
+      data: {
+        label: "API Gateway",
+        status: "healthy",
+        handles: { right: true },
+      },
+    },
+    ...services.map((svc, i) => ({
+      id: svc.toLowerCase(),
+      type: "serverNode" as const,
+      position: { x: 260, y: i * 80 + 10 },
+      data: {
+        label: `${svc} Service`,
+        status: (getServiceStatus(svc) as "healthy" | "unhealthy"),
+        handles: { left: true, right: true },
+      },
+    })),
+    ...services.map((svc, i) => ({
+      id: `${svc.toLowerCase()}-db`,
+      type: "databaseNode" as const,
+      position: { x: 470, y: i * 80 + 10 },
+      data: {
+        label: `${svc} DB`,
+        status: (getServiceStatus(svc) as "healthy" | "unhealthy"),
+        handles: { left: true },
+      },
+    })),
   ];
 
-  const microStages = [
-    { label: "Merge Order PR", done: tick >= 1 },
-    { label: "Run Order tests", done: tick >= 2 },
-    { label: "Build Order image", done: tick >= 3 },
-    { label: "Deploy Order only", done: tick >= 4 },
+  const microEdges: FlowEdge[] = [
+    ...services.map((svc) => ({
+      id: `gw-${svc.toLowerCase()}`,
+      source: "gateway",
+      target: svc.toLowerCase(),
+      animated: getServiceStatus(svc) === "healthy",
+    })),
+    ...services.map((svc) => ({
+      id: `${svc.toLowerCase()}-db-edge`,
+      source: svc.toLowerCase(),
+      target: `${svc.toLowerCase()}-db`,
+      animated: getServiceStatus(svc) === "healthy",
+    })),
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div className="space-y-1.5">
-        <div className="text-[11px] font-semibold text-orange-400 mb-2 flex items-center gap-1.5">
-          <Box className="size-3" /> Monolith Deploy
-        </div>
-        {monoStages.map((s) => (
-          <div key={s.label} className="flex items-center gap-2">
-            <div className={cn(
-              "size-1.5 rounded-full transition-all",
-              s.done ? "bg-orange-400" : "bg-muted-foreground/20"
-            )} />
-            <span className={cn(
-              "text-[11px] transition-colors",
-              s.done ? "text-orange-400" : "text-muted-foreground/40"
-            )}>{s.label}</span>
+    <Playground
+      title="Failure Blast Radius: Monolith vs Microservices"
+      controls={false}
+      canvasHeight="min-h-[360px]"
+      canvas={
+        <div className="flex flex-col lg:flex-row h-full">
+          {/* Monolith side */}
+          <div className="flex-1 p-4 border-b lg:border-b-0 lg:border-r border-violet-500/10">
+            <p className="text-xs font-semibold text-blue-400 mb-3">Monolith</p>
+            <div
+              className={cn(
+                "rounded-xl border-2 p-4 transition-all duration-500",
+                statusMap[monolithStatus]
+              )}
+            >
+              <p className="text-sm font-semibold mb-2">
+                {monolithStatus === "unhealthy" ? "ENTIRE SYSTEM DOWN" : "All Systems Healthy"}
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {services.map((svc) => (
+                  <div
+                    key={svc}
+                    className={cn(
+                      "rounded-md border px-2 py-1 text-xs text-center transition-all",
+                      monolithStatus === "unhealthy"
+                        ? "border-red-500/30 bg-red-500/10 text-red-400"
+                        : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                    )}
+                  >
+                    {svc}
+                  </div>
+                ))}
+              </div>
+              {monolithStatus === "unhealthy" && (
+                <p className="text-[10px] text-red-400/70 mt-2 text-center">
+                  {brokenService} crash took down everything
+                </p>
+              )}
+            </div>
           </div>
-        ))}
-        <div className={cn(
-          "text-[10px] font-mono mt-1 transition-opacity",
-          tick >= 9 ? "opacity-100 text-orange-400" : "opacity-0"
-        )}>
-          Total: ~45 minutes
-        </div>
-      </div>
 
-      <div className="space-y-1.5">
-        <div className="text-[11px] font-semibold text-emerald-400 mb-2 flex items-center gap-1.5">
-          <Boxes className="size-3" /> Microservice Deploy
+          {/* Microservices side */}
+          <div className="flex-1 p-1">
+            <p className="text-xs font-semibold text-emerald-400 mb-1 px-3 pt-3">Microservices</p>
+            <FlowDiagram nodes={microNodes} edges={microEdges} minHeight={280} interactive={false} />
+          </div>
         </div>
-        {microStages.map((s) => (
-          <div key={s.label} className="flex items-center gap-2">
-            <div className={cn(
-              "size-1.5 rounded-full transition-all",
-              s.done ? "bg-emerald-400" : "bg-muted-foreground/20"
-            )} />
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Click a service to break it</p>
+          <p className="text-xs text-muted-foreground">
+            In a monolith, one crashed module takes the whole server down.
+            With microservices, only the broken service fails -- the rest keep serving traffic.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {services.map((svc) => (
+              <button
+                key={svc}
+                onClick={() => setBrokenService(brokenService === svc ? null : svc)}
+                className={cn(
+                  "rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors",
+                  brokenService === svc
+                    ? "bg-red-500/20 text-red-400 border-red-500/30"
+                    : "bg-muted/30 text-muted-foreground border-border/30 hover:bg-red-500/10 hover:text-red-400"
+                )}
+              >
+                Break {svc}
+              </button>
+            ))}
+            {brokenService && (
+              <button
+                onClick={() => setBrokenService(null)}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 transition-colors"
+              >
+                Heal All
+              </button>
+            )}
+          </div>
+          {brokenService && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs space-y-1">
+              <p className="font-medium text-red-400">Blast radius comparison:</p>
+              <p className="text-muted-foreground">
+                Monolith: <span className="text-red-400 font-semibold">4/4 modules down</span>
+              </p>
+              <p className="text-muted-foreground">
+                Microservices: <span className="text-emerald-400 font-semibold">1/4 services down</span>. The other 3 continue serving users.
+              </p>
+            </div>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+// ─── Playground 3: Scaling Comparison ───────────────────────────────────────
+
+function ScalingPlayground() {
+  const [trafficLevel, setTrafficLevel] = useState(1);
+
+  const trafficLabels: Record<number, string> = {
+    1: "Low",
+    2: "Medium",
+    3: "High",
+    4: "Viral Spike",
+  };
+
+  // Cost data as traffic grows
+  const costData = [
+    { traffic: "Low", monolith: 50, microservices: 80 },
+    { traffic: "Medium", monolith: 200, microservices: 150 },
+    { traffic: "High", monolith: 800, microservices: 400 },
+    { traffic: "Viral", monolith: 3200, microservices: 900 },
+  ];
+
+  const n = trafficLevel;
+
+  const monoNodes: FlowNode[] = [
+    ...Array.from({ length: n }, (_, i) => ({
+      id: `mono-${i}`, type: "serverNode" as const, position: { x: 40 + i * 160, y: 60 },
+      data: { label: `Monolith #${i + 1}`, sublabel: "All modules", status: "healthy" as const, handles: { bottom: true } },
+    })),
+    {
+      id: "mono-db", type: "databaseNode" as const, position: { x: 40 + ((n - 1) * 160) / 2, y: 200 },
+      data: { label: "Shared DB", sublabel: n >= 3 ? "Bottleneck!" : "OK", status: n >= 3 ? "warning" as const : "healthy" as const, handles: { top: true } },
+    },
+  ];
+  const monoEdges: FlowEdge[] = Array.from({ length: n }, (_, i) => ({
+    id: `mono-${i}-db`, source: `mono-${i}`, target: "mono-db", animated: true,
+  }));
+
+  const microScaleNodes: FlowNode[] = [
+    { id: "user-svc", type: "serverNode", position: { x: 20, y: 20 }, data: { label: "User (x1)", status: "healthy", handles: { bottom: true } } },
+    { id: "product-svc", type: "serverNode", position: { x: 20, y: 120 }, data: { label: "Product (x1)", status: "healthy", handles: { bottom: true } } },
+    ...Array.from({ length: n }, (_, i) => ({
+      id: `order-svc-${i}`, type: "serverNode" as const, position: { x: 220 + i * 150, y: 20 },
+      data: { label: `Order #${i + 1}`, status: "healthy" as const, handles: { bottom: true } },
+    })),
+    { id: "payment-svc", type: "serverNode", position: { x: 220, y: 120 }, data: { label: "Payment (x1)", status: "healthy", handles: { bottom: true } } },
+    { id: "order-db", type: "databaseNode", position: { x: 220 + ((n - 1) * 150) / 2, y: 220 }, data: { label: "Order DB", status: "healthy", handles: { top: true } } },
+  ];
+  const microScaleEdges: FlowEdge[] = Array.from({ length: n }, (_, i) => ({
+    id: `order-${i}-db`, source: `order-svc-${i}`, target: "order-db", animated: true,
+  }));
+
+  return (
+    <Playground
+      title="Scaling Efficiency: Scale Everything vs Scale What Matters"
+      controls={false}
+      canvasHeight="min-h-[520px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          {/* Traffic slider */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground font-medium">Traffic:</span>
+            <input
+              type="range"
+              min={1}
+              max={4}
+              value={trafficLevel}
+              onChange={(e) => setTrafficLevel(Number(e.target.value))}
+              className="flex-1 h-1.5 rounded-full accent-violet-500 cursor-pointer"
+            />
             <span className={cn(
-              "text-[11px] transition-colors",
-              s.done ? "text-emerald-400" : "text-muted-foreground/40"
-            )}>{s.label}</span>
+              "text-xs font-semibold px-2 py-0.5 rounded",
+              trafficLevel <= 2 ? "text-emerald-400 bg-emerald-500/10" : "text-orange-400 bg-orange-500/10"
+            )}>
+              {trafficLabels[trafficLevel]}
+            </span>
+          </div>
+
+          {/* Side by side diagrams */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-blue-400 mb-2">
+                Monolith: Scale everything ({n}x full copies)
+              </p>
+              <div className="rounded-lg border border-border/30 overflow-hidden">
+                <FlowDiagram nodes={monoNodes} edges={monoEdges} minHeight={260} interactive={false} />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-emerald-400 mb-2">
+                Microservices: Scale only Order Service ({n}x)
+              </p>
+              <div className="rounded-lg border border-border/30 overflow-hidden">
+                <FlowDiagram
+                  nodes={microScaleNodes}
+                  edges={microScaleEdges}
+                  minHeight={260}
+                  interactive={false}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Cost chart */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Monthly cost comparison ($)</p>
+            <LiveChart
+              type="bar"
+              data={costData}
+              dataKeys={{ x: "traffic", y: ["monolith", "microservices"], label: ["Monolith", "Microservices"] }}
+              height={160}
+              unit="$"
+              showLegend
+              referenceLines={[{ y: 1000, label: "Budget limit", color: "#ef4444" }]}
+            />
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+// ─── Playground 4: Decision Framework ───────────────────────────────────────
+
+const questions = [
+  { id: "team", question: "How large is your engineering team?", options: ["< 10 people", "10-50 people", "> 50 people"], weights: [-2, 0, 2] },
+  { id: "deploy", question: "How often do you need to deploy?", options: ["Weekly", "Daily", "Multiple times/day"], weights: [-1, 0, 2] },
+  { id: "domain", question: "How complex is your domain?", options: ["Simple / unclear", "Moderate", "Well-defined bounded contexts"], weights: [-2, 0, 2] },
+  { id: "infra", question: "What is your DevOps maturity?", options: ["No dedicated DevOps", "Some CI/CD", "K8s, service mesh, etc."], weights: [-2, 0, 2] },
+  { id: "scale", question: "Do different parts need different scaling?", options: ["No", "Somewhat", "Absolutely"], weights: [-1, 0, 2] },
+];
+
+function DecisionFramework() {
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+
+  const score = Object.values(answers).reduce((sum, v) => sum + v, 0);
+  const answered = Object.keys(answers).length;
+  const allAnswered = answered === questions.length;
+
+  const recommendation = score <= -3
+    ? { label: "Start with a Monolith", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/30" }
+    : score <= 2
+      ? { label: "Modular Monolith (prepare to split)", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/30" }
+      : { label: "Microservices make sense", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30" };
+
+  const selectedStyles: Record<string, string> = {
+    monolith: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+    neutral: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    micro: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  };
+
+  const getOptionStyle = (qId: string, weight: number, idx: number) => {
+    const optionKey = idx === 0 ? "monolith" : idx === 1 ? "neutral" : "micro";
+    if (answers[qId] === weight) return selectedStyles[optionKey];
+    return "bg-muted/30 text-muted-foreground border-border/30 hover:bg-muted/50";
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.02] overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-violet-500/20 bg-violet-500/[0.04] px-4 py-2">
+        <div className="size-2 rounded-full bg-violet-500/50" />
+        <span className="text-sm font-medium text-violet-400">Architecture Decision Framework</span>
+      </div>
+      <div className="p-4 space-y-4">
+        {questions.map((q) => (
+          <div key={q.id} className="space-y-2">
+            <p className="text-sm font-medium">{q.question}</p>
+            <div className="flex flex-wrap gap-2">
+              {q.options.map((opt, idx) => (
+                <button
+                  key={opt}
+                  onClick={() => setAnswers((prev) => ({ ...prev, [q.id]: q.weights[idx] }))}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors",
+                    getOptionStyle(q.id, q.weights[idx], idx)
+                  )}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
           </div>
         ))}
-        <div className={cn(
-          "text-[10px] font-mono mt-1 transition-opacity",
-          tick >= 4 ? "opacity-100 text-emerald-400" : "opacity-0"
-        )}>
-          Total: ~8 minutes
-        </div>
+
+        {/* Result */}
+        {allAnswered && (
+          <div className={cn("rounded-xl border p-4 transition-all", recommendation.bg)}>
+            <p className={cn("text-lg font-bold", recommendation.color)}>
+              {recommendation.label}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {score <= -3
+                ? "Your team is small, your domain is still evolving, and you lack the infrastructure to manage distributed systems. A well-structured monolith will let you move faster."
+                : score <= 2
+                  ? "You are at a crossover point. Build a modular monolith with clear domain boundaries so you can extract services when the pain justifies it."
+                  : "You have the team size, domain clarity, and infrastructure maturity to benefit from microservices. Start extracting your most painful module first."}
+            </p>
+          </div>
+        )}
+
+        {!allAnswered && answered > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Answer all {questions.length} questions to see a recommendation. ({answered}/{questions.length} answered)
+          </p>
+        )}
       </div>
     </div>
   );
 }
+
+// ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function MicroservicesVsMonolithPage() {
   return (
@@ -231,232 +635,90 @@ export default function MicroservicesVsMonolithPage() {
         difficulty="intermediate"
       />
 
-      <FailureScenario title="50 developers, 1 deploy button, 0 deploys this week">
-        <p className="text-sm text-muted-foreground">
-          Your company has grown to 50 engineers across 8 teams. Everyone works in the same
-          monolithic codebase. On Tuesday, Team A merges a change to the payment module.
-          It breaks a shared utility that Team B&apos;s notification service depends on.
-          <strong className="text-red-400"> CI goes red. Nobody can deploy.</strong> Three teams are blocked for two days
-          while Team A and Team B argue about who owns the broken utility function.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          This is not hypothetical. In 2008, Netflix experienced a catastrophic database corruption
-          that brought their entire monolithic DVD service down for three days. The outage triggered
-          a seven-year migration to over 700 microservices that today handle 15+ billion API calls daily.
-        </p>
-        <div className="flex items-center justify-center gap-4 py-4">
-          <ServerNode type="server" label="Monolith" sublabel="All 8 teams" status="unhealthy" />
-          <span className="text-red-500 text-lg font-mono font-bold">CI FAILED</span>
-        </div>
-      </FailureScenario>
+      <ConversationalCallout type="tip">
+        In 2008, Netflix experienced a catastrophic database corruption that brought their entire
+        monolithic DVD service down for three days. That outage triggered a seven-year migration to
+        over 700 microservices handling 15+ billion API calls daily. But in 2023, Amazon Prime Video
+        moved a monitoring tool <em>from</em> microservices <em>back to</em> a monolith, cutting costs
+        by 90%. The lesson? There is no universally &quot;better&quot; architecture.
+      </ConversationalCallout>
 
-      <WhyItBreaks>
-        <p className="text-sm text-muted-foreground">
-          A monolith couples all modules into a single deployable unit. This means:
-        </p>
-        <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
-          <li><strong>Shared codebase ownership</strong> -- one team&apos;s mistake blocks every other team</li>
-          <li><strong>Single deployment pipeline</strong> -- you cannot deploy the billing fix without also deploying the half-finished search refactor</li>
-          <li><strong>Scaling is all-or-nothing</strong> -- if the image processing module needs more CPU, you scale the entire application</li>
-          <li><strong>Technology lock-in</strong> -- every module must use the same language, framework, and dependency versions</li>
-          <li><strong>Blast radius is the entire system</strong> -- a memory leak in one module crashes all modules</li>
-        </ul>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="The Architecture Spectrum">
+      {/* Playground 1: Architecture Comparison */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Architecture Comparison</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Watch a monolith get decomposed into independent services. This is the journey Netflix
-          took from 2008 to 2015, Amazon took starting in 2001, and Uber took starting in 2012.
+          Toggle between architectures and press play to watch a request flow through each.
+          Notice how the monolith handles it in a single hop, while microservices route through
+          a gateway to multiple independent services.
         </p>
-        <MonolithSplitViz />
-      </ConceptVisualizer>
+        <ArchitecturePlayground />
+      </section>
 
-      <ConceptVisualizer title="Deployment Independence — The Real Win">
+      {/* Playground 2: Failure Cascade */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Failure Blast Radius</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          The biggest practical difference is not technical -- it is organizational. With microservices,
-          Team B can deploy a bug fix to the Orders service without waiting for Team A to finish
-          their Auth refactor. Amazon reportedly deploys new code every 11.7 seconds on average.
+          Click to &quot;break&quot; a service and compare the damage. In a monolith, one crashed
+          module takes everything down. In microservices, failures are isolated.
         </p>
-        <DeploymentComparisonViz />
-        <ConversationalCallout type="tip">
-          Amazon&apos;s CTO Werner Vogels famously said their move to microservices in 2001 was driven by
-          organizational pain, not technical ambition. Teams were stepping on each other in a shared
-          codebase. The &quot;two-pizza team&quot; rule was born from this migration.
-        </ConversationalCallout>
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="The Hidden Cost: Operational Complexity">
-        <p className="text-sm text-muted-foreground mb-4">
-          Microservices do not eliminate complexity -- they relocate it from the codebase to the
-          infrastructure. Here is what you need that a monolith does not require:
-        </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {[
-            { label: "Service Discovery", desc: "How services find each other", icon: "🔍" },
-            { label: "Distributed Tracing", desc: "Jaeger, Zipkin, or Datadog", icon: "📡" },
-            { label: "Circuit Breakers", desc: "Prevent cascade failures", icon: "🔌" },
-            { label: "API Gateways", desc: "Single entry point for clients", icon: "🚪" },
-            { label: "Container Orchestration", desc: "Kubernetes, ECS, Nomad", icon: "🎛️" },
-            { label: "Centralized Logging", desc: "Aggregate logs from 100+ services", icon: "📋" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-lg border bg-muted/20 p-2.5">
-              <div className="text-xs font-semibold mb-0.5">{item.label}</div>
-              <div className="text-[10px] text-muted-foreground/60">{item.desc}</div>
-            </div>
-          ))}
-        </div>
-      </ConceptVisualizer>
-
-      <CorrectApproach title="When to Use Which">
-        <BeforeAfter
-          before={{
-            title: "Monolith works when...",
-            content: (
-              <ul className="text-sm space-y-1.5 text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <Users className="size-3.5 mt-0.5 shrink-0 text-blue-400" />
-                  <span>Small team (under 10 engineers)</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Rocket className="size-3.5 mt-0.5 shrink-0 text-blue-400" />
-                  <span>Early-stage product still finding product-market fit</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Box className="size-3.5 mt-0.5 shrink-0 text-blue-400" />
-                  <span>Simple domain with few bounded contexts</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <GitBranch className="size-3.5 mt-0.5 shrink-0 text-blue-400" />
-                  <span>Operational complexity budget is low</span>
-                </li>
-              </ul>
-            ),
-          }}
-          after={{
-            title: "Microservices work when...",
-            content: (
-              <ul className="text-sm space-y-1.5 text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <Users className="size-3.5 mt-0.5 shrink-0 text-emerald-400" />
-                  <span>Multiple teams need to deploy independently</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <ArrowRight className="size-3.5 mt-0.5 shrink-0 text-emerald-400" />
-                  <span>Different modules have different scaling needs</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Boxes className="size-3.5 mt-0.5 shrink-0 text-emerald-400" />
-                  <span>Clear domain boundaries exist between services</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Rocket className="size-3.5 mt-0.5 shrink-0 text-emerald-400" />
-                  <span>You can invest in infrastructure (CI/CD, monitoring, service mesh)</span>
-                </li>
-              </ul>
-            ),
-          }}
-        />
-      </CorrectApproach>
-
-      <ConceptVisualizer title="The Migration Path">
-        <p className="text-sm text-muted-foreground mb-4">
-          You rarely go from zero to microservices. Netflix did not rewrite everything at once --
-          they started with non-critical services like movie encoding, refined their approach,
-          then tackled the core streaming pipeline. The Strangler Fig pattern is the safest path.
-        </p>
-        <AnimatedFlow
-          steps={[
-            { id: "monolith", label: "Monolith", description: "Everything in one codebase", icon: <Box className="size-4" /> },
-            { id: "identify", label: "Identify Seams", description: "Use DDD to find bounded contexts", icon: <GitBranch className="size-4" /> },
-            { id: "extract", label: "Strangler Fig", description: "Route traffic to new service, keep old as fallback", icon: <ArrowRight className="size-4" /> },
-            { id: "api", label: "Define Contracts", description: "Service communicates via well-defined APIs", icon: <Boxes className="size-4" /> },
-            { id: "repeat", label: "Repeat", description: "Extract next service when pain justifies it", icon: <Rocket className="size-4" /> },
-          ]}
-          interval={2200}
-        />
-      </ConceptVisualizer>
-
-      <InteractiveDemo title="Team Scaling Simulator">
-        {({ isPlaying, tick }) => {
-          const stage = isPlaying ? Math.min(tick % 8, 5) : 0;
-          const scenarios = [
-            { engineers: 3, teams: 1, arch: "Monolith", deployFreq: "10/day", pain: "None", verdict: "healthy" as const },
-            { engineers: 10, teams: 2, arch: "Monolith", deployFreq: "5/day", pain: "Low", verdict: "healthy" as const },
-            { engineers: 25, teams: 4, arch: "Monolith", deployFreq: "2/day", pain: "Growing", verdict: "warning" as const },
-            { engineers: 50, teams: 8, arch: "Monolith", deployFreq: "2/week", pain: "High", verdict: "unhealthy" as const },
-            { engineers: 50, teams: 8, arch: "Microservices", deployFreq: "50/day", pain: "Infra cost", verdict: "warning" as const },
-            { engineers: 200, teams: 25, arch: "Microservices", deployFreq: "200/day", pain: "Manageable", verdict: "healthy" as const },
-          ];
-          const s = scenarios[stage];
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to simulate growing a team from 3 to 200 engineers. Watch when
-                the monolith starts hurting and microservices start making sense.
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {[
-                  { label: "Engineers", value: s.engineers },
-                  { label: "Teams", value: s.teams },
-                  { label: "Architecture", value: s.arch },
-                  { label: "Deploy Freq", value: s.deployFreq },
-                  { label: "Pain Level", value: s.pain },
-                ].map((m) => (
-                  <div key={m.label} className="rounded-lg border bg-muted/20 p-2 text-center">
-                    <div className="text-[10px] text-muted-foreground/60">{m.label}</div>
-                    <div className="text-xs font-semibold mt-0.5">{m.value}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-center">
-                <ServerNode
-                  type="server"
-                  label={s.arch}
-                  sublabel={`${s.engineers} engineers`}
-                  status={s.verdict}
-                />
-              </div>
-            </div>
-          );
-        }}
-      </InteractiveDemo>
+        <FailureCascadePlayground />
+      </section>
 
       <AhaMoment
-        question="Should a startup begin with microservices?"
+        question="If microservices isolate failures, why not always use them?"
         answer={
           <p>
-            Almost never. Shopify runs one of the largest e-commerce platforms on a monolithic
-            Ruby on Rails app with over 3 million merchants. And in 2023, Amazon Prime Video
-            moved a monitoring tool <em>from</em> microservices <em>back to</em> a monolith,
-            reducing costs by 90%. Start with a well-structured monolith. Microservices solve
-            organizational scaling problems (multiple teams, independent deployments), not technical
-            ones. If you have 3 engineers, microservices add network complexity, distributed
-            debugging, and operational overhead with zero benefit.
+            Because isolation comes at a cost. Each service needs its own CI/CD pipeline, monitoring,
+            database, and on-call rotation. You trade in-process function calls for network requests
+            that can timeout, fail, or arrive out of order. Debugging &quot;why is the order page
+            slow?&quot; goes from reading one stack trace to correlating traces across 6 services.
+            Shopify handles 3 million merchants on a monolith. The complexity tax only pays off
+            when you have the team size and operational maturity to manage it.
           </p>
         }
       />
 
+      {/* Playground 3: Scaling */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Scaling Efficiency</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Drag the traffic slider to see how each architecture scales. The monolith must duplicate
+          everything, while microservices can scale only the hot service. Watch the cost chart
+          to see where the monolith approach becomes wasteful.
+        </p>
+        <ScalingPlayground />
+      </section>
+
       <ConversationalCallout type="warning">
         The &quot;distributed monolith&quot; is the worst of both worlds. It happens when
-        microservices are tightly coupled -- they must be deployed together, they share a database,
-        or they make synchronous calls in long chains. You get the operational complexity of
+        microservices are tightly coupled -- they must be deployed together, share a database,
+        or make synchronous calls in long chains. You get the operational complexity of
         microservices with none of the independence. If your services cannot deploy independently,
-        you do not have microservices. You have a monolith with network calls.
+        you do not have microservices -- you have a monolith with network calls.
       </ConversationalCallout>
+
+      {/* Playground 4: Decision Framework */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Which Architecture Should You Pick?</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Answer five questions about your team and project. The framework will recommend
+          the architecture that fits your current situation.
+        </p>
+        <DecisionFramework />
+      </section>
 
       <ConversationalCallout type="tip">
         In interviews, never say &quot;microservices are better.&quot; The correct answer is always
         &quot;it depends on team size, domain complexity, and operational maturity.&quot; Then explain
-        the tradeoffs for the specific scenario. Mention the Netflix migration as an example of when
-        it was the right call, and Amazon Prime Video as an example of when reverting was smart.
+        the tradeoffs for the specific scenario. Mention Netflix as an example of when the migration
+        was the right call, and Amazon Prime Video as when reverting was smart.
       </ConversationalCallout>
 
       <KeyTakeaway
         points={[
           "A monolith is a single deployable unit -- simple to develop and deploy, but coupling becomes painful as the team grows beyond 10-15 engineers.",
-          "Microservices decompose the system by business domain, enabling independent deployment and scaling at the cost of operational complexity (service discovery, distributed tracing, circuit breakers).",
-          "Start with a monolith. Extract services only when organizational pain (blocked deployments, team coupling) justifies the infrastructure investment. Netflix took 7 years to migrate.",
+          "Microservices decompose the system by business domain, enabling independent deployment and scaling at the cost of operational complexity.",
+          "Start with a monolith. Extract services only when organizational pain (blocked deployments, team coupling) justifies the infrastructure investment.",
           "The 'distributed monolith' anti-pattern happens when microservices are tightly coupled -- services that must deploy together are not independent services.",
           "Each microservice should own its own data. Sharing a database between services recreates the coupling you were trying to escape.",
         ]}

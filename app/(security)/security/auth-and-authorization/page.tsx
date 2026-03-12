@@ -1,185 +1,198 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { InteractiveDemo } from "@/components/interactive-demo";
-import { BeforeAfter } from "@/components/before-after";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
-import { ServerNode } from "@/components/server-node";
+import { BeforeAfter } from "@/components/before-after";
+import { Playground } from "@/components/playground";
+import { FlowDiagram } from "@/components/flow-diagram";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Shield, Key, User, Lock, Fingerprint, CheckCircle2, XCircle, ArrowRight } from "lucide-react";
+import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
+import { CheckCircle2, XCircle, Shield, Lock } from "lucide-react";
+import { MarkerType } from "@xyflow/react";
 
-const oauthNodeBgStyles: Record<string, string> = {
-  blue: "bg-blue-500/10 border-blue-500/30",
-  violet: "bg-violet-500/10 border-violet-500/30",
-  amber: "bg-amber-500/10 border-amber-500/30",
+/* ── static class maps (no dynamic interpolation) ── */
+
+const jwtSectionColors: Record<string, string> = {
+  header: "text-red-400",
+  payload: "text-violet-400",
+  signature: "text-emerald-400",
 };
 
-const oauthNodeIconStyles: Record<string, string> = {
-  blue: "size-5 text-blue-400",
-  violet: "size-5 text-violet-400",
-  amber: "size-5 text-amber-400",
+const jwtSectionBg: Record<string, string> = {
+  header: "bg-red-500/10 border-red-500/20",
+  payload: "bg-violet-500/10 border-violet-500/20",
+  signature: "bg-emerald-500/10 border-emerald-500/20",
 };
 
-function OAuthFlowViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 10), 1400);
-    return () => clearInterval(t);
-  }, []);
+const jwtSectionBgActive: Record<string, string> = {
+  header: "text-red-400 bg-red-500/10",
+  payload: "text-violet-400 bg-violet-500/10",
+  signature: "text-emerald-400 bg-emerald-500/10",
+};
 
-  const stages = [
-    { from: "user", to: "app", label: "Click 'Login with Google'", color: "text-blue-400" },
-    { from: "app", to: "google", label: "Redirect to Google + code_challenge", color: "text-blue-400" },
-    { from: "google", to: "user", label: "Google shows consent screen", color: "text-amber-400" },
-    { from: "user", to: "google", label: "User grants permission", color: "text-emerald-400" },
-    { from: "google", to: "app", label: "Redirect back with auth code", color: "text-amber-400" },
-    { from: "app", to: "google", label: "Exchange code + code_verifier for tokens", color: "text-violet-400" },
-    { from: "google", to: "app", label: "Return access_token + id_token", color: "text-emerald-400" },
-  ];
+const jwtSectionBgInactive: Record<string, string> = {
+  header: "text-red-400/40",
+  payload: "text-violet-400/40",
+  signature: "text-emerald-400/40",
+};
+
+const permissionStatusStyles: Record<string, string> = {
+  granted: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  denied: "bg-red-500/20 text-red-400 border-red-500/30",
+  idle: "bg-muted/30 text-muted-foreground border-border/50",
+};
+
+/* ── OAuth 2.0 Flow Playground ── */
+
+const OAUTH_STEPS = [
+  { label: "User clicks 'Login with Google'", detail: "App generates code_verifier + code_challenge (PKCE)" },
+  { label: "Redirect to Auth Server", detail: "GET /authorize?response_type=code&code_challenge=...&scope=openid" },
+  { label: "User logs in at Auth Server", detail: "Auth server shows consent screen with requested scopes" },
+  { label: "Auth Server redirects back", detail: "GET /callback?code=AUTH_CODE_abc123" },
+  { label: "App exchanges code for tokens", detail: "POST /token { code, code_verifier, client_id, redirect_uri }" },
+  { label: "Auth Server returns tokens", detail: "{ access_token: 'eyJ...', id_token: 'eyJ...', refresh_token: '...' }" },
+  { label: "App calls Resource Server", detail: "GET /api/user  Authorization: Bearer eyJ..." },
+];
+
+function OAuthPlayground() {
+  const sim = useSimulation({ maxSteps: 7, intervalMs: 1800 });
+
+  const edgeColor = "#8b5cf6";
+  const edgeColorActive = "#22c55e";
+
+  const nodes: FlowNode[] = useMemo(() => [
+    { id: "user", type: "clientNode", position: { x: 0, y: 80 }, data: { label: "User", sublabel: "Browser", status: sim.step >= 1 ? "healthy" : "idle", handles: { right: true } } },
+    { id: "app", type: "serverNode", position: { x: 220, y: 80 }, data: { label: "Your App", sublabel: "Backend", status: sim.step >= 2 ? "healthy" : "idle", handles: { left: true, right: true } } },
+    { id: "auth", type: "gatewayNode", position: { x: 440, y: 0 }, data: { label: "Auth Server", sublabel: "Google / IdP", status: sim.step >= 3 ? "healthy" : "idle", handles: { left: true, bottom: true } } },
+    { id: "resource", type: "databaseNode", position: { x: 440, y: 170 }, data: { label: "Resource Server", sublabel: "/api/user", status: sim.step >= 7 ? "healthy" : "idle", handles: { left: true, top: true } } },
+  ], [sim.step]);
+
+  const activeEdgeMap: Record<number, string> = { 1: "e-user-app", 2: "e-app-auth", 3: "e-auth-app-back", 4: "e-auth-app-back", 5: "e-app-auth", 6: "e-auth-app-back", 7: "e-app-resource" };
+
+  const edges: FlowEdge[] = useMemo(() => {
+    const active = activeEdgeMap[sim.step] ?? "";
+    return [
+      { id: "e-user-app", source: "user", target: "app", animated: active === "e-user-app", style: { stroke: active === "e-user-app" ? edgeColorActive : edgeColor, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: active === "e-user-app" ? edgeColorActive : edgeColor } },
+      { id: "e-app-auth", source: "app", target: "auth", animated: active === "e-app-auth", style: { stroke: active === "e-app-auth" ? edgeColorActive : edgeColor, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: active === "e-app-auth" ? edgeColorActive : edgeColor } },
+      { id: "e-auth-app-back", source: "auth", target: "app", animated: active === "e-auth-app-back", style: { stroke: active === "e-auth-app-back" ? edgeColorActive : edgeColor, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: active === "e-auth-app-back" ? edgeColorActive : edgeColor } },
+      { id: "e-app-resource", source: "app", target: "resource", animated: active === "e-app-resource", style: { stroke: active === "e-app-resource" ? edgeColorActive : edgeColor, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: active === "e-app-resource" ? edgeColorActive : edgeColor } },
+    ];
+  }, [sim.step]);
 
   return (
-    <div className="relative py-2">
-      <div className="flex justify-between items-start mb-5 px-2">
-        {[
-          { icon: User, label: "User", color: "blue" },
-          { icon: Shield, label: "Your App", color: "violet" },
-          { icon: Key, label: "Google (IdP)", color: "amber" },
-        ].map((node) => (
-          <div key={node.label} className="text-center">
-            <div className={cn(
-              "size-11 rounded-xl border flex items-center justify-center mb-1.5 transition-all",
-              step >= 1
-                ? oauthNodeBgStyles[node.color]
-                : "bg-muted/30 border-border"
-            )}>
-              <node.icon className={oauthNodeIconStyles[node.color]} />
+    <Playground
+      title="OAuth 2.0 Authorization Code Flow with PKCE"
+      simulation={sim}
+      canvasHeight="min-h-[300px]"
+      canvas={<FlowDiagram nodes={nodes} edges={edges} interactive={false} minHeight={300} />}
+      explanation={(state) => (
+        <div className="space-y-3">
+          {OAUTH_STEPS.map((s, i) => {
+            const isActive = state.step === i + 1;
+            const isDone = state.step > i + 1;
+            const isPending = state.step < i + 1;
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "rounded-lg border px-3 py-2 transition-all duration-300",
+                  isActive ? "bg-violet-500/10 border-violet-500/30 ring-1 ring-violet-500/20" : "",
+                  isDone ? "bg-emerald-500/5 border-emerald-500/20 opacity-70" : "",
+                  isPending ? "bg-muted/10 border-border/30 opacity-40" : ""
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-muted-foreground/60 w-4">{i + 1}</span>
+                  <span className={cn("text-xs font-medium", isActive ? "text-violet-400" : isDone ? "text-emerald-400" : "text-muted-foreground")}>
+                    {s.label}
+                  </span>
+                  {isDone && <CheckCircle2 className="size-3 text-emerald-400 ml-auto shrink-0" />}
+                </div>
+                {(isActive || isDone) && (
+                  <p className="text-[11px] font-mono text-muted-foreground mt-1 pl-6 break-all">{s.detail}</p>
+                )}
+              </div>
+            );
+          })}
+          {state.step >= 7 && (
+            <div className="text-center text-xs font-medium text-emerald-400 pt-2">
+              User authenticated — session created
             </div>
-            <span className="text-[11px] font-medium">{node.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="space-y-2 px-2">
-        {stages.map((s, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex items-center gap-2 transition-all duration-500 rounded-lg px-3 py-1.5",
-              step > i
-                ? "opacity-100 translate-y-0 bg-muted/20"
-                : step === i
-                ? "opacity-100 translate-y-0 bg-muted/30 ring-1 ring-blue-500/20"
-                : "opacity-0 translate-y-2"
-            )}
-          >
-            <span className="text-[10px] font-mono text-muted-foreground/50 w-4 shrink-0">{i + 1}</span>
-            <span className={cn("text-[10px] font-mono font-semibold shrink-0 w-14", s.color)}>
-              {s.from} → {s.to}
-            </span>
-            <span className="text-[11px] text-muted-foreground">{s.label}</span>
-          </div>
-        ))}
-      </div>
-      {step >= 7 && (
-        <div className="flex items-center justify-center gap-2 mt-3 text-[11px] text-emerald-400 font-medium">
-          <CheckCircle2 className="size-3.5" />
-          User authenticated — session created
+          )}
         </div>
       )}
-    </div>
+    />
   );
 }
 
-function JwtAnatomyViz() {
-  const [activeSection, setActiveSection] = useState<"header" | "payload" | "signature">("header");
-  useEffect(() => {
-    const sections: Array<"header" | "payload" | "signature"> = ["header", "payload", "signature"];
-    let idx = 0;
-    const t = setInterval(() => {
-      idx = (idx + 1) % 3;
-      setActiveSection(sections[idx]);
-    }, 2500);
-    return () => clearInterval(t);
-  }, []);
+/* ── JWT Anatomy Interactive ── */
 
-  const sections = {
-    header: {
-      color: "text-red-400",
-      bg: "bg-red-500/10 border-red-500/20",
-      encoded: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9",
-      decoded: `{
-  "alg": "RS256",
-  "typ": "JWT"
-}`,
-      desc: "Declares the signing algorithm (RS256 = RSA + SHA-256) and token type. The server uses this to know how to verify the signature.",
-    },
-    payload: {
-      color: "text-violet-400",
-      bg: "bg-violet-500/10 border-violet-500/20",
-      encoded: "eyJzdWIiOiI0MiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTcwMH0",
-      decoded: `{
-  "sub": "42",
-  "role": "admin",
-  "iat": 1700000000,
-  "exp": 1700000900
-}`,
-      desc: "Contains claims about the user. 'sub' is the user ID, 'exp' is expiration (15 min). This is base64-encoded, NOT encrypted — anyone can read it.",
-    },
-    signature: {
-      color: "text-emerald-400",
-      bg: "bg-emerald-500/10 border-emerald-500/20",
-      encoded: "SflKxwRJSMeKKF2QT4fw...",
-      decoded: `RSASHA256(
-  base64(header) + "." +
-  base64(payload),
-  privateKey
-)`,
-      desc: "Cryptographic proof that the header and payload haven't been tampered with. Only the server with the private key can create a valid signature.",
-    },
-  };
+const JWT_SECTIONS = {
+  header: {
+    encoded: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9",
+    decoded: '{\n  "alg": "RS256",\n  "typ": "JWT"\n}',
+    desc: "Declares the signing algorithm (RS256 = RSA + SHA-256) and token type.",
+  },
+  payload: {
+    encoded: "eyJzdWIiOiI0MiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTcwMH0",
+    decoded: '{\n  "sub": "42",\n  "role": "admin",\n  "iat": 1700000000,\n  "exp": 1700000900\n}',
+    desc: "Contains claims about the user. base64-encoded, NOT encrypted.",
+  },
+  signature: {
+    encoded: "SflKxwRJSMeKKF2QT4fw...",
+    decoded: 'RSASHA256(\n  base64(header) + "." +\n  base64(payload),\n  privateKey\n)',
+    desc: "Cryptographic proof that header + payload haven't been tampered with.",
+  },
+};
 
-  const s = sections[activeSection];
+function JwtPlayground() {
+  const [active, setActive] = useState<"header" | "payload" | "signature">("header");
+  const [editRole, setEditRole] = useState("admin");
+  const [editExp, setEditExp] = useState("900");
+  const [tampered, setTampered] = useState(false);
+
+  const sectionKeys: Array<"header" | "payload" | "signature"> = ["header", "payload", "signature"];
+
+  const customPayload = `{\n  "sub": "42",\n  "role": "${editRole}",\n  "iat": 1700000000,\n  "exp": ${1700000000 + parseInt(editExp || "900")}\n}`;
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-1 font-mono text-xs p-3 rounded-lg bg-muted/30 border border-border/50 overflow-x-auto">
-        <span
-          className={cn("cursor-pointer transition-all px-1 rounded", activeSection === "header" ? "text-red-400 bg-red-500/10" : "text-red-400/40")}
-          onClick={() => setActiveSection("header")}
-        >
-          {sections.header.encoded}
-        </span>
-        <span className="text-muted-foreground/30">.</span>
-        <span
-          className={cn("cursor-pointer transition-all px-1 rounded", activeSection === "payload" ? "text-violet-400 bg-violet-500/10" : "text-violet-400/40")}
-          onClick={() => setActiveSection("payload")}
-        >
-          {sections.payload.encoded}
-        </span>
-        <span className="text-muted-foreground/30">.</span>
-        <span
-          className={cn("cursor-pointer transition-all px-1 rounded", activeSection === "signature" ? "text-emerald-400 bg-emerald-500/10" : "text-emerald-400/40")}
-          onClick={() => setActiveSection("signature")}
-        >
-          {sections.signature.encoded}
-        </span>
+    <div className="rounded-xl border border-border/50 bg-muted/[0.02] p-5 space-y-4">
+      <h3 className="text-base font-semibold flex items-center gap-2">
+        <Lock className="size-4 text-violet-400" />
+        JWT Anatomy — Header.Payload.Signature
+      </h3>
+
+      {/* Token display */}
+      <div className="flex flex-wrap gap-1 font-mono text-xs p-3 rounded-lg bg-muted/30 border border-border/50">
+        {sectionKeys.map((key, i) => (
+          <span key={key} className="flex items-center">
+            {i > 0 && <span className="text-muted-foreground/30 mr-1">.</span>}
+            <button
+              onClick={() => setActive(key)}
+              className={cn(
+                "cursor-pointer transition-all px-1 rounded hover:underline",
+                active === key ? jwtSectionBgActive[key] : jwtSectionBgInactive[key]
+              )}
+            >
+              {key === "payload" && tampered ? "eyJtb2RpZmllZCI6InRydWUifQ" : JWT_SECTIONS[key].encoded}
+            </button>
+          </span>
+        ))}
       </div>
 
+      {/* Section tabs */}
       <div className="flex gap-2">
-        {(["header", "payload", "signature"] as const).map((key) => (
+        {sectionKeys.map((key) => (
           <button
             key={key}
-            onClick={() => setActiveSection(key)}
+            onClick={() => setActive(key)}
             className={cn(
               "flex-1 text-[11px] font-semibold py-1.5 rounded-md border transition-all capitalize",
-              activeSection === key ? sections[key].bg + " " + sections[key].color : "bg-muted/20 border-border/50 text-muted-foreground/50"
+              active === key ? cn(jwtSectionBg[key], jwtSectionColors[key]) : "bg-muted/20 border-border/50 text-muted-foreground/50"
             )}
           >
             {key}
@@ -187,96 +200,268 @@ function JwtAnatomyViz() {
         ))}
       </div>
 
-      <div className={cn("rounded-lg border p-3 transition-all", s.bg)}>
-        <pre className={cn("text-xs font-mono mb-2", s.color)}>{s.decoded}</pre>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">{s.desc}</p>
+      {/* Decoded view */}
+      <div className={cn("rounded-lg border p-3 transition-all", jwtSectionBg[active])}>
+        <pre className={cn("text-xs font-mono mb-2 whitespace-pre-wrap", jwtSectionColors[active])}>
+          {active === "payload" ? customPayload : JWT_SECTIONS[active].decoded}
+        </pre>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{JWT_SECTIONS[active].desc}</p>
+      </div>
+
+      {/* Edit controls */}
+      <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground">Edit payload fields:</p>
+        <div className="flex flex-wrap gap-3">
+          <label className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground font-mono">role:</span>
+            <select
+              value={editRole}
+              onChange={(e) => { setEditRole(e.target.value); setTampered(true); }}
+              className="bg-muted/40 border border-border/50 rounded px-2 py-1 text-xs font-mono"
+            >
+              <option value="admin">admin</option>
+              <option value="editor">editor</option>
+              <option value="viewer">viewer</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground font-mono">exp (seconds):</span>
+            <input
+              type="number"
+              value={editExp}
+              onChange={(e) => { setEditExp(e.target.value); setTampered(true); }}
+              className="bg-muted/40 border border-border/50 rounded px-2 py-1 text-xs font-mono w-20"
+            />
+          </label>
+        </div>
+
+        {tampered && (
+          <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 mt-2">
+            <XCircle className="size-4 text-red-400 shrink-0" />
+            <p className="text-xs text-red-400">
+              Signature invalid! The payload was modified, but the signature was computed over the original data.
+              The server will reject this token with a 401.
+            </p>
+          </div>
+        )}
+
+        {tampered && (
+          <button
+            onClick={() => { setEditRole("admin"); setEditExp("900"); setTampered(false); }}
+            className="text-[11px] text-violet-400 hover:underline"
+          >
+            Reset to original
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function RbacAbacViz() {
-  const [model, setModel] = useState<"rbac" | "abac">("rbac");
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 6), 1200);
-    return () => clearInterval(t);
-  }, []);
+/* ── RBAC Playground ── */
 
-  const rbacCheck = [
-    { label: "User: Alice", detail: "role = 'editor'", pass: true },
-    { label: "Resource: /api/posts", detail: "requires: editor, admin", pass: true },
-    { label: "Permission check", detail: "'editor' in [editor, admin]?", pass: true },
-  ];
+const RESOURCES = ["users", "posts", "settings", "billing"] as const;
+const ROLES = ["admin", "editor", "viewer"] as const;
 
-  const abacCheck = [
-    { label: "User attributes", detail: "dept=engineering, clearance=L2", pass: true },
-    { label: "Resource attributes", detail: "classification=internal, dept=engineering", pass: true },
-    { label: "Environment", detail: "time=14:00, ip=office-range, MFA=true", pass: true },
-  ];
+const DEFAULT_PERMISSIONS: Record<string, Record<string, boolean>> = {
+  admin: { users: true, posts: true, settings: true, billing: true },
+  editor: { users: false, posts: true, settings: false, billing: false },
+  viewer: { users: false, posts: false, settings: false, billing: false },
+};
 
-  const checks = model === "rbac" ? rbacCheck : abacCheck;
+function RbacPlayground() {
+  const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
+  const [testRole, setTestRole] = useState<string>("editor");
+  const [testResource, setTestResource] = useState<string>("posts");
+  const [simResult, setSimResult] = useState<"idle" | "granted" | "denied">("idle");
+
+  const sim = useSimulation({ maxSteps: 4, intervalMs: 800 });
+
+  const togglePerm = (role: string, resource: string) => {
+    setPermissions((prev) => ({
+      ...prev,
+      [role]: { ...prev[role], [resource]: !prev[role][resource] },
+    }));
+    setSimResult("idle");
+  };
+
+  const runCheck = () => {
+    setSimResult("idle");
+    sim.reset();
+    setTimeout(() => {
+      sim.play();
+    }, 50);
+  };
+
+  const isAllowed = permissions[testRole]?.[testResource] ?? false;
+
+  if (sim.step >= 4 && simResult === "idle") {
+    setSimResult(isAllowed ? "granted" : "denied");
+  }
+
+  const rbacNodes: FlowNode[] = useMemo(() => [
+    { id: "user", type: "clientNode", position: { x: 0, y: 50 }, data: { label: `User (${testRole})`, status: sim.step >= 1 ? "healthy" : "idle", handles: { right: true } } },
+    { id: "middleware", type: "gatewayNode", position: { x: 200, y: 50 }, data: { label: "Auth Middleware", status: sim.step >= 2 ? "warning" : "idle", handles: { left: true, right: true } } },
+    { id: "check", type: "serverNode", position: { x: 400, y: 50 }, data: { label: "Permission Check", sublabel: `${testRole} → ${testResource}?`, status: sim.step >= 3 ? (isAllowed ? "healthy" : "unhealthy") : "idle", handles: { left: true, right: true } } },
+    { id: "resource", type: "databaseNode", position: { x: 600, y: 50 }, data: { label: testResource, status: sim.step >= 4 && isAllowed ? "healthy" : "idle", handles: { left: true } } },
+  ], [sim.step, testRole, testResource, isAllowed]);
+
+  const rbacEdges: FlowEdge[] = useMemo(() => [
+    { id: "e1", source: "user", target: "middleware", animated: sim.step === 1, style: { stroke: "#8b5cf6", strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: "#8b5cf6" } },
+    { id: "e2", source: "middleware", target: "check", animated: sim.step === 2, style: { stroke: "#8b5cf6", strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: "#8b5cf6" } },
+    { id: "e3", source: "check", target: "resource", animated: sim.step === 3, style: { stroke: sim.step >= 3 && isAllowed ? "#22c55e" : sim.step >= 3 ? "#ef4444" : "#8b5cf6", strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: sim.step >= 3 && isAllowed ? "#22c55e" : sim.step >= 3 ? "#ef4444" : "#8b5cf6" } },
+  ], [sim.step, isAllowed]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        {(["rbac", "abac"] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => { setModel(m); setStep(0); }}
-            className={cn(
-              "flex-1 text-xs font-semibold py-2 rounded-md border transition-all uppercase",
-              model === m
-                ? m === "rbac"
-                  ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                  : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                : "bg-muted/20 border-border/50 text-muted-foreground/50"
-            )}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-4">
+      <Playground
+        title="RBAC Permission Playground"
+        simulation={sim}
+        canvasHeight="min-h-[200px]"
+        canvas={<FlowDiagram nodes={rbacNodes} edges={rbacEdges} interactive={false} minHeight={200} />}
+        controls={false}
+      />
 
-      <div className="space-y-1.5">
-        {checks.map((c, i) => (
-          <div
-            key={`${model}-${i}`}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-400",
-              step > i
-                ? "bg-emerald-500/8 border-emerald-500/20"
-                : step === i
-                ? "bg-blue-500/8 border-blue-500/20 ring-1 ring-blue-500/15"
-                : "bg-muted/10 border-border/30 text-muted-foreground/40"
-            )}
-          >
-            <span className={cn("text-xs font-medium w-32 shrink-0", step >= i ? "text-foreground" : "")}>
-              {c.label}
-            </span>
-            <span className="flex-1 text-[11px] font-mono text-muted-foreground">{c.detail}</span>
-            {step > i && <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />}
-          </div>
-        ))}
-      </div>
-
-      {step >= 3 && (
-        <div className={cn(
-          "text-center text-[11px] font-medium py-1",
-          "text-emerald-400"
-        )}>
-          Access Granted — {model === "rbac" ? "role matched required permission" : "all attribute policies satisfied"}
+      {/* Permission grid */}
+      <div className="rounded-lg border border-border/50 bg-muted/[0.02] p-4 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground">Permission Matrix (click to toggle):</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="text-left py-1 px-2 text-muted-foreground font-medium">Role</th>
+                {RESOURCES.map((r) => (
+                  <th key={r} className="text-center py-1 px-2 text-muted-foreground font-medium capitalize">{r}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ROLES.map((role) => (
+                <tr key={role}>
+                  <td className="py-1 px-2 font-mono font-semibold capitalize">{role}</td>
+                  {RESOURCES.map((res) => (
+                    <td key={res} className="text-center py-1 px-2">
+                      <button
+                        onClick={() => togglePerm(role, res)}
+                        className={cn(
+                          "size-7 rounded-md border transition-all text-[10px] font-bold",
+                          permissions[role][res]
+                            ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                            : "bg-red-500/10 border-red-500/20 text-red-400/60"
+                        )}
+                      >
+                        {permissions[role][res] ? "Y" : "N"}
+                      </button>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
 
-      <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-        {model === "rbac"
-          ? "RBAC checks one thing: does the user's role appear in the resource's allowed roles list? Simple, fast, but can lead to role explosion when you need fine-grained rules."
-          : "ABAC evaluates multiple attributes — user, resource, and environment — against a policy engine. More flexible but more complex to manage and debug."}
-      </p>
+        {/* Test simulation */}
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border/30">
+          <span className="text-xs text-muted-foreground">Simulate:</span>
+          <select
+            value={testRole}
+            onChange={(e) => { setTestRole(e.target.value); setSimResult("idle"); }}
+            className="bg-muted/40 border border-border/50 rounded px-2 py-1 text-xs font-mono"
+          >
+            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <span className="text-xs text-muted-foreground">tries to access</span>
+          <select
+            value={testResource}
+            onChange={(e) => { setTestResource(e.target.value); setSimResult("idle"); }}
+            className="bg-muted/40 border border-border/50 rounded px-2 py-1 text-xs font-mono"
+          >
+            {RESOURCES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <button
+            onClick={runCheck}
+            className="rounded-md bg-violet-500/20 border border-violet-500/30 px-3 py-1 text-xs font-medium text-violet-400 hover:bg-violet-500/30 transition-colors"
+          >
+            Run check
+          </button>
+          {simResult !== "idle" && (
+            <span className={cn("flex items-center gap-1 text-xs font-semibold rounded-md border px-2 py-1", permissionStatusStyles[simResult])}>
+              {simResult === "granted" ? <CheckCircle2 className="size-3" /> : <XCircle className="size-3" />}
+              {simResult === "granted" ? "Access Granted" : "403 Forbidden"}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
+
+/* ── Session vs Token Comparison ── */
+
+function SessionVsToken() {
+  const sessionNodes: FlowNode[] = [
+    { id: "client", type: "clientNode", position: { x: 0, y: 40 }, data: { label: "Browser", sublabel: "Cookie: session_id=abc", status: "healthy", handles: { right: true } } },
+    { id: "server", type: "serverNode", position: { x: 250, y: 0 }, data: { label: "Server", sublabel: "Lookup session in store", status: "healthy", handles: { left: true, right: true } } },
+    { id: "store", type: "databaseNode", position: { x: 480, y: 40 }, data: { label: "Session Store", sublabel: "Redis / DB", status: "healthy", handles: { left: true } } },
+  ];
+  const sessionEdges: FlowEdge[] = [
+    { id: "e1", source: "client", target: "server", animated: true, style: { stroke: "#3b82f6", strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" } },
+    { id: "e2", source: "server", target: "store", animated: true, style: { stroke: "#3b82f6", strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" } },
+  ];
+
+  const tokenNodes: FlowNode[] = [
+    { id: "client", type: "clientNode", position: { x: 0, y: 40 }, data: { label: "Browser", sublabel: "Header: Bearer eyJ...", status: "healthy", handles: { right: true } } },
+    { id: "server", type: "serverNode", position: { x: 280, y: 40 }, data: { label: "Server", sublabel: "Verify JWT signature", status: "healthy", handles: { left: true } } },
+  ];
+  const tokenEdges: FlowEdge[] = [
+    { id: "e1", source: "client", target: "server", animated: true, style: { stroke: "#22c55e", strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: "#22c55e" } },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-base font-semibold flex items-center gap-2">
+        <Shield className="size-4 text-blue-400" />
+        Sessions vs Tokens — Side by Side
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.02] overflow-hidden">
+          <div className="px-4 py-2 border-b border-blue-500/10 bg-blue-500/[0.04]">
+            <span className="text-xs font-semibold text-blue-400">Stateful Sessions</span>
+          </div>
+          <div className="p-2">
+            <FlowDiagram nodes={sessionNodes} edges={sessionEdges} interactive={false} minHeight={140} />
+          </div>
+          <div className="px-4 pb-3 space-y-1">
+            <p className="text-[11px] text-muted-foreground">Server stores session data. Must query store on every request. Requires sticky sessions or shared store for horizontal scaling.</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {["Stateful", "Server memory", "Easy revocation"].map((t) => (
+                <span key={t} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded px-1.5 py-0.5">{t}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.02] overflow-hidden">
+          <div className="px-4 py-2 border-b border-emerald-500/10 bg-emerald-500/[0.04]">
+            <span className="text-xs font-semibold text-emerald-400">Stateless JWTs</span>
+          </div>
+          <div className="p-2">
+            <FlowDiagram nodes={tokenNodes} edges={tokenEdges} interactive={false} minHeight={140} />
+          </div>
+          <div className="px-4 pb-3 space-y-1">
+            <p className="text-[11px] text-muted-foreground">Token carries all claims. Server verifies signature without any database lookup. Scales horizontally with zero shared state.</p>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {["Stateless", "No DB lookup", "Hard to revoke"].map((t) => (
+                <span key={t} className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded px-1.5 py-0.5">{t}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Main Page ── */
 
 export default function AuthAndAuthorizationPage() {
   return (
@@ -287,126 +472,43 @@ export default function AuthAndAuthorizationPage() {
         difficulty="intermediate"
       />
 
-      <FailureScenario title="A regular user becomes an admin by changing the URL">
-        <p className="text-sm text-muted-foreground">
-          Your app checks if a user is logged in before showing pages, but it never checks
-          <strong> what that user is allowed to do</strong>. A regular user changes the URL
-          from <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">/dashboard</code> to{" "}
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">/admin</code> and
-          gets full admin access — user management, billing, database controls, everything.
-        </p>
-        <div className="flex items-center justify-center gap-4 py-3">
-          <ServerNode type="client" label="Regular User" status="warning" />
-          <span className="text-emerald-500 text-sm font-mono">— /admin →</span>
-          <ServerNode type="server" label="API Server" sublabel="No authz check" status="unhealthy" />
-          <span className="text-red-500 text-sm font-mono">— full access →</span>
-          <ServerNode type="database" label="Admin Data" status="unhealthy" />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          This is <strong>Broken Access Control</strong> — the #1 web application security risk according
-          to the OWASP Top 10. Client-side route hiding is cosmetic, not security.
-        </p>
-      </FailureScenario>
+      <ConversationalCallout type="question">
+        What is the difference between a 401 and a 403? A 401 means &quot;we do not know who you are&quot;
+        (authentication failed). A 403 means &quot;we know who you are, but you are not allowed&quot;
+        (authorization failed). If your API only ever returns 401, you have probably skipped the authorization check entirely.
+      </ConversationalCallout>
 
-      <WhyItBreaks title="Authentication and authorization are two separate checks">
-        <p className="text-sm text-muted-foreground">
-          Authentication (authn) answers &quot;who are you?&quot; Authorization (authz) answers
-          &quot;what can you do?&quot; Many developers only implement authentication — they verify
-          the user is logged in, then trust the client to only show allowed pages. But anyone can
-          type a URL, craft an API request with <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">curl</code>,
-          or use browser dev tools. Every protected resource must be checked <strong>server-side</strong> against
-          the user&apos;s actual permissions.
-        </p>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { n: "401", label: "Unauthorized", desc: "Authentication failed — we don't know who you are", color: "text-red-400" },
-            { n: "403", label: "Forbidden", desc: "Authentication passed, but you don't have permission", color: "text-amber-400" },
-          ].map((item) => (
-            <div key={item.n} className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-3">
-              <span className={cn("text-xs font-mono font-bold bg-muted rounded-md px-2 py-1 shrink-0", item.color)}>
-                {item.n}
-              </span>
-              <div>
-                <p className="text-xs font-semibold">{item.label}</p>
-                <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </WhyItBreaks>
+      {/* OAuth 2.0 Flow */}
+      <OAuthPlayground />
 
-      <ConceptVisualizer title="OAuth2 Authorization Code Flow with PKCE">
-        <p className="text-sm text-muted-foreground mb-4">
-          OAuth2 lets users log in with a third-party provider (Google, GitHub) without
-          sharing their password with your app. The authorization code flow with PKCE
-          (Proof Key for Code Exchange) is the most secure variant — it prevents authorization
-          code interception attacks even in public clients like SPAs and mobile apps.
-        </p>
-        <OAuthFlowViz />
-        <ConversationalCallout type="tip">
-          PKCE works by generating a random <code className="text-xs bg-muted px-1 rounded font-mono">code_verifier</code> on
-          the client, hashing it to create a <code className="text-xs bg-muted px-1 rounded font-mono">code_challenge</code> sent
-          with the initial request, then proving possession of the verifier when exchanging the code.
-          Even if an attacker intercepts the authorization code, they can&apos;t exchange it without the original verifier.
-          The upcoming OAuth 2.1 spec requires PKCE for all authorization code flows.
-        </ConversationalCallout>
-      </ConceptVisualizer>
+      <ConversationalCallout type="tip">
+        PKCE works by generating a random <code className="text-xs bg-muted px-1 rounded font-mono">code_verifier</code> on
+        the client, hashing it to create a <code className="text-xs bg-muted px-1 rounded font-mono">code_challenge</code> sent
+        with the initial redirect. When exchanging the authorization code, the client proves it started the flow by sending
+        the original verifier. Even if an attacker intercepts the code, they cannot exchange it without the verifier.
+      </ConversationalCallout>
 
-      <ConceptVisualizer title="JWT Anatomy — Header.Payload.Signature">
-        <p className="text-sm text-muted-foreground mb-4">
-          A JSON Web Token is a compact, self-contained way to transmit identity claims between
-          services. It has three base64-encoded parts separated by dots. Click each section to
-          explore it, or watch it cycle automatically.
-        </p>
-        <JwtAnatomyViz />
-        <AhaMoment
-          question="If JWTs are just base64-encoded, can't someone edit the payload to make themselves an admin?"
-          answer={
-            <p>
-              They can change the payload, but then the signature won&apos;t match. The server
-              verifies the signature using a private key that only it possesses. A tampered token
-              fails verification and gets rejected with a 401. That&apos;s the entire point of the
-              signature — it&apos;s not about hiding data, it&apos;s about proving data hasn&apos;t
-              been modified. For asymmetric algorithms like RS256, the signing key (private) and
-              verification key (public) are different, so even services that verify tokens can&apos;t
-              forge new ones.
-            </p>
-          }
-        />
-      </ConceptVisualizer>
+      {/* JWT Anatomy */}
+      <JwtPlayground />
 
-      <ConceptVisualizer title="OpenID Connect (OIDC) — Identity on Top of OAuth2">
-        <p className="text-sm text-muted-foreground mb-3">
-          OAuth2 is an <em>authorization</em> framework — it grants access to resources but doesn&apos;t
-          inherently tell you <em>who</em> the user is. OpenID Connect adds an identity layer on top:
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-          {[
-            { label: "OAuth2 alone", desc: "Grants an access_token to call APIs on behalf of a user. Doesn't standardize user identity.", color: "border-blue-500/20 bg-blue-500/5" },
-            { label: "OIDC adds", desc: "Returns an id_token (a JWT) containing verified user identity claims: email, name, picture, etc.", color: "border-violet-500/20 bg-violet-500/5" },
-            { label: "UserInfo endpoint", desc: "Standard /userinfo endpoint returns additional profile data using the access_token.", color: "border-emerald-500/20 bg-emerald-500/5" },
-          ].map((item) => (
-            <div key={item.label} className={cn("rounded-lg border p-3 space-y-1", item.color)}>
-              <p className="text-xs font-semibold">{item.label}</p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-sm text-muted-foreground mt-3">
-          When someone says &quot;Login with Google,&quot; they&apos;re using OIDC. Google is the
-          Identity Provider (IdP), your app is the Relying Party (RP), and the id_token proves
-          the user&apos;s identity without your app ever seeing their Google password.
-        </p>
-      </ConceptVisualizer>
+      <AhaMoment
+        question="If JWTs are just base64-encoded, can't someone edit the payload to make themselves an admin?"
+        answer={
+          <p>
+            They can change the payload, but then the signature will not match. The server verifies the signature
+            using a private key that only it possesses. A tampered token fails verification and gets rejected
+            with a 401. Try it in the playground above: change the role and watch the signature warning appear.
+            For asymmetric algorithms like RS256, the signing key (private) and verification key (public) are
+            different, so even services that verify tokens cannot forge new ones.
+          </p>
+        }
+      />
 
-      <ConceptVisualizer title="Access Control Models — RBAC vs ABAC">
-        <p className="text-sm text-muted-foreground mb-4">
-          Once you know <em>who</em> a user is, you need a model for deciding what they can do.
-          The two dominant approaches are Role-Based Access Control and Attribute-Based Access Control.
-          Toggle between them to see how each evaluates an access request.
-        </p>
-        <RbacAbacViz />
-      </ConceptVisualizer>
+      {/* RBAC Playground */}
+      <RbacPlayground />
+
+      {/* Session vs Token */}
+      <SessionVsToken />
 
       <BeforeAfter
         before={{
@@ -414,17 +516,13 @@ export default function AuthAndAuthorizationPage() {
           content: (
             <div className="space-y-2 text-sm text-muted-foreground">
               <p className="font-mono text-xs bg-muted/50 p-2 rounded">
-                {`// API route: /api/admin/users`}<br />
+                {`// API: /api/admin/users`}<br />
                 {`const user = getSession(req);`}<br />
                 {`if (!user) return 401;`}<br />
-                {`// No role check — any logged-in`}<br />
-                {`// user proceeds`}<br />
+                {`// Any logged-in user proceeds`}<br />
                 {`return getAllUsers();`}
               </p>
-              <p>
-                Any authenticated user can hit this endpoint. A regular user with a valid
-                session gets full admin data. This is the most common security flaw in web apps.
-              </p>
+              <p>Any authenticated user can hit this endpoint and get full admin data. This is Broken Access Control — OWASP #1.</p>
             </div>
           ),
         }}
@@ -433,141 +531,41 @@ export default function AuthAndAuthorizationPage() {
           content: (
             <div className="space-y-2 text-sm text-muted-foreground">
               <p className="font-mono text-xs bg-muted/50 p-2 rounded">
-                {`// API route: /api/admin/users`}<br />
+                {`// API: /api/admin/users`}<br />
                 {`const user = getSession(req);`}<br />
-                {`if (!user) return 401; // AuthN`}<br />
+                {`if (!user) return 401;`}<br />
                 {`if (user.role !== "admin")`}<br />
-                {`  return 403; // AuthZ`}<br />
+                {`  return 403;`}<br />
                 {`return getAllUsers();`}
               </p>
-              <p>
-                Authentication check (401) and authorization check (403) are both enforced
-                server-side. The client never decides access — it only reflects it.
-              </p>
+              <p>Authentication (401) and authorization (403) are both enforced server-side. The client never decides access.</p>
             </div>
           ),
         }}
       />
 
-      <CorrectApproach title="Defense in Depth for Auth">
-        <div className="space-y-3">
-          <div>
-            <h4 className="text-sm font-semibold">1. Server-side enforcement on every request</h4>
-            <p className="text-sm text-muted-foreground">
-              Every API route and server action must check both authentication and authorization.
-              Never rely on the client hiding UI elements — that&apos;s a UX convenience, not a
-              security boundary. Middleware can centralize this so individual routes don&apos;t
-              repeat boilerplate.
-            </p>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold">2. Principle of Least Privilege</h4>
-            <p className="text-sm text-muted-foreground">
-              Users get the minimum permissions they need. Default to deny. New roles start with
-              zero access and permissions are added explicitly. This limits the blast radius when
-              an account is compromised.
-            </p>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold">3. Short-lived tokens + refresh rotation</h4>
-            <p className="text-sm text-muted-foreground">
-              Access tokens should expire in 15 minutes or less. Use refresh tokens (stored securely,
-              rotated on each use) to issue new access tokens. If a token is stolen, the window of
-              exploitation is small. Refresh token rotation detects theft — if a rotated-out token
-              is reused, revoke the entire family.
-            </p>
-          </div>
-          <div>
-            <h4 className="text-sm font-semibold">4. Secure token storage</h4>
-            <p className="text-sm text-muted-foreground">
-              Store tokens in <code className="text-xs bg-muted px-1 rounded font-mono">httpOnly</code>,{" "}
-              <code className="text-xs bg-muted px-1 rounded font-mono">Secure</code>,{" "}
-              <code className="text-xs bg-muted px-1 rounded font-mono">SameSite=Strict</code> cookies.
-              Never use localStorage or sessionStorage — they&apos;re accessible to any JavaScript on the
-              page, making XSS attacks trivially exploitable.
-            </p>
-          </div>
-        </div>
-      </CorrectApproach>
-
-      <InteractiveDemo title="Token Lifecycle Simulator">
-        {({ isPlaying, tick }) => {
-          const tokenLifespan = 6;
-          const elapsed = isPlaying ? tick % (tokenLifespan + 3) : 0;
-          const isExpired = elapsed > tokenLifespan;
-          const isRefreshing = elapsed === tokenLifespan + 1;
-          const isRenewed = elapsed > tokenLifespan + 1;
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to watch a JWT access token expire and get refreshed. Each tick is ~2.5 minutes
-                in a 15-minute token lifecycle.
-              </p>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium w-24 shrink-0">Access Token</span>
-                  <div className="flex-1 bg-muted/30 rounded-full h-5 overflow-hidden">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        isRenewed ? "bg-emerald-500" : isExpired ? "bg-red-500" : elapsed > 4 ? "bg-amber-500" : "bg-emerald-500"
-                      )}
-                      style={{ width: isRenewed ? "100%" : `${Math.max(0, 100 - (elapsed / tokenLifespan) * 100)}%` }}
-                    />
-                  </div>
-                  <span className={cn("text-[10px] font-mono w-16 text-right", isExpired && !isRenewed ? "text-red-400" : "text-muted-foreground")}>
-                    {isRenewed ? "15:00" : isExpired ? "EXPIRED" : `${Math.max(0, 15 - Math.round(elapsed * 2.5))}:00`}
-                  </span>
-                </div>
-                {isRefreshing && (
-                  <div className="flex items-center gap-2 text-[11px] text-amber-400 pl-24">
-                    <ArrowRight className="size-3" />
-                    Refresh token exchanged — issuing new access token...
-                  </div>
-                )}
-                {isRenewed && (
-                  <div className="flex items-center gap-2 text-[11px] text-emerald-400 pl-24">
-                    <CheckCircle2 className="size-3.5" />
-                    New access token issued. Old refresh token rotated.
-                  </div>
-                )}
-              </div>
-              {elapsed > 4 && !isExpired && (
-                <ConversationalCallout type="warning">
-                  Token is about to expire. A well-built client refreshes proactively before
-                  expiration to avoid interrupted requests.
-                </ConversationalCallout>
-              )}
-            </div>
-          );
-        }}
-      </InteractiveDemo>
-
       <ConversationalCallout type="warning">
         Use RS256 (asymmetric) over HS256 (symmetric) for JWTs in distributed systems. With HS256,
         every service that verifies tokens needs the secret key — and any of them could forge tokens.
         With RS256, only the auth service holds the private signing key; other services verify with
-        the public key and can&apos;t create new tokens.
+        the public key and cannot create new tokens.
       </ConversationalCallout>
 
       <ConversationalCallout type="tip">
-        In system design interviews, always mention both authn and authz when discussing security.
-        Saying &quot;we check if the user is logged in&quot; only covers half the problem. The
-        follow-up question will be &quot;how do you prevent a regular user from accessing admin
-        endpoints?&quot; Mention RBAC for simple permission models, ABAC when you need context-aware
-        rules (time-of-day, IP range, resource sensitivity), and note that most production systems
-        use a hybrid approach.
+        In system design interviews, always mention both authn and authz. Saying &quot;we check if the user
+        is logged in&quot; only covers half the problem. Mention RBAC for simple permission models,
+        ABAC when you need context-aware rules, and note that most production systems use short-lived
+        access tokens (15 min) with rotated refresh tokens stored in httpOnly/Secure/SameSite cookies.
       </ConversationalCallout>
 
       <KeyTakeaway
         points={[
           "Authentication verifies identity (who you are). Authorization verifies permissions (what you can do). Both must be enforced server-side on every request.",
-          "OAuth2 + PKCE is the standard for third-party login. PKCE prevents authorization code interception by binding the code to a client-generated verifier.",
-          "OpenID Connect (OIDC) adds identity on top of OAuth2 — the id_token is a JWT containing verified user claims like email and name.",
-          "JWTs carry claims in a signed payload. Use RS256 (asymmetric) in distributed systems so services can verify tokens without being able to forge them.",
-          "RBAC assigns permissions via roles (simple, can lead to role explosion). ABAC evaluates user/resource/environment attributes (flexible, more complex). Most systems use both.",
-          "Use short-lived access tokens (15 min), rotated refresh tokens, and httpOnly/Secure/SameSite cookies. Never store tokens in localStorage.",
+          "OAuth2 + PKCE is the standard for third-party login. The code_verifier/code_challenge pair prevents authorization code interception even in public clients.",
+          "JWTs carry claims in a signed payload. Edit the payload and the signature breaks — that's the whole point. Use RS256 in distributed systems.",
+          "RBAC assigns permissions via roles (simple but can lead to role explosion). ABAC evaluates attributes (flexible but complex). Most systems use both.",
+          "Stateful sessions require server-side storage but are easy to revoke. Stateless JWTs scale horizontally but are hard to revoke before expiration.",
+          "Store tokens in httpOnly/Secure/SameSite cookies. Never use localStorage — it's accessible to any JavaScript on the page via XSS.",
         ]}
       />
     </div>

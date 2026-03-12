@@ -1,442 +1,620 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { BeforeAfter } from "@/components/before-after";
-import { ServerNode } from "@/components/server-node";
-import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
-import { InteractiveDemo } from "@/components/interactive-demo";
-import { MetricCounter } from "@/components/metric-counter";
+import { ConversationalCallout } from "@/components/conversational-callout";
+import { BeforeAfter } from "@/components/before-after";
+import { Playground } from "@/components/playground";
+import { FlowDiagram } from "@/components/flow-diagram";
+import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Hash, ArrowRight, AlertTriangle, Shuffle } from "lucide-react";
 
-function ConsistentHashRingViz() {
-  const [step, setStep] = useState(0);
-  const [showVnodes, setShowVnodes] = useState(false);
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 12), 1000);
-    return () => clearInterval(t);
-  }, []);
+function simpleHash(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
 
-  const ringRadius = 100;
-  const centerX = 140;
-  const centerY = 120;
+function rangeShardIndex(key: string): number {
+  const first = key.charAt(0).toUpperCase();
+  if (first <= "F") return 0;
+  if (first <= "M") return 1;
+  if (first <= "S") return 2;
+  return 3;
+}
 
-  const nodes = showVnodes
-    ? [
-        { id: "A1", label: "A", angle: 30, color: "#3b82f6" },
-        { id: "A2", label: "A", angle: 150, color: "#3b82f6" },
-        { id: "A3", label: "A", angle: 280, color: "#3b82f6" },
-        { id: "B1", label: "B", angle: 90, color: "#22c55e" },
-        { id: "B2", label: "B", angle: 210, color: "#22c55e" },
-        { id: "B3", label: "B", angle: 330, color: "#22c55e" },
-        { id: "C1", label: "C", angle: 60, color: "#eab308" },
-        { id: "C2", label: "C", angle: 180, color: "#eab308" },
-        { id: "C3", label: "C", angle: 300, color: "#eab308" },
-      ]
-    : [
-        { id: "A", label: "A", angle: 45, color: "#3b82f6" },
-        { id: "B", label: "B", angle: 165, color: "#22c55e" },
-        { id: "C", label: "C", angle: 285, color: "#eab308" },
-      ];
+const SHARD_COLORS = ["#3b82f6", "#22c55e", "#eab308", "#a855f7"];
+const SHARD_NAMES = ["Shard A", "Shard B", "Shard C", "Shard D"];
 
-  const dataKeys = [
-    { key: "user_42", angle: 20, step: 1 },
-    { key: "user_99", angle: 110, step: 3 },
-    { key: "user_7", angle: 200, step: 5 },
-    { key: "user_55", angle: 250, step: 7 },
-    { key: "user_31", angle: 340, step: 9 },
+// ── 1. Shard Distribution Playground ─────────────────────────────────────────
+
+function ShardDistributionPlayground() {
+  const [mode, setMode] = useState<"hash" | "range">("hash");
+  const [input, setInput] = useState("");
+  const [keys, setKeys] = useState<string[]>(["alice", "bob", "carol", "dave", "eve", "frank"]);
+  const [lastAdded, setLastAdded] = useState<string | null>(null);
+
+  const addKey = useCallback(() => {
+    const trimmed = input.trim();
+    if (!trimmed || keys.includes(trimmed)) return;
+    setKeys((prev) => [...prev, trimmed]);
+    setLastAdded(trimmed);
+    setInput("");
+    setTimeout(() => setLastAdded(null), 1200);
+  }, [input, keys]);
+
+  const shardAssignments = useMemo(() => {
+    const buckets: string[][] = [[], [], [], []];
+    for (const key of keys) {
+      const idx = mode === "hash" ? simpleHash(key) % 4 : rangeShardIndex(key);
+      buckets[idx].push(key);
+    }
+    return buckets;
+  }, [keys, mode]);
+
+  const chartData = shardAssignments.map((bucket, i) => ({
+    shard: SHARD_NAMES[i],
+    count: bucket.length,
+  }));
+
+  const maxCount = Math.max(...shardAssignments.map((b) => b.length), 1);
+  const isUnbalanced = maxCount > keys.length / 4 + 2 && keys.length > 4;
+
+  // Build flow nodes: Router at left, 4 shard database nodes at right
+  const flowNodes: FlowNode[] = [
+    {
+      id: "router",
+      type: "gatewayNode",
+      position: { x: 20, y: 120 },
+      data: {
+        label: "Router",
+        sublabel: mode === "hash" ? "hash(key) % 4" : "Range A-F / G-M / N-S / T-Z",
+        status: "healthy",
+        handles: { right: true },
+      },
+    },
+    ...shardAssignments.map((bucket, i) => ({
+      id: `shard-${i}`,
+      type: "databaseNode" as const,
+      position: { x: 320, y: i * 85 + 10 },
+      data: {
+        label: SHARD_NAMES[i],
+        sublabel: `${bucket.length} keys`,
+        status: (bucket.length === maxCount && isUnbalanced
+          ? "warning"
+          : bucket.length === 0
+            ? "idle"
+            : "healthy") as "warning" | "idle" | "healthy",
+        metrics: [{ label: "Keys", value: String(bucket.length) }],
+        handles: { left: true },
+      },
+    })),
   ];
 
-  const getPos = (angle: number, r: number = ringRadius) => ({
-    x: centerX + r * Math.cos((angle - 90) * Math.PI / 180),
-    y: centerY + r * Math.sin((angle - 90) * Math.PI / 180),
-  });
-
-  const findTargetNode = (keyAngle: number) => {
-    const sortedNodes = [...nodes].sort((a, b) => a.angle - b.angle);
-    for (const node of sortedNodes) {
-      if (node.angle >= keyAngle) return node;
-    }
-    return sortedNodes[0];
-  };
+  const flowEdges: FlowEdge[] = [0, 1, 2, 3].map((i) => ({
+    id: `router-shard-${i}`,
+    source: "router",
+    target: `shard-${i}`,
+    sourceHandle: "right",
+    targetHandle: "left",
+    animated: shardAssignments[i].length > 0,
+    style: { stroke: SHARD_COLORS[i], strokeWidth: 2, opacity: shardAssignments[i].length > 0 ? 0.8 : 0.2 },
+  }));
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2 justify-center">
-        <button
-          onClick={() => setShowVnodes(false)}
-          className={cn(
-            "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-            !showVnodes
-              ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-              : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
-          )}
-        >
-          3 Physical Nodes
-        </button>
-        <button
-          onClick={() => setShowVnodes(true)}
-          className={cn(
-            "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-            showVnodes
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-              : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
-          )}
-        >
-          3 Nodes + Virtual Nodes
-        </button>
-      </div>
-
-      <div className="flex justify-center">
-        <svg viewBox="0 0 280 240" className="w-full max-w-sm">
-          {/* Ring */}
-          <circle cx={centerX} cy={centerY} r={ringRadius} fill="none" stroke="currentColor" strokeWidth="1" opacity={0.15} />
-
-          {/* Hash space labels */}
-          <text x={centerX} y={centerY - ringRadius - 8} textAnchor="middle" fill="currentColor" fontSize="8" opacity={0.3}>0</text>
-          <text x={centerX + ringRadius + 8} y={centerY + 3} textAnchor="start" fill="currentColor" fontSize="8" opacity={0.3}>2^32/4</text>
-          <text x={centerX} y={centerY + ringRadius + 14} textAnchor="middle" fill="currentColor" fontSize="8" opacity={0.3}>2^32/2</text>
-          <text x={centerX - ringRadius - 8} y={centerY + 3} textAnchor="end" fill="currentColor" fontSize="8" opacity={0.3}>3/4</text>
-
-          {/* Server nodes on ring */}
-          {nodes.map((node) => {
-            const pos = getPos(node.angle);
-            return (
-              <g key={node.id}>
-                <circle cx={pos.x} cy={pos.y} r={showVnodes ? 8 : 12} fill={node.color} opacity={0.2} />
-                <circle cx={pos.x} cy={pos.y} r={showVnodes ? 5 : 8} fill={node.color} opacity={0.8} />
-                <text x={pos.x} y={pos.y + (showVnodes ? 2 : 3)} textAnchor="middle" fill="white" fontSize={showVnodes ? "7" : "9"} fontWeight="bold">
-                  {node.label}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Data keys being routed */}
-          {dataKeys.map((dk) => {
-            const keyPos = getPos(dk.angle, ringRadius + 25);
-            const target = findTargetNode(dk.angle);
-            const targetPos = getPos(target.angle);
-            const isActive = step >= dk.step && step < dk.step + 2;
-            const isDone = step >= dk.step + 2;
-
-            return (
-              <g key={dk.key} opacity={isActive ? 1 : isDone ? 0.6 : 0.2}>
-                {/* Key label */}
-                <text x={keyPos.x} y={keyPos.y} textAnchor="middle" fill="currentColor" fontSize="7" fontFamily="monospace">
-                  {dk.key}
-                </text>
-                {/* Arrow from key to target node */}
-                {(isActive || isDone) && (
-                  <line
-                    x1={keyPos.x}
-                    y1={keyPos.y + 3}
-                    x2={targetPos.x}
-                    y2={targetPos.y}
-                    stroke={target.color}
-                    strokeWidth="1"
-                    strokeDasharray={isActive ? "3,3" : "0"}
-                    opacity={0.5}
-                  />
+    <Playground
+      title="Shard Distribution Playground"
+      controls={false}
+      canvasHeight="min-h-[520px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          {/* Mode toggle and input */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-1 rounded-lg border border-border/50 p-0.5">
+              <button
+                onClick={() => setMode("hash")}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  mode === "hash"
+                    ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+              >
+                Hash-Based
+              </button>
+              <button
+                onClick={() => setMode("range")}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  mode === "range"
+                    ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Range-Based
+              </button>
+            </div>
+            <div className="flex gap-2 flex-1 min-w-[200px]">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addKey()}
+                placeholder="Type a user name or ID..."
+                className="flex-1 rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-violet-500/50"
+              />
+              <button
+                onClick={addKey}
+                className="rounded-lg bg-violet-500/15 border border-violet-500/30 px-3 py-1.5 text-xs font-medium text-violet-400 hover:bg-violet-500/25 transition-colors"
+              >
+                Add Key
+              </button>
+              <button
+                onClick={() => { setKeys([]); setLastAdded(null); }}
+                className="rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
 
-      <div className="text-center">
-        <p className="text-[10px] text-muted-foreground">
-          {showVnodes
-            ? "With virtual nodes (vnodes), each physical server owns multiple positions on the ring. Data distributes more evenly across servers."
-            : "Each key is hashed to a position on the ring, then assigned to the first server found clockwise."}
-        </p>
-      </div>
-    </div>
+          {/* Flow diagram */}
+          <FlowDiagram
+            nodes={flowNodes}
+            edges={flowEdges}
+            minHeight={280}
+            interactive={false}
+            allowDrag={false}
+          />
+
+          {/* Shard contents */}
+          <div className="grid grid-cols-4 gap-2">
+            {shardAssignments.map((bucket, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "rounded-lg border p-2 transition-all duration-300",
+                  bucket.length === maxCount && isUnbalanced
+                    ? "border-red-500/40 bg-red-500/[0.06]"
+                    : "border-border/40 bg-muted/20"
+                )}
+              >
+                <p className="text-[10px] font-semibold mb-1" style={{ color: SHARD_COLORS[i] }}>
+                  {SHARD_NAMES[i]}
+                  {mode === "range" && (
+                    <span className="text-muted-foreground/60 ml-1">
+                      ({i === 0 ? "A-F" : i === 1 ? "G-M" : i === 2 ? "N-S" : "T-Z"})
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {bucket.map((k) => (
+                    <span
+                      key={k}
+                      className={cn(
+                        "text-[9px] font-mono px-1.5 py-0.5 rounded border transition-all",
+                        k === lastAdded
+                          ? "bg-violet-500/20 border-violet-500/40 text-violet-400 animate-pulse"
+                          : "bg-muted/30 border-border/30 text-muted-foreground"
+                      )}
+                    >
+                      {k}
+                    </span>
+                  ))}
+                  {bucket.length === 0 && (
+                    <span className="text-[9px] text-muted-foreground/30">empty</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Distribution bar chart */}
+          <LiveChart
+            type="bar"
+            data={chartData}
+            dataKeys={{ x: "shard", y: "count", label: "Keys" }}
+            height={120}
+            colors={SHARD_COLORS}
+          />
+
+          {isUnbalanced && (
+            <p className="text-xs text-center text-amber-400 font-medium">
+              Hotspot detected — one shard has significantly more keys than the others.
+            </p>
+          )}
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="font-semibold text-foreground">How it works</p>
+          {mode === "hash" ? (
+            <>
+              <p>Each key is hashed and the result modulo 4 determines the shard. This tends to distribute data evenly regardless of key patterns.</p>
+              <p className="text-xs font-mono bg-muted/30 rounded p-2">shard = hash(key) % 4</p>
+              <p>Try adding keys like &quot;user_1&quot;, &quot;user_2&quot;, etc. and notice how they spread evenly. The downside: range queries (e.g. &quot;all users starting with A&quot;) must fan out to every shard.</p>
+            </>
+          ) : (
+            <>
+              <p>Keys are assigned to shards based on their first character: A-F goes to Shard A, G-M to Shard B, N-S to Shard C, T-Z to Shard D.</p>
+              <p className="text-xs font-mono bg-muted/30 rounded p-2">A-F → Shard A, G-M → Shard B, ...</p>
+              <p>Try adding common English names and notice how some ranges get more data than others. Real-world names are not uniformly distributed across letters.</p>
+            </>
+          )}
+        </div>
+      }
+    />
   );
 }
 
-function ShardRoutingViz() {
-  const [step, setStep] = useState(0);
+// ── 2. Resharding Simulation ─────────────────────────────────────────────────
 
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 10), 800);
-    return () => clearInterval(t);
-  }, []);
+function ReshardingSimulation() {
+  const [numShards, setNumShards] = useState(2);
+  const [hashingMode, setHashingMode] = useState<"modular" | "consistent">("modular");
 
-  const requests = [
-    { user: "user_42", hash: "42 % 4 = 2", shard: 2 },
-    { user: "user_99", hash: "99 % 4 = 3", shard: 3 },
-    { user: "user_7", hash: "7 % 4 = 3", shard: 3 },
-    { user: "user_56", hash: "56 % 4 = 0", shard: 0 },
-    { user: "user_21", hash: "21 % 4 = 1", shard: 1 },
-  ];
+  const allKeys = useMemo(
+    () => Array.from({ length: 24 }, (_, i) => `key_${String(i + 1).padStart(2, "0")}`),
+    []
+  );
 
-  const shardColors = [
-    "text-blue-400 bg-blue-500/10 border-blue-500/20",
-    "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    "text-violet-400 bg-violet-500/10 border-violet-500/20",
-  ];
+  const assignKeys = useCallback(
+    (n: number, mode: "modular" | "consistent") => {
+      const buckets: string[][] = Array.from({ length: n }, () => []);
+      for (const key of allKeys) {
+        const h = simpleHash(key);
+        if (mode === "modular") {
+          buckets[h % n].push(key);
+        } else {
+          // consistent hashing simulation — keys on a ring, servers at fixed positions
+          const ringPos = h % 360;
+          const serverPositions = Array.from({ length: n }, (_, i) => (i * (360 / n)) | 0);
+          let best = 0;
+          let minDist = 361;
+          for (let s = 0; s < n; s++) {
+            const dist = (serverPositions[s] - ringPos + 360) % 360;
+            if (dist < minDist) {
+              minDist = dist;
+              best = s;
+            }
+          }
+          buckets[best].push(key);
+        }
+      }
+      return buckets;
+    },
+    [allKeys]
+  );
 
-  const activeReq = Math.floor(step / 2);
-  const phase = step % 2;
+  const prevAssignment = assignKeys(numShards > 2 ? numShards - 1 : 2, hashingMode);
+  const currAssignment = assignKeys(numShards, hashingMode);
+
+  // Calculate how many keys moved
+  const movedCount = useMemo(() => {
+    const prevMap = new Map<string, number>();
+    prevAssignment.forEach((bucket, shardIdx) => {
+      bucket.forEach((key) => prevMap.set(key, shardIdx));
+    });
+    let moved = 0;
+    currAssignment.forEach((bucket, shardIdx) => {
+      bucket.forEach((key) => {
+        if (prevMap.get(key) !== shardIdx) moved++;
+      });
+    });
+    return numShards === 2 ? 0 : moved;
+  }, [prevAssignment, currAssignment, numShards]);
+
+  const movedPct = numShards === 2 ? 0 : Math.round((movedCount / allKeys.length) * 100);
+
+  const chartData = currAssignment.map((bucket, i) => ({
+    shard: `Shard ${i + 1}`,
+    count: bucket.length,
+  }));
 
   return (
-    <div className="space-y-4">
-      {/* Request queue */}
-      <div className="flex items-center gap-2 justify-center flex-wrap">
-        {requests.map((req, i) => (
-          <div
-            key={req.user}
-            className={cn(
-              "rounded-md border px-2.5 py-1.5 text-[10px] font-mono transition-all duration-300",
-              i === activeReq && phase === 0
-                ? "bg-blue-500/10 border-blue-500/30 text-blue-400 ring-1 ring-blue-500/20"
-                : i < activeReq
-                ? "bg-muted/10 border-border/20 text-muted-foreground/30"
-                : "bg-muted/20 border-border/50 text-muted-foreground"
-            )}
-          >
-            {req.user}
+    <Playground
+      title="Resharding Simulation"
+      controls={false}
+      canvasHeight="min-h-[400px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          {/* Controls */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-1 rounded-lg border border-border/50 p-0.5">
+              <button
+                onClick={() => setHashingMode("modular")}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  hashingMode === "modular"
+                    ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Modular Hashing
+              </button>
+              <button
+                onClick={() => setHashingMode("consistent")}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  hashingMode === "consistent"
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Consistent Hashing
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setNumShards((n) => Math.max(2, n - 1))}
+                disabled={numShards <= 2}
+                className="rounded-lg border border-border/50 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+              >
+                Remove Shard
+              </button>
+              <span className="text-sm font-mono font-semibold text-foreground w-20 text-center">
+                {numShards} shards
+              </span>
+              <button
+                onClick={() => setNumShards((n) => Math.min(6, n + 1))}
+                disabled={numShards >= 6}
+                className="rounded-lg bg-violet-500/15 border border-violet-500/30 px-3 py-1.5 text-xs font-medium text-violet-400 hover:bg-violet-500/25 disabled:opacity-30 transition-colors"
+              >
+                Add Shard
+              </button>
+            </div>
           </div>
-        ))}
-      </div>
 
-      {/* Hash function */}
-      {activeReq < requests.length && (
-        <div className="flex items-center justify-center gap-2">
-          <Hash className={cn(
-            "size-4 transition-all",
-            phase === 0 ? "text-blue-400 animate-pulse" : "text-muted-foreground/30"
-          )} />
-          <span className={cn(
-            "text-xs font-mono transition-all",
-            phase >= 0 ? "text-foreground" : "text-muted-foreground/30"
-          )}>
-            hash({requests[activeReq].user}) → {requests[activeReq].hash}
-          </span>
-          <ArrowRight className={cn(
-            "size-3.5 transition-all",
-            phase >= 1 ? "text-emerald-400" : "text-muted-foreground/30"
-          )} />
+          {/* Big metric: data that moved */}
+          {numShards > 2 && (
+            <div className="flex items-center justify-center gap-6">
+              <div className="text-center">
+                <p className={cn(
+                  "text-4xl font-bold tabular-nums",
+                  movedPct > 50 ? "text-red-400" : movedPct > 25 ? "text-amber-400" : "text-emerald-400"
+                )}>
+                  {movedPct}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  data moved ({movedCount} of {allKeys.length} keys)
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  {hashingMode === "modular"
+                    ? "Modular: nearly all keys rehash when shard count changes."
+                    : "Consistent: only keys near the new server on the ring move."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Bar chart */}
+          <LiveChart
+            type="bar"
+            data={chartData}
+            dataKeys={{ x: "shard", y: "count", label: "Keys" }}
+            height={140}
+            colors={SHARD_COLORS.slice(0, numShards)}
+          />
+
+          {/* Shard grid */}
+          <div className={cn("grid gap-2", numShards <= 4 ? "grid-cols-4" : "grid-cols-3")}>
+            {currAssignment.map((bucket, i) => (
+              <div key={i} className="rounded-lg border border-border/40 bg-muted/20 p-2">
+                <p className="text-[10px] font-semibold mb-1" style={{ color: SHARD_COLORS[i % SHARD_COLORS.length] }}>
+                  Shard {i + 1}
+                  <span className="text-muted-foreground/50 ml-1">({bucket.length})</span>
+                </p>
+                <div className="flex flex-wrap gap-0.5">
+                  {bucket.slice(0, 8).map((k) => (
+                    <span key={k} className="text-[8px] font-mono px-1 py-0.5 rounded bg-muted/30 text-muted-foreground">
+                      {k}
+                    </span>
+                  ))}
+                  {bucket.length > 8 && (
+                    <span className="text-[8px] text-muted-foreground/50">+{bucket.length - 8} more</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="font-semibold text-foreground">Why resharding matters</p>
+          <p>When your dataset outgrows your shards, you need to add more. But how you hash determines how painful that is.</p>
+          <div className="space-y-2 text-xs">
+            <div className="rounded p-2 bg-red-500/[0.06] border border-red-500/20">
+              <p className="font-semibold text-red-400">Modular Hashing</p>
+              <p className="mt-1">key % N changes for almost every key when N changes. Going from 3 to 4 shards can move ~75% of all data.</p>
+            </div>
+            <div className="rounded p-2 bg-emerald-500/[0.06] border border-emerald-500/20">
+              <p className="font-semibold text-emerald-400">Consistent Hashing</p>
+              <p className="mt-1">Only ~1/N of keys move when adding a shard. The new shard takes ownership of a range on the hash ring, affecting only its neighbors.</p>
+            </div>
+          </div>
+          <p>Click &quot;Add Shard&quot; and &quot;Remove Shard&quot; to see the difference. Toggle between hashing modes to compare.</p>
+        </div>
+      }
+    />
+  );
+}
+
+// ── 3. Hot Partition Demo ────────────────────────────────────────────────────
+
+function HotPartitionDemo() {
+  const sim = useSimulation({ intervalMs: 600, maxSteps: 40 });
+
+  const [useSuffix, setUseSuffix] = useState(false);
+
+  // Simulate writes: celebrity user gets 80% of writes
+  const writes = useMemo(() => {
+    const result: { key: string; shard: number }[] = [];
+    for (let i = 0; i < sim.step; i++) {
+      const isCelebWrite = i % 5 !== 0; // 80% celebrity
+      let key: string;
+      if (isCelebWrite) {
+        key = useSuffix ? `celeb_${i % 4}` : "celebrity_user";
+      } else {
+        key = `normal_user_${i}`;
+      }
+      const shard = simpleHash(key) % 4;
+      result.push({ key, shard });
+    }
+    return result;
+  }, [sim.step, useSuffix]);
+
+  const shardCounts = useMemo(() => {
+    const counts = [0, 0, 0, 0];
+    for (const w of writes) counts[w.shard]++;
+    return counts;
+  }, [writes]);
+
+  const totalWrites = writes.length;
+  const maxWrites = Math.max(...shardCounts, 1);
+
+  const flowNodes: FlowNode[] = [
+    {
+      id: "client",
+      type: "clientNode",
+      position: { x: 20, y: 120 },
+      data: {
+        label: "Write Traffic",
+        sublabel: `${totalWrites} writes`,
+        status: "healthy",
+        handles: { right: true },
+      },
+    },
+    ...shardCounts.map((count, i) => {
+      const pct = totalWrites > 0 ? Math.round((count / totalWrites) * 100) : 0;
+      const isHot = pct > 40;
+      return {
+        id: `shard-${i}`,
+        type: "databaseNode" as const,
+        position: { x: 320, y: i * 85 + 10 },
+        data: {
+          label: SHARD_NAMES[i],
+          sublabel: `${count} writes (${pct}%)`,
+          status: (isHot ? "unhealthy" : count === 0 ? "idle" : "healthy") as "unhealthy" | "idle" | "healthy",
+          metrics: [{ label: "Load", value: `${pct}%` }],
+          handles: { left: true },
+        },
+      };
+    }),
+  ];
+
+  const flowEdges: FlowEdge[] = shardCounts.map((count, i) => ({
+    id: `client-shard-${i}`,
+    source: "client",
+    target: `shard-${i}`,
+    sourceHandle: "right",
+    targetHandle: "left",
+    animated: count > 0,
+    style: {
+      stroke: count === maxWrites && totalWrites > 5 && !useSuffix ? "#ef4444" : SHARD_COLORS[i],
+      strokeWidth: Math.max(1, Math.min(4, (count / Math.max(maxWrites, 1)) * 4)),
+      opacity: count > 0 ? 0.8 : 0.15,
+    },
+  }));
+
+  const chartData = shardCounts.map((count, i) => ({
+    shard: SHARD_NAMES[i],
+    writes: count,
+  }));
+
+  return (
+    <Playground
+      title="Hot Partition Demo — Celebrity User Problem"
+      simulation={sim}
+      canvasHeight="min-h-[480px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          {/* Fix toggle */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setUseSuffix(false); sim.reset(); }}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                !useSuffix
+                  ? "bg-red-500/10 border-red-500/30 text-red-400"
+                  : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              No Fix (all writes to one key)
+            </button>
+            <button
+              onClick={() => { setUseSuffix(true); sim.reset(); }}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                useSuffix
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Fix: Random Suffix (spread writes)
+            </button>
+          </div>
+
+          {/* Flow diagram */}
+          <FlowDiagram
+            nodes={flowNodes}
+            edges={flowEdges}
+            minHeight={260}
+            interactive={false}
+            allowDrag={false}
+          />
+
+          {/* Live chart */}
+          <LiveChart
+            type="bar"
+            data={chartData}
+            dataKeys={{ x: "shard", y: "writes", label: "Writes" }}
+            height={120}
+            colors={SHARD_COLORS}
+            referenceLines={totalWrites > 5 ? [{ y: totalWrites / 4, label: "ideal", color: "#22c55e" }] : undefined}
+          />
+        </div>
+      }
+      explanation={(state) => (
+        <div className="space-y-3">
+          <p className="font-semibold text-foreground">The Celebrity Problem</p>
+          <p>
+            Imagine a social media platform where one user (a celebrity) gets millions of interactions.
+            All writes for that user hash to the same shard, creating a hot partition.
+          </p>
+          {!useSuffix ? (
+            <div className="rounded p-2 bg-red-500/[0.06] border border-red-500/20 text-xs">
+              <p className="font-semibold text-red-400">Problem</p>
+              <p className="mt-1 font-mono">hash(&quot;celebrity_user&quot;) % 4</p>
+              <p className="mt-1">Always maps to the same shard. That shard is overwhelmed while others sit idle.</p>
+            </div>
+          ) : (
+            <div className="rounded p-2 bg-emerald-500/[0.06] border border-emerald-500/20 text-xs">
+              <p className="font-semibold text-emerald-400">Fix: Write Sharding</p>
+              <p className="mt-1 font-mono">hash(&quot;celeb_&quot; + random(0..3)) % 4</p>
+              <p className="mt-1">Append a random suffix to the key to spread writes across shards. Reads must gather from all suffix-shards and merge.</p>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Step {state.step} / {state.maxSteps}. Press play to watch writes accumulate.
+          </p>
         </div>
       )}
-
-      {/* Shards */}
-      <div className="grid grid-cols-4 gap-2">
-        {[0, 1, 2, 3].map((shardId) => {
-          const assignedRequests = requests
-            .slice(0, activeReq + (phase >= 1 ? 1 : 0))
-            .filter((r) => r.shard === shardId);
-
-          return (
-            <div
-              key={shardId}
-              className={cn(
-                "rounded-lg border p-2 text-center transition-all duration-300",
-                activeReq < requests.length && phase >= 1 && requests[activeReq].shard === shardId
-                  ? `ring-1 ${shardColors[shardId]}`
-                  : "bg-muted/20 border-border/50"
-              )}
-            >
-              <p className="text-[9px] font-medium text-muted-foreground mb-1">Shard {shardId}</p>
-              <div className="space-y-0.5">
-                {assignedRequests.map((r) => (
-                  <p key={r.user} className="text-[8px] font-mono text-muted-foreground">{r.user}</p>
-                ))}
-                {assignedRequests.length === 0 && (
-                  <p className="text-[8px] text-muted-foreground/30">empty</p>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    />
   );
 }
 
-function HotspotViz() {
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const shardsByCountry = [
-    { label: "US", load: 62, status: "unhealthy" as const, requests: "620K/s" },
-    { label: "EU", load: 25, status: "warning" as const, requests: "250K/s" },
-    { label: "APAC", load: 10, status: "healthy" as const, requests: "100K/s" },
-    { label: "Other", load: 3, status: "idle" as const, requests: "30K/s" },
-  ];
-
-  const shardsByUserId = [
-    { label: "Shard 0", load: 26, status: "healthy" as const, requests: "260K/s" },
-    { label: "Shard 1", load: 24, status: "healthy" as const, requests: "240K/s" },
-    { label: "Shard 2", load: 25, status: "healthy" as const, requests: "250K/s" },
-    { label: "Shard 3", load: 25, status: "healthy" as const, requests: "250K/s" },
-  ];
-
-  const showBad = step < 4;
-  const shards = showBad ? shardsByCountry : shardsByUserId;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-2 justify-center">
-        <span className={cn(
-          "text-xs px-3 py-1 rounded-lg border transition-all",
-          showBad ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-muted/20 border-border/50 text-muted-foreground/40"
-        )}>
-          <AlertTriangle className="size-3 inline mr-1" />
-          Shard by Country
-        </span>
-        <span className={cn(
-          "text-xs px-3 py-1 rounded-lg border transition-all",
-          !showBad ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-muted/20 border-border/50 text-muted-foreground/40"
-        )}>
-          <Shuffle className="size-3 inline mr-1" />
-          Shard by user_id (hash)
-        </span>
-      </div>
-
-      <div className="space-y-1.5">
-        {shards.map((shard) => (
-          <div key={shard.label} className="flex items-center gap-3">
-            <span className="text-[10px] font-mono text-muted-foreground w-16 text-right">{shard.label}</span>
-            <div className="flex-1 flex items-center gap-2">
-              <div
-                className={cn(
-                  "h-7 rounded-md flex items-center px-3 text-[10px] font-medium transition-all duration-500 border",
-                  shard.status === "unhealthy"
-                    ? "bg-red-500/15 border-red-500/30 text-red-400"
-                    : shard.status === "warning"
-                    ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                    : shard.status === "healthy"
-                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                    : "bg-muted/20 border-border/50 text-muted-foreground/40"
-                )}
-                style={{ width: `${Math.max(shard.load, 5)}%` }}
-              >
-                {shard.load}%
-              </div>
-              <span className="text-[9px] font-mono text-muted-foreground">{shard.requests}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <p className={cn(
-        "text-[10px] text-center font-medium transition-all",
-        showBad ? "text-red-400" : "text-emerald-400"
-      )}>
-        {showBad
-          ? "Hotspot: US shard handles 62% of all traffic. Overwhelmed."
-          : "Even distribution: each shard handles ~25%. Balanced."}
-      </p>
-    </div>
-  );
-}
-
-function RebalancingViz() {
-  const [phase, setPhase] = useState(0);
-
-  useEffect(() => {
-    const t = setInterval(() => setPhase((s) => (s + 1) % 6), 1500);
-    return () => clearInterval(t);
-  }, []);
-
-  const scenarios = [
-    {
-      label: "3 shards (before)",
-      shards: [
-        { name: "S0", size: 333, items: 8 },
-        { name: "S1", size: 333, items: 8 },
-        { name: "S2", size: 334, items: 8 },
-      ],
-      note: "Data evenly distributed across 3 shards.",
-    },
-    {
-      label: "Adding Shard 3 (naive hash)",
-      shards: [
-        { name: "S0", size: 250, items: 6 },
-        { name: "S1", size: 250, items: 6 },
-        { name: "S2", size: 250, items: 6 },
-        { name: "S3", size: 250, items: 6 },
-      ],
-      note: "Naive rehashing: ~75% of keys must move. Massive data migration.",
-    },
-    {
-      label: "Adding Shard 3 (consistent hashing)",
-      shards: [
-        { name: "S0", size: 280, items: 7 },
-        { name: "S1", size: 333, items: 8 },
-        { name: "S2", size: 280, items: 7 },
-        { name: "S3", size: 107, items: 2 },
-      ],
-      note: "Consistent hashing: only ~25% of keys move (1/N). Minimal disruption.",
-    },
-  ];
-
-  const currentScenario = scenarios[phase % 3];
-
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-2 justify-center">
-        {scenarios.map((s, i) => (
-          <span
-            key={s.label}
-            className={cn(
-              "text-[9px] px-2 py-1 rounded border transition-all",
-              phase % 3 === i
-                ? i === 1 ? "bg-red-500/10 border-red-500/30 text-red-400"
-                  : i === 2 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                : "bg-muted/10 border-border/30 text-muted-foreground/40"
-            )}
-          >
-            {s.label}
-          </span>
-        ))}
-      </div>
-
-      <div className="flex items-end justify-center gap-2">
-        {currentScenario.shards.map((shard) => (
-          <div key={shard.name} className="flex flex-col items-center gap-1">
-            <div
-              className={cn(
-                "w-14 rounded-t-md border-x border-t transition-all duration-500",
-                phase % 3 === 1 ? "bg-amber-500/10 border-amber-500/20" : "bg-blue-500/10 border-blue-500/20"
-              )}
-              style={{ height: `${shard.size / 5}px` }}
-            >
-              <div className="flex flex-col items-center justify-end h-full pb-1">
-                <span className="text-[8px] font-mono text-muted-foreground">{shard.items} keys</span>
-              </div>
-            </div>
-            <span className="text-[9px] font-mono font-medium">{shard.name}</span>
-          </div>
-        ))}
-      </div>
-
-      <p className={cn(
-        "text-[10px] text-center transition-all",
-        phase % 3 === 1 ? "text-red-400" : phase % 3 === 2 ? "text-emerald-400" : "text-muted-foreground"
-      )}>
-        {currentScenario.note}
-      </p>
-    </div>
-  );
-}
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ShardingAndPartitioningPage() {
   return (
@@ -447,284 +625,140 @@ export default function ShardingAndPartitioningPage() {
         difficulty="advanced"
       />
 
-      <FailureScenario title="1TB in a single database — the breaking point">
+      {/* Intro context */}
+      <section className="space-y-4 max-w-3xl mx-auto px-4">
         <p className="text-sm text-muted-foreground">
-          Your social media platform has grown to 1TB of data in a single PostgreSQL instance.
-          Queries that used to take 5ms now take 5 seconds. Adding indexes does not help because
-          the B+tree itself is enormous. Backups take 8 hours. A single ALTER TABLE locks the
-          database for 45 minutes. Your users experience timeouts during peak hours, and vertical
-          scaling has hit its ceiling &mdash; you are already running on the largest available
-          instance with 64 vCPUs and 512GB RAM.
+          <strong className="text-foreground">Partitioning</strong> splits a table into smaller pieces on the
+          <em> same server</em> (think PostgreSQL table partitions by date range).
+          <strong className="text-foreground"> Sharding</strong> splits data across
+          <em> multiple servers</em>, each holding a subset. Sharding is what you reach for when a single machine
+          genuinely cannot handle your write volume or data size.
         </p>
-        <div className="flex items-center justify-center gap-3 py-2 flex-wrap">
-          <ServerNode type="database" label="Single DB" sublabel="1TB, 64 vCPU" status="unhealthy" />
-        </div>
-        <div className="grid grid-cols-4 gap-2 pt-2">
-          <MetricCounter label="Query Latency" value={5000} unit="ms" trend="up" />
-          <MetricCounter label="Backup Time" value={8} unit="hrs" trend="up" />
-          <MetricCounter label="Migration Lock" value={45} unit="min" trend="up" />
-          <MetricCounter label="CPU Usage" value={98} unit="%" trend="up" />
-        </div>
-      </FailureScenario>
-
-      <WhyItBreaks title="One machine has hard physical limits">
-        <p className="text-sm text-muted-foreground">
-          A single database server has hard physical limits: disk I/O throughput, memory for caching,
-          and CPU for query processing. When your data exceeds what one machine can efficiently handle,
-          no amount of indexing or query optimization will save you. The data itself needs to be
-          <strong className="text-foreground"> split across multiple machines</strong>.
-        </p>
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          <div className="rounded-lg bg-muted/30 p-3 space-y-1">
-            <p className="text-xs font-semibold">Partitioning</p>
-            <p className="text-[11px] text-muted-foreground">
-              Splits a table into smaller pieces on the <strong className="text-foreground">same server</strong>.
-              PostgreSQL supports range, list, and hash partitioning natively. Good for managing large
-              tables (e.g., orders by month) without the complexity of distributed systems.
-            </p>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-3 space-y-1">
-            <p className="text-xs font-semibold">Sharding</p>
-            <p className="text-[11px] text-muted-foreground">
-              Splits data across <strong className="text-foreground">multiple servers</strong>.
-              Each shard is an independent database holding a subset of the data. Requires a routing
-              layer to direct queries to the correct shard. Much more complex, but breaks the
-              single-machine ceiling.
-            </p>
-          </div>
-        </div>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="Shard Routing — Watch Data Flow to Shards">
-        <p className="text-sm text-muted-foreground mb-4">
-          In hash-based sharding, each request&apos;s shard key is hashed to determine which shard
-          receives the data. Watch as user IDs are hashed and routed to their assigned shards.
-          The hash function ensures even distribution &mdash; but range queries now require
-          hitting all shards.
-        </p>
-        <ShardRoutingViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Consistent Hashing — The Hash Ring">
-        <p className="text-sm text-muted-foreground mb-4">
-          When you add or remove a shard with naive hashing (<code className="text-xs bg-muted px-1 rounded font-mono">key % N</code>),
-          almost every key remaps to a different shard. Consistent hashing solves this by placing
-          both servers and keys on a ring. When a server is added, only its neighbors&apos; keys
-          are affected. Toggle virtual nodes to see how they improve distribution.
-        </p>
-        <ConsistentHashRingViz />
-        <ConversationalCallout type="tip">
-          Without virtual nodes, 3 servers might get 60/25/15% of the keys. With 150 virtual
-          nodes per server, the distribution becomes nearly perfect. This is why Cassandra,
-          DynamoDB, and Riak all use virtual nodes in their consistent hashing implementation.
-        </ConversationalCallout>
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="The Hotspot Problem — Animated">
-        <p className="text-sm text-muted-foreground mb-4">
-          Choosing the wrong shard key creates hotspots where one shard is overwhelmed while
-          others sit idle. Watch the difference between sharding by country (uneven) versus
-          sharding by hashed user_id (balanced).
-        </p>
-        <HotspotViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Rebalancing: Naive vs Consistent Hashing">
-        <p className="text-sm text-muted-foreground mb-4">
-          What happens when you add a fourth shard? With naive hash-mod, nearly 75% of keys
-          must migrate. With consistent hashing, only about 25% (1/N) of keys need to move.
-          This difference is critical at scale &mdash; migrating terabytes of data takes hours
-          and saturates your network.
-        </p>
-        <RebalancingViz />
-      </ConceptVisualizer>
+      </section>
 
       <BeforeAfter
         before={{
           title: "Single Database (1TB)",
           content: (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex justify-center">
-                <ServerNode type="database" label="Single DB" sublabel="1TB" status="unhealthy" />
-              </div>
-              <ul className="space-y-1 text-xs">
-                <li>Query latency: 5,000ms at peak</li>
-                <li>Backup time: 8 hours</li>
-                <li>Schema migrations: 45-minute lock</li>
-                <li>Max connections: saturated</li>
-                <li>Single point of failure</li>
-              </ul>
-            </div>
+            <ul className="space-y-1.5 text-xs text-muted-foreground">
+              <li>Query latency: 5,000ms at peak</li>
+              <li>Backup time: 8 hours</li>
+              <li>Schema migration: 45-minute table lock</li>
+              <li>Max connections: saturated</li>
+              <li>Single point of failure</li>
+            </ul>
           ),
         }}
         after={{
           title: "Sharded (4 x 250GB)",
           content: (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex justify-center gap-2 flex-wrap">
-                <ServerNode type="database" label="Shard 0" sublabel="250GB" status="healthy" />
-                <ServerNode type="database" label="Shard 1" sublabel="250GB" status="healthy" />
-                <ServerNode type="database" label="Shard 2" sublabel="250GB" status="healthy" />
-                <ServerNode type="database" label="Shard 3" sublabel="250GB" status="healthy" />
-              </div>
-              <ul className="space-y-1 text-xs">
-                <li>Query latency: 50ms (queries hit one shard)</li>
-                <li>Backup time: 2 hours per shard (parallel)</li>
-                <li>Schema migrations: rolling, no downtime</li>
-                <li>4x connection capacity</li>
-              </ul>
-            </div>
+            <ul className="space-y-1.5 text-xs text-muted-foreground">
+              <li>Query latency: 50ms (hits one shard)</li>
+              <li>Backup time: 2 hours per shard (parallel)</li>
+              <li>Rolling schema migrations, no downtime</li>
+              <li>4x connection capacity</li>
+              <li>Fault-isolated: one shard failure does not affect others</li>
+            </ul>
           ),
         }}
       />
 
-      <InteractiveDemo title="Cross-Shard Query Simulator">
-        {({ isPlaying, tick }) => {
-          const phase = isPlaying ? tick % 6 : 0;
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to see how a cross-shard query (scatter-gather) works when you need data
-                from multiple shards.
-              </p>
-              <div className="flex flex-col items-center gap-3">
-                <div className={cn(
-                  "rounded-lg border px-4 py-2 transition-all duration-300",
-                  phase >= 1 ? "bg-blue-500/10 border-blue-500/30" : "bg-muted/20 border-border/50"
-                )}>
-                  <p className="text-[10px] font-mono text-muted-foreground">
-                    {phase >= 1 ? "SELECT COUNT(*) FROM orders GROUP BY status" : "Waiting..."}
-                  </p>
-                </div>
+      {/* Playground 1: Shard Distribution */}
+      <ShardDistributionPlayground />
 
-                <ServerNode type="loadbalancer" label="Coordinator" sublabel={
-                  phase >= 2 ? "Scatter to all shards" : phase >= 1 ? "Parse query" : "Idle"
-                } status={phase >= 1 ? "healthy" : "idle"} />
+      <ConversationalCallout type="tip">
+        Try switching between Hash-Based and Range-Based modes with the same keys. Notice how hash-based
+        distributes evenly, while range-based can create hotspots if your data clusters in certain letter
+        ranges. This is why most production systems default to hash-based sharding.
+      </ConversationalCallout>
 
-                <div className="flex gap-2 flex-wrap justify-center">
-                  {[0, 1, 2, 3].map((s) => (
-                    <ServerNode
-                      key={s}
-                      type="database"
-                      label={`Shard ${s}`}
-                      sublabel={
-                        phase >= 4 ? "Done" : phase >= 3 ? "Scanning..." : phase >= 2 ? "Received" : "Idle"
-                      }
-                      status={
-                        phase >= 4 ? "healthy" : phase >= 2 ? "warning" : "idle"
-                      }
-                    />
-                  ))}
-                </div>
+      {/* Playground 2: Resharding */}
+      <ReshardingSimulation />
 
-                {phase >= 5 && (
-                  <div className="rounded-lg border bg-emerald-500/10 border-emerald-500/20 p-3 text-center">
-                    <p className="text-[10px] font-mono text-emerald-400">
-                      Results merged: 4 partial results → 1 final result
-                    </p>
-                    <p className="text-[9px] text-muted-foreground mt-1">
-                      Total time: max(shard latencies) + merge overhead
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        }}
-      </InteractiveDemo>
-
-      <CorrectApproach title="Choosing a Shard Key">
-        <div className="space-y-3 text-sm text-muted-foreground">
+      <AhaMoment
+        question="Why does modular hashing move so many keys when you add a shard?"
+        answer={
           <p>
-            The shard key determines everything. A good shard key has <strong className="text-foreground">high cardinality</strong> (many
-            distinct values), <strong className="text-foreground">even distribution</strong>, and
-            <strong className="text-foreground"> aligns with your most common query patterns</strong>.
+            With modular hashing, the shard is <code className="text-xs bg-muted px-1 rounded font-mono">hash(key) % N</code>.
+            When N changes from 3 to 4, nearly every key produces a different remainder. For example,
+            <code className="text-xs bg-muted px-1 rounded font-mono">hash(&quot;alice&quot;) = 17</code> maps to shard 2 with 3 shards
+            (17 % 3 = 2) but shard 1 with 4 shards (17 % 4 = 1). Consistent hashing avoids this by placing
+            servers and keys on a ring — adding a server only steals keys from its clockwise neighbor.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-2 pr-4 font-semibold">Use Case</th>
-                  <th className="text-left py-2 pr-4 font-semibold">Good Key</th>
-                  <th className="text-left py-2 pr-4 font-semibold">Bad Key</th>
-                  <th className="text-left py-2 font-semibold">Why</th>
-                </tr>
-              </thead>
-              <tbody className="text-muted-foreground text-xs">
-                <tr className="border-b border-muted">
-                  <td className="py-2 pr-4 text-foreground">Multi-tenant SaaS</td>
-                  <td className="py-2 pr-4 text-emerald-400 font-mono">tenant_id</td>
-                  <td className="py-2 pr-4 text-red-400 font-mono">created_at</td>
-                  <td className="py-2">Tenant queries stay on one shard; timestamps create write hotspots on latest shard</td>
-                </tr>
-                <tr className="border-b border-muted">
-                  <td className="py-2 pr-4 text-foreground">Social media</td>
-                  <td className="py-2 pr-4 text-emerald-400 font-mono">user_id</td>
-                  <td className="py-2 pr-4 text-red-400 font-mono">post_date</td>
-                  <td className="py-2">User profiles and posts co-located; date-based = all new writes hit one shard</td>
-                </tr>
-                <tr className="border-b border-muted">
-                  <td className="py-2 pr-4 text-foreground">E-commerce</td>
-                  <td className="py-2 pr-4 text-emerald-400 font-mono">order_id (hash)</td>
-                  <td className="py-2 pr-4 text-red-400 font-mono">country</td>
-                  <td className="py-2">US shard would hold 60% of data; hashed IDs distribute evenly</td>
-                </tr>
-                <tr>
-                  <td className="py-2 pr-4 text-foreground">IoT telemetry</td>
-                  <td className="py-2 pr-4 text-emerald-400 font-mono">device_id</td>
-                  <td className="py-2 pr-4 text-red-400 font-mono">sensor_type</td>
-                  <td className="py-2">Low cardinality (only 5 types); device IDs have millions of distinct values</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </CorrectApproach>
+        }
+      />
+
+      {/* Playground 3: Hot Partition */}
+      <HotPartitionDemo />
 
       <ConversationalCallout type="warning">
         <strong>Cross-shard queries are expensive.</strong> A scatter-gather query fans out to all shards,
-        waits for all responses, then merges results. If you have 100 shards, that is 100 network
-        round trips. Design your data model so the most common queries hit a single shard. If you
-        frequently need to JOIN data across shard boundaries, your shard key is wrong.
+        waits for all responses, then merges. If you have 100 shards, that is 100 network round trips.
+        Design your data model so the most common queries hit a single shard. If you frequently JOIN
+        across shard boundaries, your shard key is wrong.
       </ConversationalCallout>
 
       <AhaMoment
         question="When should you NOT shard?"
         answer={
           <p>
-            Sharding adds enormous operational complexity: cross-shard joins, distributed transactions,
-            rebalancing when adding shards, application-level routing logic, and operational burden of
-            managing multiple database instances. Before sharding, exhaust these options first:
-            (1) optimize queries and add indexes, (2) add read replicas for read-heavy workloads,
-            (3) use table partitioning (same server, no routing), (4) archive cold data to cheaper
-            storage, (5) vertically scale to a bigger machine. Shard only when you have genuinely
-            exhausted these options and a single machine cannot handle your data volume or write throughput.
+            Sharding adds enormous complexity: cross-shard joins, distributed transactions, rebalancing,
+            routing logic, and operational overhead. Before sharding, exhaust these options:
+            (1) optimize queries and indexes, (2) add read replicas, (3) use table partitioning on the same
+            server, (4) archive cold data, (5) vertically scale. Shard only when you have genuinely hit
+            the ceiling of a single machine.
           </p>
         }
       />
 
-      <AhaMoment
-        question="How does DynamoDB handle sharding automatically?"
-        answer={
-          <p>
-            DynamoDB uses consistent hashing with automatic partition management. You choose a partition
-            key, and DynamoDB hashes it to assign data to internal partitions. As a partition grows
-            beyond 10GB or exceeds its throughput allocation, DynamoDB automatically splits it &mdash;
-            no manual intervention needed. The trade-off is that you must design your partition key
-            carefully upfront, because DynamoDB does not support cross-partition joins or queries that
-            do not include the partition key. This is why DynamoDB requires you to know your access
-            patterns before you write a single row.
-          </p>
-        }
-      />
+      <section className="max-w-3xl mx-auto px-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2 pr-4 font-semibold">Use Case</th>
+                <th className="text-left py-2 pr-4 font-semibold">Good Key</th>
+                <th className="text-left py-2 pr-4 font-semibold">Bad Key</th>
+                <th className="text-left py-2 font-semibold">Why</th>
+              </tr>
+            </thead>
+            <tbody className="text-muted-foreground text-xs">
+              <tr className="border-b border-muted">
+                <td className="py-2 pr-4 text-foreground">Multi-tenant SaaS</td>
+                <td className="py-2 pr-4 text-emerald-400 font-mono">tenant_id</td>
+                <td className="py-2 pr-4 text-red-400 font-mono">created_at</td>
+                <td className="py-2">Queries stay on one shard; timestamps create write hotspots</td>
+              </tr>
+              <tr className="border-b border-muted">
+                <td className="py-2 pr-4 text-foreground">Social media</td>
+                <td className="py-2 pr-4 text-emerald-400 font-mono">user_id</td>
+                <td className="py-2 pr-4 text-red-400 font-mono">post_date</td>
+                <td className="py-2">Profiles and posts co-located; dates = all new writes hit one shard</td>
+              </tr>
+              <tr className="border-b border-muted">
+                <td className="py-2 pr-4 text-foreground">E-commerce</td>
+                <td className="py-2 pr-4 text-emerald-400 font-mono">order_id (hash)</td>
+                <td className="py-2 pr-4 text-red-400 font-mono">country</td>
+                <td className="py-2">US shard would hold 60% of data; hashed IDs distribute evenly</td>
+              </tr>
+              <tr>
+                <td className="py-2 pr-4 text-foreground">IoT telemetry</td>
+                <td className="py-2 pr-4 text-emerald-400 font-mono">device_id</td>
+                <td className="py-2 pr-4 text-red-400 font-mono">sensor_type</td>
+                <td className="py-2">Only 5 sensor types (low cardinality); millions of device IDs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <KeyTakeaway
         points={[
-          "Partitioning splits data within one server; sharding splits it across multiple servers. Shard when a single machine can't handle your data volume or write throughput.",
-          "Hash-based sharding distributes data evenly but makes range queries expensive (scatter-gather). Range-based sharding preserves ordering but risks hotspots.",
-          "Consistent hashing minimizes key redistribution when adding/removing servers — only ~1/N keys move instead of rehashing everything.",
-          "Virtual nodes (vnodes) improve consistent hashing distribution — Cassandra and DynamoDB both use them to prevent structural imbalance.",
-          "The shard key determines everything — pick one with high cardinality, even distribution, and alignment with your most common query patterns.",
+          "Partitioning splits data within one server; sharding splits it across multiple servers. Shard when a single machine cannot handle your data volume or write throughput.",
+          "Hash-based sharding distributes data evenly but makes range queries expensive. Range-based preserves ordering but risks hotspots on skewed data.",
+          "Consistent hashing minimizes key redistribution when adding servers — only ~1/N keys move instead of rehashing everything.",
+          "The shard key determines everything — pick one with high cardinality, even distribution, and alignment with your query patterns.",
+          "Hot partitions happen when one key receives disproportionate traffic. Fix with write sharding: append a random suffix to spread writes, merge on read.",
           "Sharding is a last resort. Exhaust indexing, read replicas, partitioning, archiving, and vertical scaling first.",
         ]}
       />

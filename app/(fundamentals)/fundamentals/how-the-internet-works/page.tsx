@@ -1,137 +1,455 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { ServerNode } from "@/components/server-node";
-import { InteractiveDemo } from "@/components/interactive-demo";
-import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
+import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { Playground } from "@/components/playground";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Globe, Search, Handshake, ArrowRightLeft, FileText, CheckCircle2 } from "lucide-react";
+import { MarkerType } from "@xyflow/react";
 
-function DnsWaterfall() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 9), 1200);
-    return () => clearInterval(t);
-  }, []);
+// --- DNS Resolution Playground ---
 
-  const stages = [
-    { label: "Browser Cache", time: "~0ms", hit: step >= 1 && step < 2 },
-    { label: "OS Cache", time: "~0ms", hit: step >= 2 && step < 3 },
-    { label: "ISP Resolver", time: "~5ms", hit: step >= 3 && step < 4 },
-    { label: "Root Server", time: "~15ms", hit: step >= 4 && step < 5 },
-    { label: ".com TLD", time: "~25ms", hit: step >= 5 && step < 6 },
-    { label: "Authoritative NS", time: "~35ms", hit: step >= 6 },
-  ];
+const DNS_STEPS = [
+  { key: "browser", label: "Browser types domain", detail: "You type \"google.com\" into the address bar and press Enter." },
+  { key: "resolver", label: "Query DNS Resolver", detail: "Your browser asks your ISP's recursive DNS resolver: \"What IP is google.com?\"" },
+  { key: "root", label: "Root DNS Server", detail: "The resolver asks a root server, which says: \"I don't know, but try the .com TLD server.\"" },
+  { key: "tld", label: ".com TLD Server", detail: "The TLD server responds: \"Ask Google's authoritative nameserver at ns1.google.com.\"" },
+  { key: "auth", label: "Authoritative DNS", detail: "Google's nameserver replies with the final answer: \"google.com is 142.250.80.46.\"" },
+  { key: "resolved", label: "IP Address returned", detail: "The IP address travels back through the chain. Your browser now knows where to connect." },
+];
+
+const dnsTimingData = [
+  { step: "Browser Cache", time: 1 },
+  { step: "Resolver", time: 5 },
+  { step: "Root DNS", time: 15 },
+  { step: "TLD DNS", time: 25 },
+  { step: "Auth DNS", time: 35 },
+  { step: "Response", time: 10 },
+];
+
+function DnsPlayground() {
+  const [domain, setDomain] = useState("google.com");
+  const sim = useSimulation({ maxSteps: 6, intervalMs: 1200 });
+
+  const statusForStep = (nodeStep: number): "healthy" | "warning" | "idle" => {
+    if (sim.step > nodeStep) return "healthy";
+    if (sim.step === nodeStep) return "warning";
+    return "idle";
+  };
+
+  const dnsNodes: FlowNode[] = useMemo(() => [
+    { id: "browser", type: "clientNode", position: { x: 0, y: 120 }, data: { label: "Browser", sublabel: domain, status: statusForStep(0), handles: { right: true } } },
+    { id: "resolver", type: "serverNode", position: { x: 200, y: 120 }, data: { label: "DNS Resolver", sublabel: "ISP", status: statusForStep(1), handles: { left: true, right: true } } },
+    { id: "root", type: "serverNode", position: { x: 400, y: 20 }, data: { label: "Root DNS", sublabel: ".", status: statusForStep(2), handles: { left: true, bottom: true } } },
+    { id: "tld", type: "serverNode", position: { x: 400, y: 120 }, data: { label: "TLD DNS", sublabel: ".com", status: statusForStep(3), handles: { top: true, bottom: true } } },
+    { id: "auth", type: "serverNode", position: { x: 400, y: 220 }, data: { label: "Auth DNS", sublabel: domain, status: statusForStep(4), handles: { top: true, left: true } } },
+    { id: "ip", type: "cacheNode", position: { x: 200, y: 220 }, data: { label: "IP Address", sublabel: sim.step >= 5 ? "142.250.80.46" : "???", status: statusForStep(5), handles: { right: true, left: true } } },
+  ], [sim.step, domain]);
+
+  const edgeStyle = { strokeWidth: 2 };
+  const activeEdge = { style: { ...edgeStyle, stroke: "#8b5cf6" }, animated: true };
+  const doneEdge = { style: { ...edgeStyle, stroke: "#10b981" }, animated: false };
+  const idleEdge = { style: { ...edgeStyle, stroke: "#555", opacity: 0.3 }, animated: false };
+
+  const edgeState = (step: number) => sim.step > step ? doneEdge : sim.step === step ? activeEdge : idleEdge;
+
+  const dnsEdges: FlowEdge[] = useMemo(() => [
+    { id: "e1", source: "browser", target: "resolver", ...edgeState(1), markerEnd: { type: MarkerType.ArrowClosed } },
+    { id: "e2", source: "resolver", target: "root", ...edgeState(2), markerEnd: { type: MarkerType.ArrowClosed } },
+    { id: "e3", source: "root", target: "tld", ...edgeState(3), markerEnd: { type: MarkerType.ArrowClosed } },
+    { id: "e4", source: "tld", target: "auth", ...edgeState(4), markerEnd: { type: MarkerType.ArrowClosed } },
+    { id: "e5", source: "auth", target: "ip", ...edgeState(5), markerEnd: { type: MarkerType.ArrowClosed } },
+    { id: "e6", source: "ip", target: "browser", ...edgeState(5), markerEnd: { type: MarkerType.ArrowClosed } },
+  ], [sim.step]);
+
+  const currentExplanation = sim.step > 0 && sim.step <= DNS_STEPS.length
+    ? DNS_STEPS[sim.step - 1]
+    : null;
 
   return (
-    <div className="space-y-1.5">
-      {stages.map((s, i) => (
-        <div key={s.label} className="flex items-center gap-3">
-          <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right">{i + 1}</span>
-          <div className="flex-1 flex items-center gap-2">
-            <div
-              className={cn(
-                "h-7 rounded-md flex items-center px-3 text-xs font-medium transition-all duration-300 border",
-                step > i
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : step === i
-                  ? "bg-blue-500/10 border-blue-500/30 text-blue-400 ring-1 ring-blue-500/20"
-                  : "bg-muted/20 border-border/50 text-muted-foreground/40"
-              )}
-              style={{ width: `${30 + i * 12}%` }}
-            >
-              {s.label}
+    <Playground
+      title="DNS Resolution Playground"
+      simulation={sim}
+      canvas={
+        <div className="flex flex-col h-full">
+          <div className="px-4 pt-3 pb-1">
+            <label className="text-xs text-muted-foreground block mb-1">Domain to resolve:</label>
+            <input
+              type="text"
+              value={domain}
+              onChange={(e) => { setDomain(e.target.value); sim.reset(); }}
+              className="bg-muted/30 border border-border/50 rounded-md px-3 py-1.5 text-sm font-mono w-full max-w-xs focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+              placeholder="google.com"
+            />
+          </div>
+          <div className="flex-1">
+            <FlowDiagram nodes={dnsNodes} edges={dnsEdges} fitView interactive={false} allowDrag={false} minHeight={280} />
+          </div>
+        </div>
+      }
+      explanation={(state) => (
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-2">Step-by-step</h4>
+            {DNS_STEPS.map((s, i) => (
+              <div
+                key={s.key}
+                className={cn(
+                  "flex items-start gap-2 rounded-md px-2 py-1.5 mb-1 transition-all text-xs",
+                  state.step > i ? "text-emerald-400 bg-emerald-500/5" :
+                  state.step === i ? "text-violet-300 bg-violet-500/10 ring-1 ring-violet-500/20" :
+                  "text-muted-foreground/40"
+                )}
+              >
+                <span className="font-mono font-bold w-4 shrink-0">{i + 1}</span>
+                <span>{s.label}</span>
+              </div>
+            ))}
+          </div>
+          {currentExplanation && (
+            <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3">
+              <p className="text-xs text-violet-300">{currentExplanation.detail}</p>
             </div>
-            <span className={cn(
-              "text-[10px] font-mono transition-opacity",
-              step >= i ? "opacity-100 text-muted-foreground" : "opacity-0"
-            )}>
-              {s.time}
+          )}
+          {state.step >= 6 && (
+            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 p-3">
+              <p className="text-xs text-emerald-400 font-medium">
+                Resolved {domain} to 142.250.80.46 in ~91ms total
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    />
+  );
+}
+
+// --- TCP Handshake Playground ---
+
+const TCP_PHASES = [
+  { label: "SYN", from: "client", detail: "Client sends SYN packet: \"I'd like to connect. My sequence number is 1000.\"" },
+  { label: "SYN-ACK", from: "server", detail: "Server replies with SYN-ACK: \"Got it! My sequence number is 5000. I acknowledge your 1001.\"" },
+  { label: "ACK", from: "client", detail: "Client confirms with ACK: \"I acknowledge your 5001. We're in sync!\"" },
+  { label: "Connected!", from: "both", detail: "Three-way handshake complete. Both sides have confirmed bidirectional communication." },
+  { label: "GET /", from: "client", detail: "Client sends HTTP request through the established TCP connection." },
+  { label: "200 OK", from: "server", detail: "Server sends back the response. Data flows reliably over the connection." },
+];
+
+function TcpHandshakePlayground() {
+  const sim = useSimulation({ maxSteps: 6, intervalMs: 1000 });
+
+  const tcpNodes: FlowNode[] = useMemo(() => {
+    const clientStatus: "healthy" | "warning" | "idle" = sim.step >= 3 ? "healthy" : sim.step >= 1 ? "warning" : "idle";
+    const serverStatus: "healthy" | "warning" | "idle" = sim.step >= 3 ? "healthy" : sim.step >= 2 ? "warning" : "idle";
+    return [
+      { id: "client", type: "clientNode", position: { x: 50, y: 100 }, data: { label: "Client", sublabel: "Browser", status: clientStatus, handles: { right: true } } },
+      { id: "server", type: "serverNode", position: { x: 400, y: 100 }, data: { label: "Server", sublabel: "142.250.80.46", status: serverStatus, handles: { left: true } } },
+    ];
+  }, [sim.step]);
+
+  const packetColorMap: Record<string, string> = {
+    syn: "#3b82f6",
+    synack: "#10b981",
+    ack: "#8b5cf6",
+    connected: "#10b981",
+    request: "#3b82f6",
+    response: "#10b981",
+  };
+
+  const tcpEdges: FlowEdge[] = useMemo(() => {
+    const edges: FlowEdge[] = [];
+    if (sim.step >= 1) {
+      edges.push({
+        id: "syn", source: "client", target: "server",
+        label: "SYN (seq=1000)",
+        style: { stroke: packetColorMap.syn, strokeWidth: 2 },
+        animated: sim.step === 1,
+        markerEnd: { type: MarkerType.ArrowClosed, color: packetColorMap.syn },
+      });
+    }
+    if (sim.step >= 2) {
+      edges.push({
+        id: "synack", source: "server", target: "client",
+        label: "SYN-ACK (seq=5000, ack=1001)",
+        style: { stroke: packetColorMap.synack, strokeWidth: 2 },
+        animated: sim.step === 2,
+        markerEnd: { type: MarkerType.ArrowClosed, color: packetColorMap.synack },
+      });
+    }
+    if (sim.step >= 3) {
+      edges.push({
+        id: "ack", source: "client", target: "server",
+        label: sim.step === 3 ? "ACK (ack=5001)" : sim.step >= 5 ? "GET / HTTP/1.1" : "Connected",
+        style: { stroke: sim.step >= 4 ? packetColorMap.request : packetColorMap.ack, strokeWidth: 2 },
+        animated: sim.step === 3 || sim.step === 5,
+        markerEnd: { type: MarkerType.ArrowClosed, color: packetColorMap.ack },
+      });
+    }
+    if (sim.step >= 6) {
+      edges.push({
+        id: "response", source: "server", target: "client",
+        label: "200 OK + HTML",
+        style: { stroke: packetColorMap.response, strokeWidth: 2 },
+        animated: true,
+        markerEnd: { type: MarkerType.ArrowClosed, color: packetColorMap.response },
+      });
+    }
+    return edges;
+  }, [sim.step]);
+
+  return (
+    <Playground
+      title="TCP Three-Way Handshake"
+      simulation={sim}
+      canvas={
+        <FlowDiagram nodes={tcpNodes} edges={tcpEdges} fitView interactive={false} allowDrag={false} minHeight={260} />
+      }
+      explanation={(state) => (
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Handshake Phases</h4>
+          {TCP_PHASES.map((phase, i) => (
+            <div
+              key={phase.label}
+              className={cn(
+                "rounded-md px-3 py-2 border transition-all text-xs",
+                state.step > i ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400" :
+                state.step === i ? "border-violet-500/30 bg-violet-500/10 text-violet-300" :
+                "border-border/20 text-muted-foreground/30"
+              )}
+            >
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className={cn(
+                  "font-mono font-bold text-[10px] px-1.5 py-0.5 rounded",
+                  phase.from === "client" ? "bg-blue-500/15 text-blue-400" :
+                  phase.from === "server" ? "bg-emerald-500/15 text-emerald-400" :
+                  "bg-violet-500/15 text-violet-400"
+                )}>
+                  {phase.label}
+                </span>
+                <span className="text-muted-foreground/50">
+                  {phase.from === "both" ? "" : `from ${phase.from}`}
+                </span>
+              </div>
+              {state.step === i && (
+                <p className="text-[11px] mt-1 text-muted-foreground">{phase.detail}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    />
+  );
+}
+
+// --- HTTP Request Journey ---
+
+const HTTP_STAGES = [
+  { key: "dns", label: "DNS Lookup", time: 50, detail: "Resolving domain to IP address" },
+  { key: "tcp", label: "TCP Handshake", time: 30, detail: "SYN -> SYN-ACK -> ACK" },
+  { key: "tls", label: "TLS Handshake", time: 100, detail: "Negotiating encryption keys" },
+  { key: "request", label: "HTTP Request", time: 10, detail: "GET / HTTP/1.1 sent" },
+  { key: "server", label: "Server Processing", time: 80, detail: "Server generates response" },
+  { key: "response", label: "Response Transfer", time: 40, detail: "200 OK + 45KB HTML" },
+  { key: "render", label: "Browser Render", time: 60, detail: "Parsing and painting" },
+];
+
+function HttpJourneyPlayground() {
+  const sim = useSimulation({ maxSteps: 7, intervalMs: 800 });
+
+  const httpNodes: FlowNode[] = useMemo(() => {
+    const s = sim.step;
+    const nodeStatus = (step: number): "healthy" | "warning" | "idle" =>
+      s > step ? "healthy" : s === step ? "warning" : "idle";
+
+    return [
+      { id: "browser", type: "clientNode", position: { x: 0, y: 100 }, data: { label: "Browser", status: nodeStatus(0), handles: { right: true } } },
+      { id: "dns", type: "serverNode", position: { x: 150, y: 20 }, data: { label: "DNS", sublabel: "50ms", status: nodeStatus(0), handles: { left: true, right: true } } },
+      { id: "tcp", type: "gatewayNode", position: { x: 300, y: 20 }, data: { label: "TCP", sublabel: "30ms", status: nodeStatus(1), handles: { left: true, right: true } } },
+      { id: "tls", type: "gatewayNode", position: { x: 450, y: 20 }, data: { label: "TLS", sublabel: "100ms", status: nodeStatus(2), handles: { left: true, bottom: true } } },
+      { id: "server", type: "serverNode", position: { x: 450, y: 180 }, data: { label: "Server", sublabel: "80ms", status: nodeStatus(4), handles: { top: true, left: true } } },
+      { id: "response", type: "cacheNode", position: { x: 225, y: 180 }, data: { label: "Response", sublabel: "40ms", status: nodeStatus(5), handles: { right: true, left: true } } },
+      { id: "render", type: "clientNode", position: { x: 0, y: 180 }, data: { label: "Render", sublabel: "60ms", status: nodeStatus(6), handles: { right: true } } },
+    ];
+  }, [sim.step]);
+
+  const httpEdges: FlowEdge[] = useMemo(() => {
+    const s = sim.step;
+    const mkEdge = (id: string, src: string, tgt: string, step: number): FlowEdge => ({
+      id, source: src, target: tgt,
+      animated: s === step,
+      style: { strokeWidth: 2, stroke: s > step ? "#10b981" : s === step ? "#8b5cf6" : "#555", opacity: s >= step ? 1 : 0.2 },
+      markerEnd: { type: MarkerType.ArrowClosed },
+    });
+    return [
+      mkEdge("e1", "browser", "dns", 0),
+      mkEdge("e2", "dns", "tcp", 1),
+      mkEdge("e3", "tcp", "tls", 2),
+      mkEdge("e4", "tls", "server", 3),
+      mkEdge("e5", "server", "response", 5),
+      mkEdge("e6", "response", "render", 6),
+    ];
+  }, [sim.step]);
+
+  const waterfallData = HTTP_STAGES.map((stage) => ({
+    phase: stage.label,
+    time: stage.time,
+  }));
+
+  return (
+    <Playground
+      title="HTTP Request Lifecycle"
+      simulation={sim}
+      canvas={
+        <div className="flex flex-col h-full">
+          <div className="flex-1">
+            <FlowDiagram nodes={httpNodes} edges={httpEdges} fitView interactive={false} allowDrag={false} minHeight={260} />
+          </div>
+          {sim.step >= 7 && (
+            <div className="px-4 pb-3">
+              <p className="text-xs text-emerald-400 font-medium text-center">
+                Total: {HTTP_STAGES.reduce((a, s) => a + s.time, 0)}ms — page loaded!
+              </p>
+            </div>
+          )}
+        </div>
+      }
+      explanation={(state) => (
+        <div className="space-y-4">
+          <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Request Waterfall</h4>
+          <div className="space-y-1">
+            {HTTP_STAGES.map((stage, i) => {
+              const pct = (stage.time / 120) * 100;
+              return (
+                <div key={stage.key} className="flex items-center gap-2">
+                  <span className={cn(
+                    "text-[10px] font-mono w-12 text-right shrink-0",
+                    state.step > i ? "text-emerald-400" : state.step === i ? "text-violet-300" : "text-muted-foreground/30"
+                  )}>
+                    {stage.time}ms
+                  </span>
+                  <div
+                    className={cn(
+                      "h-5 rounded flex items-center px-2 text-[10px] font-medium transition-all duration-300",
+                      state.step > i ? "bg-emerald-500/15 text-emerald-400" :
+                      state.step === i ? "bg-violet-500/15 text-violet-300" :
+                      "bg-muted/20 text-muted-foreground/30"
+                    )}
+                    style={{ width: `${Math.max(pct, 30)}%` }}
+                  >
+                    {stage.label}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {state.step > 0 && state.step <= HTTP_STAGES.length && (
+            <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3">
+              <p className="text-xs text-violet-300">{HTTP_STAGES[state.step - 1].detail}</p>
+            </div>
+          )}
+        </div>
+      )}
+    />
+  );
+}
+
+// --- UDP vs TCP Comparison ---
+
+function UdpVsTcpComparison() {
+  const [protocol, setProtocol] = useState<"tcp" | "udp">("tcp");
+
+  const tcpPackets = [
+    { packet: "Packet 1", status: "delivered", time: 10 },
+    { packet: "Packet 2", status: "delivered", time: 20 },
+    { packet: "Packet 3", status: "lost", time: 30 },
+    { packet: "Packet 3", status: "retransmit", time: 45 },
+    { packet: "Packet 4", status: "delivered", time: 55 },
+  ];
+
+  const udpPackets = [
+    { packet: "Packet 1", status: "delivered", time: 5 },
+    { packet: "Packet 2", status: "delivered", time: 10 },
+    { packet: "Packet 3", status: "lost", time: 15 },
+    { packet: "Packet 4", status: "delivered", time: 20 },
+    { packet: "Packet 5", status: "delivered", time: 25 },
+  ];
+
+  const statusColorMap: Record<string, string> = {
+    delivered: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
+    lost: "bg-red-500/15 text-red-400 border-red-500/20",
+    retransmit: "bg-amber-500/15 text-amber-400 border-amber-500/20",
+  };
+
+  const packets = protocol === "tcp" ? tcpPackets : udpPackets;
+
+  return (
+    <div className="rounded-xl border border-border/50 overflow-hidden">
+      <div className="flex border-b border-border/50">
+        <button
+          onClick={() => setProtocol("tcp")}
+          className={cn(
+            "flex-1 px-4 py-2.5 text-sm font-medium transition-colors",
+            protocol === "tcp" ? "bg-blue-500/10 text-blue-400 border-b-2 border-blue-500" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          TCP (Reliable)
+        </button>
+        <button
+          onClick={() => setProtocol("udp")}
+          className={cn(
+            "flex-1 px-4 py-2.5 text-sm font-medium transition-colors",
+            protocol === "udp" ? "bg-emerald-500/10 text-emerald-400 border-b-2 border-emerald-500" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          UDP (Fast)
+        </button>
+      </div>
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          {protocol === "tcp"
+            ? "TCP guarantees every packet arrives in order. If one is lost, it stops and retransmits before continuing."
+            : "UDP fires packets as fast as possible. If one is lost, it moves on. Speed over reliability."}
+        </p>
+        <div className="space-y-1.5">
+          {packets.map((p, i) => (
+            <div key={`${p.packet}-${p.status}-${i}`} className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right">{p.time}ms</span>
+              <div className={cn("flex-1 rounded-md border px-3 py-1.5 text-xs font-medium", statusColorMap[p.status])}>
+                {p.packet} {p.status === "lost" ? "(LOST)" : p.status === "retransmit" ? "(RETRANSMIT)" : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 pt-2 border-t border-border/30">
+          <div className="text-xs">
+            <span className="text-muted-foreground">Total time: </span>
+            <span className={cn("font-mono font-bold", protocol === "tcp" ? "text-blue-400" : "text-emerald-400")}>
+              {protocol === "tcp" ? "55ms" : "25ms"}
+            </span>
+          </div>
+          <div className="text-xs">
+            <span className="text-muted-foreground">Packets lost: </span>
+            <span className="font-mono font-bold text-red-400">1</span>
+          </div>
+          <div className="text-xs">
+            <span className="text-muted-foreground">Data complete: </span>
+            <span className={cn("font-mono font-bold", protocol === "tcp" ? "text-emerald-400" : "text-amber-400")}>
+              {protocol === "tcp" ? "100%" : "80%"}
             </span>
           </div>
         </div>
-      ))}
-      <p className="text-[11px] text-muted-foreground/60 pl-11 pt-1">
-        {step === 0 ? "Querying..." : step < 6 ? "Cache miss, asking next level..." : "Found: 93.184.216.34"}
-      </p>
+      </div>
     </div>
   );
 }
 
-function TcpHandshakeViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 7), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const msgs = [
-    { from: "left", label: "SYN", desc: "Can we talk?", color: "bg-blue-500" },
-    { from: "right", label: "SYN-ACK", desc: "Yes, and can you hear me?", color: "bg-emerald-500" },
-    { from: "left", label: "ACK", desc: "Loud and clear.", color: "bg-blue-500" },
-  ];
-
-  return (
-    <div className="relative py-4">
-      <div className="flex justify-between items-start mb-6 px-4">
-        <div className="text-center">
-          <div className={cn(
-            "size-12 rounded-xl border flex items-center justify-center mb-1.5 transition-all",
-            step >= 1 ? "bg-blue-500/10 border-blue-500/30" : "bg-muted/30 border-border"
-          )}>
-            <Globe className="size-5 text-blue-400" />
-          </div>
-          <span className="text-[11px] font-medium">Client</span>
-        </div>
-        <div className="text-center">
-          <div className={cn(
-            "size-12 rounded-xl border flex items-center justify-center mb-1.5 transition-all",
-            step >= 2 ? "bg-emerald-500/10 border-emerald-500/30" : "bg-muted/30 border-border"
-          )}>
-            <ServerNode type="server" label="" className="border-0 bg-transparent p-0" />
-          </div>
-          <span className="text-[11px] font-medium">Server</span>
-        </div>
-      </div>
-      <div className="space-y-3 px-4">
-        {msgs.map((msg, i) => (
-          <div
-            key={msg.label}
-            className={cn(
-              "flex items-center gap-2 transition-all duration-500",
-              msg.from === "left" ? "flex-row" : "flex-row-reverse",
-              step > i ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
-            )}
-          >
-            <div className={cn(
-              "rounded-full px-3 py-1 text-[11px] font-mono font-bold text-white",
-              msg.color
-            )}>
-              {msg.label}
-            </div>
-            <div className="flex-1 border-t border-dashed border-muted-foreground/20" />
-            <span className="text-[10px] text-muted-foreground italic">{msg.desc}</span>
-          </div>
-        ))}
-      </div>
-      {step >= 4 && (
-        <div className="flex items-center justify-center gap-2 mt-4 text-[11px] text-emerald-400 font-medium">
-          <CheckCircle2 className="size-3.5" />
-          Connection established
-        </div>
-      )}
-    </div>
-  );
-}
+// --- Main Page ---
 
 export default function HowTheInternetWorksPage() {
   return (
@@ -142,159 +460,103 @@ export default function HowTheInternetWorksPage() {
         difficulty="beginner"
       />
 
-      <FailureScenario title="You type a URL and... nothing happens">
-        <p className="text-sm text-muted-foreground">
-          You open your browser, type <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">www.example.com</code> and
-          hit Enter. The page spins. And spins. Eventually:
-          <strong className="text-red-400"> &quot;This site can&apos;t be reached.&quot;</strong>
-        </p>
-        <p className="text-sm text-muted-foreground">
-          No useful error message. No clue whether the problem is your machine, the network, or
-          the server. Without a mental model of what was supposed to happen, you have no idea where it broke.
-        </p>
-        <div className="flex items-center justify-center gap-4 py-2">
-          <ServerNode type="client" label="Browser" status="warning" />
-          <span className="text-red-500 text-lg font-mono">---✕---</span>
-          <ServerNode type="cloud" label="Internet" status="unhealthy" />
-          <span className="text-red-500 text-lg font-mono">---✕---</span>
-          <ServerNode type="server" label="Server" status="idle" />
-        </div>
-      </FailureScenario>
+      <ConversationalCallout type="question">
+        What actually happens in the 200 milliseconds between pressing Enter and seeing a webpage?
+        There are at least 7 invisible steps, and each one can fail independently. Let&apos;s trace them
+        with interactive playgrounds.
+      </ConversationalCallout>
 
-      <WhyItBreaks title="At least 4 steps can fail — and they're invisible">
+      {/* DNS Resolution */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight">DNS Resolution — The Internet&apos;s Phone Book</h2>
         <p className="text-sm text-muted-foreground">
-          What feels like a single action — &quot;load a website&quot; — is a pipeline of
-          distinct operations. Each depends on the previous one succeeding.
+          Your browser doesn&apos;t know that <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">google.com</code> lives
+          at <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">142.250.80.46</code>. DNS is the globally distributed
+          system that maps human-friendly domain names to machine-readable IP addresses. Type a domain
+          below, hit play, and watch the lookup chain animate step by step.
         </p>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { n: "1", label: "DNS Resolution", desc: "Domain → IP address" },
-            { n: "2", label: "TCP Handshake", desc: "Establish reliable connection" },
-            { n: "3", label: "HTTP Request", desc: "Send your actual request" },
-            { n: "4", label: "Response Routing", desc: "Packets find their way back" },
-          ].map((item) => (
-            <div key={item.n} className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-3">
-              <span className="text-xs font-mono font-bold text-orange-400 bg-orange-500/10 rounded-md size-6 flex items-center justify-center shrink-0">
-                {item.n}
-              </span>
-              <div>
-                <p className="text-xs font-semibold">{item.label}</p>
-                <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </WhyItBreaks>
+        <DnsPlayground />
 
-      <ConceptVisualizer title="The Full Journey of a Web Request">
-        <p className="text-sm text-muted-foreground mb-4">
-          Click any step to jump to it. In reality, this entire flow happens in under 200ms.
-        </p>
-        <AnimatedFlow
-          steps={[
-            { id: "dns", label: "DNS Lookup", description: "What IP is example.com?", icon: <Search className="size-4" /> },
-            { id: "tcp", label: "TCP Handshake", description: "SYN → SYN-ACK → ACK", icon: <Handshake className="size-4" /> },
-            { id: "http", label: "HTTP Request", description: "GET / HTTP/1.1", icon: <ArrowRightLeft className="size-4" /> },
-            { id: "response", label: "Response", description: "200 OK + HTML/CSS/JS", icon: <FileText className="size-4" /> },
-            { id: "render", label: "Render", description: "Browser paints the page", icon: <Globe className="size-4" /> },
-          ]}
-          interval={2000}
+        <LiveChart
+          type="bar"
+          data={dnsTimingData}
+          dataKeys={{ x: "step", y: "time", label: "Resolution Time" }}
+          height={180}
+          unit="ms"
+          referenceLines={[{ y: 50, label: "Typical cached", color: "#10b981" }]}
         />
-      </ConceptVisualizer>
 
-      <ConceptVisualizer title="DNS Resolution — The Internet's Phone Book">
-        <p className="text-sm text-muted-foreground mb-4">
-          Your browser doesn&apos;t know what <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">93.184.216.34</code> is,
-          and you don&apos;t want to memorize it. DNS bridges that gap — a globally distributed
-          database mapping domain names to IP addresses.
-        </p>
-        <DnsWaterfall />
         <ConversationalCallout type="tip">
           DNS uses UDP by default because queries are small and speed matters more than
           guaranteed delivery. If the response is too large (&gt;512 bytes), it falls back to TCP.
         </ConversationalCallout>
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="TCP Three-Way Handshake">
-        <p className="text-sm text-muted-foreground mb-4">
+      {/* TCP Handshake */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight">TCP Three-Way Handshake</h2>
+        <p className="text-sm text-muted-foreground">
           Before any data is exchanged, client and server need to agree they can communicate.
           TCP establishes this trust with three messages — a polite introduction before the conversation.
+          Step through the handshake below, then watch data transfer begin.
         </p>
-        <TcpHandshakeViz />
+        <TcpHandshakePlayground />
+
         <AhaMoment
           question="Why three messages instead of two?"
           answer={
             <p>
               Two messages only confirm the client can reach the server. The third (ACK) confirms
               the server can reach the client <em>back</em>. Both directions must be verified for
-              reliable two-way communication.
+              reliable two-way communication. It also synchronizes sequence numbers so both sides
+              can track which bytes have been sent and received.
             </p>
           }
         />
-      </ConceptVisualizer>
+      </section>
 
-      <InteractiveDemo title="Trace a Request Yourself">
-        {({ isPlaying, tick }) => {
-          const stages = [
-            { name: "DNS", time: "~15ms", desc: "Resolved to 93.184.216.34" },
-            { name: "TCP", time: "~30ms", desc: "Connection established" },
-            { name: "TLS", time: "~50ms", desc: "Encryption negotiated" },
-            { name: "HTTP", time: "~65ms", desc: "GET / sent to server" },
-            { name: "Response", time: "~120ms", desc: "200 OK — 45KB HTML received" },
-          ];
-          const active = isPlaying ? Math.min(tick % 6, stages.length) : 0;
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to simulate a request to <code className="text-xs bg-muted px-1 rounded font-mono">api.example.com</code>.
-              </p>
-              <div className="space-y-1.5">
-                {stages.map((stage, i) => (
-                  <div
-                    key={stage.name}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-400",
-                      i < active
-                        ? "bg-emerald-500/8 border-emerald-500/20"
-                        : i === active && isPlaying
-                        ? "bg-blue-500/8 border-blue-500/20 ring-1 ring-blue-500/15"
-                        : "bg-muted/10 border-border/30 text-muted-foreground/40"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-xs font-mono font-bold w-16",
-                      i < active ? "text-emerald-400" : i === active && isPlaying ? "text-blue-400" : ""
-                    )}>
-                      {stage.name}
-                    </span>
-                    <div className="flex-1 text-xs text-muted-foreground">
-                      {i < active ? stage.desc : "—"}
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-mono",
-                      i < active ? "text-muted-foreground" : "text-transparent"
-                    )}>
-                      {stage.time}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {active >= stages.length && (
-                <ConversationalCallout type="question">
-                  Notice TLS between TCP and HTTP? For HTTPS sites, there&apos;s an additional
-                  handshake to negotiate encryption keys. More latency, but your data stays private.
-                </ConversationalCallout>
-              )}
-            </div>
-          );
-        }}
-      </InteractiveDemo>
-
-      <CorrectApproach title="Building a Mental Model for Debugging">
-        <p className="text-sm text-muted-foreground mb-3">
-          Now that you understand the pipeline, you can debug systematically instead of guessing:
+      {/* HTTP Request Journey */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight">The Full HTTP Request Journey</h2>
+        <p className="text-sm text-muted-foreground">
+          DNS, TCP, and TLS are just the opening act. Watch the complete lifecycle of
+          typing a URL to seeing a rendered page. Each node shows its latency contribution.
         </p>
+        <HttpJourneyPlayground />
+
+        <ConversationalCallout type="tip">
+          In every system design interview, trace the request path first: DNS, TCP, TLS, HTTP, then your
+          application. This shows the interviewer you understand the full stack before diving into
+          application-level design.
+        </ConversationalCallout>
+      </section>
+
+      {/* UDP vs TCP */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight">UDP vs TCP — Reliability vs Speed</h2>
+        <p className="text-sm text-muted-foreground">
+          Not all network traffic needs guaranteed delivery. Toggle between the two protocols
+          to see how they handle packet loss differently.
+        </p>
+        <UdpVsTcpComparison />
+
+        <AhaMoment
+          question="Why does video streaming tolerate packet loss?"
+          answer={
+            <p>
+              UDP sacrifices reliability for speed — a dropped video frame is better than buffering
+              while TCP retransmits. This is why live streams and video calls use UDP: a slightly
+              glitchy frame is imperceptible, but a half-second freeze ruins the experience. It is
+              also why QUIC (the protocol behind HTTP/3) is built on UDP — it gets UDP&apos;s speed
+              while adding its own reliability layer on top.
+            </p>
+          }
+        />
+      </section>
+
+      {/* Debugging mental model */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold tracking-tight">Building a Debugging Mental Model</h2>
         <BeforeAfter
           before={{
             title: "Without the mental model",
@@ -315,39 +577,20 @@ export default function HowTheInternetWorksPage() {
                 <li><code className="text-xs bg-muted px-1 rounded font-mono">nslookup</code> — check DNS</li>
                 <li><code className="text-xs bg-muted px-1 rounded font-mono">ping</code> — check connectivity</li>
                 <li><code className="text-xs bg-muted px-1 rounded font-mono">curl -v</code> — check HTTP</li>
-                <li>Check status code → identify issue</li>
+                <li>Check status code to identify issue</li>
                 <li>Fix the specific broken layer</li>
               </ul>
             ),
           }}
         />
-      </CorrectApproach>
-
-      <AhaMoment
-        question="Why does video streaming tolerate packet loss?"
-        answer={
-          <p>
-            UDP sacrifices reliability for speed — a dropped video frame is better than buffering
-            while TCP retransmits. This is why live streams and video calls use UDP: a slightly
-            glitchy frame is imperceptible, but a half-second freeze ruins the experience. It is
-            also why QUIC (the protocol behind HTTP/3) is built on UDP — it gets UDP&apos;s speed
-            while adding its own reliability layer on top, avoiding TCP&apos;s head-of-line blocking.
-          </p>
-        }
-      />
-
-      <ConversationalCallout type="tip">
-        In every system design interview, trace the request path first: DNS → TCP → TLS → HTTP → your
-        application. This shows the interviewer you understand the full stack before diving into
-        application-level design. It is the single most effective way to start any answer.
-      </ConversationalCallout>
+      </section>
 
       <KeyTakeaway
         points={[
-          "A web request is a pipeline: DNS → TCP → (TLS) → HTTP → Response. Each step depends on the previous one.",
-          "DNS is hierarchical: browser cache → OS cache → resolver → root → TLD → authoritative nameserver.",
+          "A web request is a pipeline: DNS, TCP, TLS, HTTP, Response. Each step depends on the previous one.",
+          "DNS is hierarchical: browser cache, OS cache, resolver, root, TLD, authoritative nameserver.",
           "TCP uses a three-way handshake (SYN, SYN-ACK, ACK) to establish reliable bidirectional communication.",
-          "Packets may take different paths and arrive out of order. TCP reassembles them.",
+          "UDP trades reliability for speed — critical for real-time applications like video and gaming.",
           "Understanding the request pipeline is the foundation for debugging and designing distributed systems.",
         ]}
       />

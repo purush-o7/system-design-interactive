@@ -1,647 +1,686 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { BeforeAfter } from "@/components/before-after";
-import { ScaleSimulator } from "@/components/scale-simulator";
-import { ServerNode } from "@/components/server-node";
-import { MetricCounter } from "@/components/metric-counter";
-import { InteractiveDemo } from "@/components/interactive-demo";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
+import { Playground } from "@/components/playground";
+import { FlowDiagram } from "@/components/flow-diagram";
+import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
 import { cn } from "@/lib/utils";
-import { ArrowUp, ArrowRight, Server, DollarSign, Cpu, MemoryStick, HardDrive } from "lucide-react";
+import {
+  Server,
+  Skull,
+  ShieldCheck,
+  ArrowUp,
+  ArrowRight,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+} from "lucide-react";
 
-/* ── Vertical Growth Animation ── */
-function VerticalGrowthViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 5), 1800);
-    return () => clearInterval(t);
-  }, []);
+const VERTICAL_TIERS = [
+  { label: "t3.medium",    cores: 2,  ram: 4,   cost: 30,   capacity: 1000  },
+  { label: "m6i.large",   cores: 2,  ram: 8,   cost: 70,   capacity: 3000  },
+  { label: "m6i.xlarge",  cores: 4,  ram: 16,  cost: 140,  capacity: 6000  },
+  { label: "m6i.4xlarge", cores: 16, ram: 64,  cost: 560,  capacity: 20000 },
+  { label: "m6i.12xl",    cores: 48, ram: 192, cost: 1682, capacity: 40000 },
+  { label: "m6i.24xl",    cores: 96, ram: 384, cost: 3364, capacity: 60000 },
+];
 
-  const tiers = [
-    { label: "t3.medium", cores: 2, ram: 4, cost: 30, height: "h-16" },
-    { label: "m6i.large", cores: 2, ram: 8, cost: 70, height: "h-24" },
-    { label: "m6i.xlarge", cores: 4, ram: 16, cost: 140, height: "h-32" },
-    { label: "m6i.4xlarge", cores: 16, ram: 64, cost: 560, height: "h-44" },
-    { label: "m6i.24xlarge", cores: 96, ram: 384, cost: 3360, height: "h-56" },
-  ];
+// Static size classes — no dynamic Tailwind interpolation
+const SERVER_SIZE_CLASSES = [
+  "h-16 w-16", "h-20 w-20", "h-28 w-28",
+  "h-36 w-36", "h-44 w-44", "h-52 w-52",
+] as const;
 
-  const current = tiers[step];
+const COST_DATA = [
+  { users: "1K",  vertical: 30,   horizontal: 70   },
+  { users: "5K",  vertical: 140,  horizontal: 140  },
+  { users: "10K", vertical: 560,  horizontal: 280  },
+  { users: "25K", vertical: 1682, horizontal: 560  },
+  { users: "50K", vertical: 3364, horizontal: 1190 },
+  { users: "100K",vertical: 6720, horizontal: 2380 },
+];
 
+/* ================================================================
+   SHARED HELPERS
+   ================================================================ */
+
+function StatGrid({ items }: { items: { label: string; value: string }[] }) {
   return (
-    <div className="flex items-end gap-6">
-      {/* The growing server */}
-      <div className="flex-1 flex flex-col items-center gap-2">
-        <div className="text-[10px] font-mono text-muted-foreground/60">
-          {step < 4 ? "Upgrading..." : "Max available!"}
+    <div className="grid grid-cols-3 gap-2 text-center">
+      {items.map((s) => (
+        <div key={s.label} className="rounded-md bg-muted/30 border border-border/40 px-2 py-1.5">
+          <div className="text-[10px] text-muted-foreground">{s.label}</div>
+          <div className="text-xs font-mono font-bold">{s.value}</div>
         </div>
-        <div
-          className={cn(
-            "w-full max-w-[120px] rounded-xl border-2 flex flex-col items-center justify-end pb-2 transition-all duration-700",
-            step < 4
-              ? "border-blue-500/30 bg-blue-500/5"
-              : "border-red-500/30 bg-red-500/5",
-            current.height
-          )}
-        >
-          <Server
-            className={cn(
-              "size-6 transition-colors",
-              step < 4 ? "text-blue-400" : "text-red-400"
-            )}
-          />
-          <span className="text-[11px] font-mono font-bold mt-1">{current.label}</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <ArrowUp className="size-3 text-blue-400" />
-          Scale Up
-        </div>
-      </div>
-
-      {/* Specs panel */}
-      <div className="flex-1 space-y-1.5">
-        {[
-          { icon: <Cpu className="size-3" />, label: "vCPUs", value: current.cores },
-          { icon: <MemoryStick className="size-3" />, label: "RAM", value: `${current.ram} GB` },
-          { icon: <DollarSign className="size-3" />, label: "Cost/mo", value: `$${current.cost}` },
-        ].map((spec) => (
-          <div
-            key={spec.label}
-            className="flex items-center gap-2 rounded-md bg-muted/30 px-2.5 py-1.5 border border-border/50"
-          >
-            <span className="text-muted-foreground">{spec.icon}</span>
-            <span className="text-[10px] text-muted-foreground w-12">{spec.label}</span>
-            <span className="text-xs font-mono font-semibold ml-auto">{spec.value}</span>
-          </div>
-        ))}
-        <p className="text-[10px] text-muted-foreground/60 text-right pt-0.5">
-          {step === 0
-            ? "Starting small..."
-            : step < 4
-            ? `${Math.round(tiers[step].cost / tiers[0].cost)}x the cost of step 1`
-            : "112x cost, 48x CPU -- diminishing returns"}
-        </p>
-      </div>
+      ))}
     </div>
   );
 }
 
-/* ── Horizontal Multiplication Animation ── */
-function HorizontalGrowthViz() {
-  const [count, setCount] = useState(1);
-  useEffect(() => {
-    const t = setInterval(() => setCount((c) => (c % 8) + 1), 1200);
-    return () => clearInterval(t);
-  }, []);
+/* ================================================================
+   SCALING SIMULATOR
+   Left: vertical (one big server grows)
+   Right: horizontal (FlowDiagram with more nodes)
+   ================================================================ */
 
-  const costPerNode = 70; // m6i.large
+function ScalingSimulator() {
+  const [verticalTier, setVerticalTier] = useState(0);
+  const [horizontalCount, setHorizontalCount] = useState(1);
+
+  const vTier = VERTICAL_TIERS[verticalTier];
+  const atCeiling = verticalTier === VERTICAL_TIERS.length - 1;
+
+  const hCostPerNode = 70;
+  const hCapacityPerNode = 3000;
+  const hTotalCost = horizontalCount * hCostPerNode;
+  const hTotalCapacity = horizontalCount * hCapacityPerNode;
+
+  const hNodes: FlowNode[] = useMemo(() => {
+    const spread = Math.min(horizontalCount, 4);
+    const offsetX = 250 - (spread * 140) / 2 + 70;
+    const cpuPct = Math.round(100 / horizontalCount);
+
+    const serverRows: FlowNode[] = Array.from({ length: horizontalCount }, (_, i) => {
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      return {
+        id: `s${i}`,
+        type: "serverNode" as const,
+        position: { x: offsetX + col * 140, y: 130 + row * 110 },
+        data: {
+          label: `Server ${i + 1}`,
+          sublabel: "m6i.large",
+          status: (cpuPct > 80 ? "warning" : "healthy") as "warning" | "healthy",
+          metrics: [
+            { label: "CPU", value: `${cpuPct}%` },
+            { label: "RAM", value: "8 GB" },
+          ],
+          handles: { top: true, bottom: false },
+        },
+      };
+    });
+
+    return [
+      {
+        id: "h-client",
+        type: "clientNode" as const,
+        position: { x: 250, y: -80 },
+        data: {
+          label: "Users",
+          sublabel: `${hTotalCapacity.toLocaleString()} cap`,
+          status: "healthy" as const,
+          handles: { bottom: true },
+        },
+      },
+      {
+        id: "h-lb",
+        type: "loadBalancerNode" as const,
+        position: { x: 250, y: 20 },
+        data: {
+          label: "Load Balancer",
+          sublabel: `${horizontalCount} backends`,
+          status: "healthy" as const,
+          handles: { top: true, bottom: true },
+        },
+      },
+      ...serverRows,
+    ];
+  }, [horizontalCount, hTotalCapacity]);
+
+  const hEdges: FlowEdge[] = useMemo(() => [
+    { id: "hc-hlb", source: "h-client", target: "h-lb", animated: true },
+    ...Array.from({ length: horizontalCount }, (_, i) => ({
+      id: `hlb-s${i}`,
+      source: "h-lb",
+      target: `s${i}`,
+      animated: true,
+    })),
+  ], [horizontalCount]);
+
+  // Cost comparison at current vertical tier
+  const hEquivNodes = Math.ceil(vTier.capacity / hCapacityPerNode);
+  const hEquivCost = hEquivNodes * hCostPerNode;
+  const saving = vTier.cost - hEquivCost;
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-1 justify-center text-[10px] text-muted-foreground mb-1">
-        <ArrowRight className="size-3 text-emerald-400" />
-        Scale Out — each node: m6i.large ($70/mo)
-      </div>
-      <div className="flex flex-wrap justify-center gap-2 min-h-[80px] items-center">
-        {Array.from({ length: count }).map((_, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex flex-col items-center gap-1 rounded-lg border px-3 py-2 transition-all duration-300",
-              i === count - 1
-                ? "bg-emerald-500/10 border-emerald-500/30 scale-105"
-                : "bg-blue-500/5 border-blue-500/20"
+    <div className="space-y-6 p-4">
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* ── Vertical panel ── */}
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/[0.02] p-5 space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-blue-400">
+            <ArrowUp className="size-4" /> Vertical (Scale Up)
+          </div>
+
+          {/* Growing server visualization */}
+          <div className="flex flex-col items-center gap-2 min-h-[180px] justify-center">
+            <div
+              className={cn(
+                "rounded-2xl border-2 flex flex-col items-center justify-center transition-all duration-500 gap-1",
+                atCeiling
+                  ? "border-red-500/50 bg-red-500/[0.07] shadow-lg shadow-red-500/10"
+                  : "border-blue-500/30 bg-blue-500/[0.06] shadow-lg shadow-blue-500/10",
+                SERVER_SIZE_CLASSES[verticalTier]
+              )}
+            >
+              <Server className={cn("transition-all duration-500", atCeiling ? "text-red-400" : "text-blue-400", verticalTier < 2 ? "size-5" : verticalTier < 4 ? "size-7" : "size-9")} />
+              <span className="text-[9px] font-mono font-bold leading-none">{vTier.label}</span>
+            </div>
+            {atCeiling && (
+              <span className="text-[11px] text-red-400 font-semibold animate-pulse">Hardware ceiling reached!</span>
             )}
-          >
-            <Server className="size-4 text-blue-400" />
-            <span className="text-[10px] font-mono">S{i + 1}</span>
           </div>
-        ))}
-      </div>
-      <div className="flex justify-between text-[10px] font-mono px-2">
-        <span className="text-muted-foreground">
-          Nodes: <span className="text-foreground font-bold">{count}</span>
-        </span>
-        <span className="text-muted-foreground">
-          Total vCPUs: <span className="text-foreground font-bold">{count * 2}</span>
-        </span>
-        <span className="text-muted-foreground">
-          Cost: <span className="text-emerald-400 font-bold">${count * costPerNode}/mo</span>
-        </span>
-      </div>
-      <p className="text-[10px] text-muted-foreground/60 text-center">
-        Linear cost growth. Remove a node anytime to save money.
-      </p>
-    </div>
-  );
-}
 
-/* ── Cost Curve Visualization ── */
-function CostCurveViz() {
-  const [hovered, setHovered] = useState<number | null>(null);
-
-  // Real-ish AWS pricing: vertical costs grow super-linearly, horizontal is linear
-  const dataPoints = [
-    { users: 1000, vertical: 30, horizontal: 70 },
-    { users: 5000, vertical: 140, horizontal: 140 },
-    { users: 10000, vertical: 560, horizontal: 280 },
-    { users: 25000, vertical: 1680, horizontal: 560 },
-    { users: 50000, vertical: 3360, horizontal: 1050 },
-    { users: 100000, vertical: 6720, horizontal: 2100 },
-  ];
-
-  const maxCost = 6720;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-4 text-[10px] justify-center">
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-red-400 rounded-full" /> Vertical (bigger server)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-emerald-400 rounded-full" /> Horizontal (more servers)
-        </span>
-      </div>
-      <div className="flex items-end gap-1 h-40 px-2">
-        {dataPoints.map((dp, i) => (
-          <div
-            key={dp.users}
-            className="flex-1 flex items-end gap-0.5 cursor-pointer group"
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            <div
-              className={cn(
-                "flex-1 rounded-t-sm transition-all duration-300",
-                hovered === i ? "bg-red-400" : "bg-red-400/60"
-              )}
-              style={{ height: `${(dp.vertical / maxCost) * 100}%` }}
-            />
-            <div
-              className={cn(
-                "flex-1 rounded-t-sm transition-all duration-300",
-                hovered === i ? "bg-emerald-400" : "bg-emerald-400/60"
-              )}
-              style={{ height: `${(dp.horizontal / maxCost) * 100}%` }}
-            />
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1.5">
+              Instance tier — {verticalTier + 1} / {VERTICAL_TIERS.length}
+            </label>
+            <input type="range" min={0} max={VERTICAL_TIERS.length - 1} value={verticalTier}
+              onChange={(e) => setVerticalTier(Number(e.target.value))} className="w-full accent-blue-500" />
           </div>
-        ))}
-      </div>
-      <div className="flex gap-1 px-2">
-        {dataPoints.map((dp, i) => (
-          <div key={dp.users} className="flex-1 text-center">
-            <span className="text-[9px] font-mono text-muted-foreground/50">
-              {dp.users >= 1000 ? `${dp.users / 1000}k` : dp.users}
-            </span>
+
+          <StatGrid items={[
+            { label: "vCPUs",   value: String(vTier.cores) },
+            { label: "RAM",     value: `${vTier.ram} GB` },
+            { label: "Cost/mo", value: `$${vTier.cost.toLocaleString()}` },
+          ]} />
+          <p className="text-[11px] text-center text-muted-foreground">
+            Capacity: <span className="font-mono font-bold text-foreground">{vTier.capacity.toLocaleString()}</span> users
+          </p>
+        </div>
+
+        {/* ── Horizontal panel ── */}
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.02] p-5 space-y-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
+            <ArrowRight className="size-4" /> Horizontal (Scale Out)
           </div>
-        ))}
+          <div className="h-52">
+            <FlowDiagram nodes={hNodes} edges={hEdges} interactive={false} allowDrag={false} minHeight={200} />
+          </div>
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1.5">Server count — {horizontalCount}</label>
+            <input type="range" min={1} max={8} value={horizontalCount}
+              onChange={(e) => setHorizontalCount(Number(e.target.value))} className="w-full accent-emerald-500" />
+          </div>
+          <StatGrid items={[
+            { label: "Total vCPUs", value: String(horizontalCount * 2) },
+            { label: "Total RAM",   value: `${horizontalCount * 8} GB` },
+            { label: "Cost/mo",     value: `$${hTotalCost.toLocaleString()}` },
+          ]} />
+          <p className="text-[11px] text-center text-muted-foreground">
+            Capacity: <span className="font-mono font-bold text-foreground">{hTotalCapacity.toLocaleString()}</span> users
+          </p>
+        </div>
       </div>
-      <p className="text-[10px] text-muted-foreground/60 text-center">Users (concurrent)</p>
-      {hovered !== null && (
-        <div className="flex justify-center gap-6 text-[11px] font-mono">
-          <span className="text-red-400">
-            Vertical: ${dataPoints[hovered].vertical}/mo
-          </span>
-          <span className="text-emerald-400">
-            Horizontal: ${dataPoints[hovered].horizontal}/mo
-          </span>
-          <span className="text-muted-foreground">
-            {dataPoints[hovered].users.toLocaleString()} users
-          </span>
+
+      {verticalTier > 1 && (
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-3 flex flex-wrap items-center justify-center gap-4 text-sm text-center">
+          <span className="text-xs text-muted-foreground">~{vTier.capacity.toLocaleString()} users:</span>
+          <span className="font-mono"><span className="text-blue-400">${vTier.cost.toLocaleString()}</span> <span className="text-[11px] text-muted-foreground">vertical</span></span>
+          <span className="text-xs text-muted-foreground">vs</span>
+          <span className="font-mono"><span className="text-emerald-400">${hEquivCost.toLocaleString()}</span> <span className="text-[11px] text-muted-foreground">horizontal ({hEquivNodes}×)</span></span>
+          {saving > 0 && <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-0.5">Save ${saving.toLocaleString()}/mo</span>}
         </div>
       )}
     </div>
   );
 }
 
-/* ── AWS Instance Pricing Table ── */
-function InstancePricingTable() {
-  const instances = [
-    { name: "t3.micro", vcpus: 2, ram: 1, hourly: 0.0104, monthly: 7.59, burst: true },
-    { name: "t3.medium", vcpus: 2, ram: 4, hourly: 0.0416, monthly: 30.37, burst: true },
-    { name: "m6i.large", vcpus: 2, ram: 8, hourly: 0.096, monthly: 70.08, burst: false },
-    { name: "m6i.xlarge", vcpus: 4, ram: 16, hourly: 0.192, monthly: 140.16, burst: false },
-    { name: "m6i.4xlarge", vcpus: 16, ram: 64, hourly: 0.768, monthly: 560.64, burst: false },
-    { name: "m6i.12xlarge", vcpus: 48, ram: 192, hourly: 2.304, monthly: 1681.92, burst: false },
-    { name: "m6i.24xlarge", vcpus: 96, ram: 384, hourly: 4.608, monthly: 3363.84, burst: false },
-  ];
+/* ================================================================
+   FAILURE DEMO
+   Kill vertical = total outage | Kill horizontal = partial
+   ================================================================ */
+
+function FailureDemo() {
+  const [verticalDead, setVerticalDead] = useState(false);
+  const [killedServer, setKilledServer] = useState<number | null>(null);
+  const serverCount = 4;
+
+  const vNodes: FlowNode[] = useMemo(() => [
+    {
+      id: "v-client",
+      type: "clientNode" as const,
+      position: { x: 150, y: 0 },
+      data: {
+        label: "Users",
+        sublabel: verticalDead ? "Connection refused!" : "Sending requests",
+        status: (verticalDead ? "unhealthy" : "healthy") as "unhealthy" | "healthy",
+        handles: { bottom: true },
+      },
+    },
+    {
+      id: "v-server",
+      type: "serverNode" as const,
+      position: { x: 150, y: 130 },
+      data: {
+        label: "Mega Server",
+        sublabel: verticalDead ? "CRASHED" : "m6i.24xlarge",
+        status: (verticalDead ? "unhealthy" : "healthy") as "unhealthy" | "healthy",
+        metrics: verticalDead
+          ? [{ label: "Status", value: "DOWN" }]
+          : [{ label: "CPU", value: "72%" }, { label: "RAM", value: "384 GB" }],
+        handles: { top: true, bottom: true },
+      },
+    },
+    {
+      id: "v-db",
+      type: "databaseNode" as const,
+      position: { x: 150, y: 260 },
+      data: {
+        label: "Database",
+        sublabel: verticalDead ? "Unreachable" : "PostgreSQL",
+        status: (verticalDead ? "unhealthy" : "healthy") as "unhealthy" | "healthy",
+        handles: { top: true },
+      },
+    },
+  ], [verticalDead]);
+
+  const vEdges: FlowEdge[] = useMemo(() => [
+    { id: "vc-vs", source: "v-client", target: "v-server", animated: !verticalDead },
+    { id: "vs-vdb", source: "v-server", target: "v-db", animated: !verticalDead },
+  ], [verticalDead]);
+
+  const alive = killedServer !== null ? serverCount - 1 : serverCount;
+  const hNodes: FlowNode[] = useMemo(() => {
+    const startX = 250 - (serverCount * 140) / 2 + 70;
+    return [
+      {
+        id: "h-client",
+        type: "clientNode" as const,
+        position: { x: 250, y: 0 },
+        data: {
+          label: "Users",
+          sublabel: killedServer !== null ? "Rerouting traffic..." : "Sending requests",
+          status: "healthy" as const,
+          handles: { bottom: true },
+        },
+      },
+      {
+        id: "h-lb",
+        type: "loadBalancerNode" as const,
+        position: { x: 250, y: 110 },
+        data: {
+          label: "Load Balancer",
+          sublabel: `${alive} healthy`,
+          status: "healthy" as const,
+          handles: { top: true, bottom: true },
+        },
+      },
+      ...Array.from({ length: serverCount }, (_, i) => {
+        const dead = killedServer === i;
+        return {
+          id: `h-s${i}`,
+          type: "serverNode" as const,
+          position: { x: startX + i * 140, y: 240 },
+          data: {
+            label: `S${i + 1}`,
+            sublabel: dead ? "CRASHED" : "m6i.large",
+            status: (dead ? "unhealthy" : "healthy") as "unhealthy" | "healthy",
+            metrics: dead
+              ? [{ label: "Status", value: "DOWN" }]
+              : [{ label: "CPU", value: `${Math.round(100 / alive)}%` }],
+            handles: { top: true },
+          },
+        };
+      }),
+    ];
+  }, [killedServer, alive]);
+
+  const hEdges: FlowEdge[] = useMemo(() => [
+    { id: "hc-hlb", source: "h-client", target: "h-lb", animated: true },
+    ...Array.from({ length: serverCount }, (_, i) => i)
+      .filter((i) => killedServer !== i)
+      .map((i) => ({ id: `hlb-hs${i}`, source: "h-lb", target: `h-s${i}`, animated: true })),
+  ], [killedServer]);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[11px]">
-        <thead>
-          <tr className="text-muted-foreground/60 border-b border-border/50">
-            <th className="text-left py-1.5 font-medium">Instance</th>
-            <th className="text-right py-1.5 font-medium">vCPUs</th>
-            <th className="text-right py-1.5 font-medium">RAM</th>
-            <th className="text-right py-1.5 font-medium">$/hour</th>
-            <th className="text-right py-1.5 font-medium">$/month</th>
-            <th className="text-right py-1.5 font-medium">$/vCPU</th>
-          </tr>
-        </thead>
-        <tbody>
-          {instances.map((inst, i) => (
-            <tr
-              key={inst.name}
+    <div className="space-y-5 p-4">
+      <p className="text-sm text-muted-foreground">
+        Kill a server in each architecture and watch what happens. This single difference
+        is the strongest argument for horizontal scaling in production.
+      </p>
+      <div className="grid md:grid-cols-2 gap-5">
+        {/* Vertical failure */}
+        <div className="rounded-xl border border-border/50 overflow-hidden">
+          <div className="flex items-center justify-between bg-muted/20 border-b border-border/30 px-4 py-2">
+            <span className="text-xs font-semibold text-blue-400">Vertical</span>
+            <span className={cn(
+              "text-[10px] font-mono px-2 py-0.5 rounded-full",
+              verticalDead ? "bg-red-500/20 text-red-400" : "bg-emerald-500/20 text-emerald-400"
+            )}>
+              {verticalDead ? "TOTAL OUTAGE" : "OPERATIONAL"}
+            </span>
+          </div>
+          <div className="h-72">
+            <FlowDiagram nodes={vNodes} edges={vEdges} interactive={false} allowDrag={false} minHeight={280} />
+          </div>
+          <div className="border-t border-border/30 p-3 flex justify-center">
+            <button
+              onClick={() => setVerticalDead(!verticalDead)}
               className={cn(
-                "border-b border-border/30 transition-colors",
-                i === instances.length - 1
-                  ? "bg-red-500/5 text-red-300"
-                  : "hover:bg-muted/20"
+                "flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-colors",
+                verticalDead
+                  ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                  : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
               )}
             >
-              <td className="py-1.5 font-mono font-medium">{inst.name}</td>
-              <td className="text-right py-1.5 font-mono">{inst.vcpus}</td>
-              <td className="text-right py-1.5 font-mono">{inst.ram} GB</td>
-              <td className="text-right py-1.5 font-mono">${inst.hourly.toFixed(4)}</td>
-              <td className="text-right py-1.5 font-mono">${Math.round(inst.monthly)}</td>
-              <td className="text-right py-1.5 font-mono text-muted-foreground">
-                ${(inst.monthly / inst.vcpus).toFixed(0)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-[10px] text-muted-foreground/50 mt-2">
-        AWS EC2 on-demand pricing, us-east-1, Linux. Cost per vCPU stays roughly constant within a family,
-        but the largest instances available still have hard limits.
-      </p>
+              {verticalDead
+                ? <><ShieldCheck className="size-3.5" /> Restart Server</>
+                : <><Skull className="size-3.5" /> Kill Server</>}
+            </button>
+          </div>
+        </div>
+
+        {/* Horizontal failure */}
+        <div className="rounded-xl border border-border/50 overflow-hidden">
+          <div className="flex items-center justify-between bg-muted/20 border-b border-border/30 px-4 py-2">
+            <span className="text-xs font-semibold text-emerald-400">Horizontal</span>
+            <span className={cn(
+              "text-[10px] font-mono px-2 py-0.5 rounded-full",
+              killedServer !== null ? "bg-amber-500/20 text-amber-400" : "bg-emerald-500/20 text-emerald-400"
+            )}>
+              {killedServer !== null ? `DEGRADED (${alive}/${serverCount})` : "OPERATIONAL"}
+            </span>
+          </div>
+          <div className="h-72">
+            <FlowDiagram nodes={hNodes} edges={hEdges} interactive={false} allowDrag={false} minHeight={280} />
+          </div>
+          <div className="border-t border-border/30 p-3 flex flex-wrap justify-center gap-2">
+            {Array.from({ length: serverCount }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setKilledServer(killedServer === i ? null : i)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors",
+                  killedServer === i
+                    ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                    : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                )}
+              >
+                {killedServer === i ? <ShieldCheck className="size-3" /> : <Skull className="size-3" />}
+                S{i + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {verticalDead && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] p-3 text-center">
+          <p className="text-sm text-red-400 font-medium">100% of traffic dropped — complete outage. Every user sees an error.</p>
+        </div>
+      )}
+      {killedServer !== null && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3 text-center">
+          <p className="text-sm text-amber-400 font-medium">Server {killedServer + 1} down. Load balancer reroutes to remaining {alive} servers — zero downtime.</p>
+        </div>
+      )}
     </div>
   );
 }
+
+/* ================================================================
+   DECISION QUIZ
+   ================================================================ */
+
+const QUIZ_QUESTIONS = [
+  {
+    q: "Your startup has 500 daily active users and one developer. What do you do?",
+    options: [
+      { text: "Scale vertically — bigger server", correct: true },
+      { text: "Add 5 horizontal servers with a load balancer", correct: false },
+      { text: "Shard the database immediately", correct: false },
+    ],
+    explanation: "At 500 users you need simplicity, not resilience. One bigger server means zero operational overhead. Horizontal complexity would slow your product development.",
+  },
+  {
+    q: "Your app hits 50K concurrent users and you need zero-downtime deployments. What changes?",
+    options: [
+      { text: "Keep upgrading the single server — it's working", correct: false },
+      { text: "Add horizontal app servers behind a load balancer", correct: true },
+      { text: "Migrate to a NoSQL database", correct: false },
+    ],
+    explanation: "A load balancer lets you take one server out of rotation, deploy, bring it back — then repeat for each node. Zero downtime. A single server always requires a maintenance window.",
+  },
+  {
+    q: "Your database is the bottleneck. You've maxed vertical scaling. What's next?",
+    options: [
+      { text: "Add more stateless web servers", correct: false },
+      { text: "Introduce read replicas for read-heavy load", correct: true },
+      { text: "Move sessions from Redis to local memory", correct: false },
+    ],
+    explanation: "Read replicas offload SELECT queries from the primary, often resolving 80%+ of DB bottlenecks before you need full sharding. Adding web servers doesn't help if the DB is the bottleneck.",
+  },
+];
+
+function DecisionQuiz() {
+  const [current, setCurrent] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+
+  const q = QUIZ_QUESTIONS[current];
+
+  function handleAnswer(idx: number) {
+    if (selected !== null) return;
+    setSelected(idx);
+    if (q.options[idx].correct) setScore((s) => s + 1);
+  }
+
+  function handleNext() {
+    if (current < QUIZ_QUESTIONS.length - 1) {
+      setCurrent((c) => c + 1);
+      setSelected(null);
+    } else {
+      setDone(true);
+    }
+  }
+
+  function handleReset() {
+    setCurrent(0);
+    setSelected(null);
+    setScore(0);
+    setDone(false);
+  }
+
+  if (done) {
+    return (
+      <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-6 text-center space-y-3">
+        <p className="text-2xl font-bold">{score}/{QUIZ_QUESTIONS.length}</p>
+        <p className="text-sm text-muted-foreground">
+          {score === QUIZ_QUESTIONS.length
+            ? "Perfect! You know exactly when to scale up vs out."
+            : score >= 2
+            ? "Good instincts — review the explanations for anything you missed."
+            : "Real-world scaling decisions are tricky. Re-read the explanations and try again."}
+        </p>
+        <button
+          onClick={handleReset}
+          className="mt-2 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 px-4 py-2 text-sm font-medium transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <HelpCircle className="size-3.5" />
+        Question {current + 1} of {QUIZ_QUESTIONS.length}
+        <div className="ml-auto flex gap-1">
+          {QUIZ_QUESTIONS.map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "size-2 rounded-full",
+                i < current ? "bg-violet-500" : i === current ? "bg-violet-500/50" : "bg-muted"
+              )}
+            />
+          ))}
+        </div>
+      </div>
+
+      <p className="text-sm font-medium text-foreground">{q.q}</p>
+
+      <div className="space-y-2">
+        {q.options.map((opt, i) => (
+          <button
+            key={i}
+            onClick={() => handleAnswer(i)}
+            disabled={selected !== null}
+            className={cn(
+              "w-full text-left rounded-lg border px-4 py-3 text-sm transition-all",
+              selected === null
+                ? "border-border/50 hover:border-violet-500/40 hover:bg-violet-500/[0.03]"
+                : selected === i && opt.correct
+                ? "border-emerald-500/50 bg-emerald-500/[0.06] text-emerald-400"
+                : selected === i && !opt.correct
+                ? "border-red-500/50 bg-red-500/[0.06] text-red-400"
+                : opt.correct
+                ? "border-emerald-500/30 bg-emerald-500/[0.04] text-emerald-400/70"
+                : "border-border/30 text-muted-foreground"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              {selected !== null && opt.correct && <CheckCircle2 className="size-3.5 shrink-0 text-emerald-400" />}
+              {selected !== null && selected === i && !opt.correct && <XCircle className="size-3.5 shrink-0 text-red-400" />}
+              {opt.text}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {selected !== null && (
+        <div className="rounded-lg border border-border/40 bg-muted/20 p-3 space-y-2">
+          <p className="text-xs text-muted-foreground">{q.explanation}</p>
+          <button
+            onClick={handleNext}
+            className="text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+          >
+            {current < QUIZ_QUESTIONS.length - 1 ? "Next question →" : "See results →"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================================================================
+   MAIN PAGE
+   ================================================================ */
 
 export default function VerticalVsHorizontalPage() {
   return (
     <div className="space-y-8">
       <TopicHero
         title="Vertical vs Horizontal Scaling"
-        subtitle="Why upgrading your server only delays the inevitable -- and what to do instead. Understanding these two strategies is the first step in every scaling conversation."
+        subtitle="Upgrading your server only delays the inevitable. Here's how to know when to scale up, when to scale out, and why every production system eventually does both."
         difficulty="beginner"
       />
 
-      <FailureScenario title="You upgraded to the biggest server money can buy -- and it still crashed">
-        <p className="text-sm text-muted-foreground">
-          Your startup just launched. One server runs everything -- the app, the database, file storage.
-          At 1,000 users things feel snappy. You upgrade from a <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">t3.medium</code> to
-          an <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">m6i.4xlarge</code> and buy yourself a few more months. But at
-          <strong className="text-red-400"> 50,000 concurrent users</strong>, even the biggest instance on AWS --
-          96 vCPUs, 384 GB RAM, costing $3,360/month -- is not enough. Your database locks up, response times hit
-          30 seconds, and your site goes down during your biggest marketing push.
-        </p>
-        <div className="flex justify-center gap-6 pt-3">
-          <div className="text-center">
-            <ServerNode type="server" label="m6i.24xlarge" sublabel="CPU 100% / RAM 91%" status="unhealthy" />
-            <p className="text-[10px] text-muted-foreground mt-1">$3,360/mo — still not enough</p>
+      {/* ── Scaling Simulator ── */}
+      <Playground
+        title="Scaling Simulator"
+        canvas={<ScalingSimulator />}
+        canvasHeight="min-h-[160px]"
+        controls={false}
+        explanation={
+          <div className="space-y-3">
+            <p className="font-medium text-foreground">How to read this</p>
+            <p>
+              The <span className="text-blue-400 font-medium">blue slider</span> upgrades
+              your single server to bigger instance types. Watch it grow — and the cost
+              jump in non-linear leaps.
+            </p>
+            <p>
+              The <span className="text-emerald-400 font-medium">green slider</span> adds
+              identical servers behind a load balancer. Each node costs the same fixed
+              amount.
+            </p>
+            <p className="text-xs border-t border-border/30 pt-2 text-muted-foreground">
+              At low scale, one bigger server is cheaper and simpler. Above ~10K users
+              horizontal becomes both more cost-effective and more resilient.
+            </p>
           </div>
-        </div>
-      </FailureScenario>
-
-      <WhyItBreaks title="Every machine has a ceiling -- and the ceiling costs exponentially more to raise">
-        <p className="text-sm text-muted-foreground">
-          Every physical machine has hard limits -- a finite number of CPU cores, a maximum amount of RAM,
-          and I/O throughput that cannot exceed the bus speed. AWS&apos;s largest general-purpose instance
-          (m6i.metal) tops out at 128 vCPUs and 512 GB of RAM. No amount of money can buy you a 1,000-core
-          server -- it does not exist.
-        </p>
-        <p className="text-sm text-muted-foreground mt-2">
-          Worse, doubling your CPU cores does not double throughput. <strong>Amdahl&apos;s Law</strong> tells us
-          that serial portions of your application become the bottleneck -- if 10% of your code is serial, you can
-          never get more than a 10x speedup no matter how many cores you throw at it.
-        </p>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { n: "1", label: "Hardware Ceiling", desc: "Largest instances top out at ~128 vCPUs" },
-            { n: "2", label: "Exponential Cost", desc: "8x CPU costs roughly 8x more money" },
-            { n: "3", label: "Single Point of Failure", desc: "One server dies = total outage" },
-            { n: "4", label: "Downtime to Upgrade", desc: "Resizing requires stopping the instance" },
-          ].map((item) => (
-            <div key={item.n} className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-3">
-              <span className="text-xs font-mono font-bold text-orange-400 bg-orange-500/10 rounded-md size-6 flex items-center justify-center shrink-0">
-                {item.n}
-              </span>
-              <div>
-                <p className="text-xs font-semibold">{item.label}</p>
-                <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="Visualizing the Two Strategies">
-        <p className="text-sm text-muted-foreground mb-4">
-          There are exactly two directions to scale: <strong>up</strong> (vertical -- bigger machine) or
-          <strong> out</strong> (horizontal -- more machines). Watch both strategies in action:
-        </p>
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="rounded-lg border border-border/50 p-4">
-            <h4 className="text-xs font-semibold text-blue-400 mb-3 flex items-center gap-1.5">
-              <ArrowUp className="size-3" /> Vertical: Server Grows Bigger
-            </h4>
-            <VerticalGrowthViz />
-          </div>
-          <div className="rounded-lg border border-border/50 p-4">
-            <h4 className="text-xs font-semibold text-emerald-400 mb-3 flex items-center gap-1.5">
-              <ArrowRight className="size-3" /> Horizontal: Servers Multiply
-            </h4>
-            <HorizontalGrowthViz />
-          </div>
-        </div>
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Real AWS EC2 Pricing -- The Numbers Don't Lie">
-        <p className="text-sm text-muted-foreground mb-4">
-          Here is actual AWS EC2 on-demand pricing for us-east-1. Notice how the cost per vCPU stays
-          roughly constant within a family -- but you simply cannot buy more than 96-128 vCPUs on a single instance.
-          The ceiling is real.
-        </p>
-        <InstancePricingTable />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Cost Curves: Vertical vs Horizontal">
-        <p className="text-sm text-muted-foreground mb-4">
-          Hover over the bars to compare costs at each scale point. Vertical scaling costs grow
-          super-linearly because you must jump to premium instance tiers. Horizontal scaling grows
-          linearly -- each new $70/mo node adds the same capacity.
-        </p>
-        <CostCurveViz />
-      </ConceptVisualizer>
-
-      <BeforeAfter
-        before={{
-          title: "Vertical Scaling (Scale Up)",
-          content: (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Replace your server with a bigger one. More CPU cores, more RAM, faster disks.
-              </p>
-              <div className="flex justify-center">
-                <ServerNode type="server" label="Mega Server" sublabel="96 cores / 384 GB" status="warning" />
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li className="flex items-start gap-1.5">
-                  <span className="text-emerald-400 shrink-0">+</span>
-                  Simple -- zero code changes, zero architecture changes
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-emerald-400 shrink-0">+</span>
-                  Single point of management (one server to monitor)
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-emerald-400 shrink-0">+</span>
-                  No distributed systems complexity (ACID transactions just work)
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-red-400 shrink-0">-</span>
-                  Hardware ceiling (max ~128 vCPUs, ~4 TB RAM on AWS)
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-red-400 shrink-0">-</span>
-                  Single point of failure -- one crash = total outage
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-red-400 shrink-0">-</span>
-                  Requires downtime to resize (stop instance, change type, restart)
-                </li>
-              </ul>
-            </div>
-          ),
-        }}
-        after={{
-          title: "Horizontal Scaling (Scale Out)",
-          content: (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Add more servers of the same size and distribute the load across them.
-              </p>
-              <div className="flex justify-center gap-2">
-                <ServerNode type="server" label="S1" sublabel="2 vCPU" status="healthy" />
-                <ServerNode type="server" label="S2" sublabel="2 vCPU" status="healthy" />
-                <ServerNode type="server" label="S3" sublabel="2 vCPU" status="healthy" />
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li className="flex items-start gap-1.5">
-                  <span className="text-emerald-400 shrink-0">+</span>
-                  Near-infinite scaling -- just keep adding nodes
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-emerald-400 shrink-0">+</span>
-                  Built-in fault tolerance -- one server dies, others keep serving
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-emerald-400 shrink-0">+</span>
-                  Linear cost growth and zero-downtime scaling
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-red-400 shrink-0">-</span>
-                  Requires stateless application design
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-red-400 shrink-0">-</span>
-                  Needs a load balancer to distribute requests
-                </li>
-                <li className="flex items-start gap-1.5">
-                  <span className="text-red-400 shrink-0">-</span>
-                  More operational complexity (deployment, monitoring, networking)
-                </li>
-              </ul>
-            </div>
-          ),
-        }}
+        }
       />
 
-      <InteractiveDemo title="Interactive Cost Calculator">
-        {({ isPlaying, tick }) => {
-          const steps = [1000, 5000, 10000, 25000, 50000, 75000, 100000];
-          const activeIdx = isPlaying ? tick % steps.length : 0;
-          const users = steps[activeIdx];
-
-          // Vertical: m6i pricing tiers
-          const verticalCost =
-            users <= 1000 ? 30 :
-            users <= 5000 ? 140 :
-            users <= 10000 ? 560 :
-            users <= 25000 ? 1682 :
-            users <= 50000 ? 3364 :
-            users <= 75000 ? 6720 :
-            6720; // can't go higher!
-
-          const verticalMaxed = users > 50000;
-
-          // Horizontal: ~5000 users per m6i.large ($70/mo each)
-          const nodes = Math.ceil(users / 5000);
-          const horizontalCost = nodes * 70;
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to cycle through traffic levels and compare costs in real-time.
-              </p>
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <span className="text-xs text-muted-foreground">Traffic:</span>
-                <span className="text-lg font-mono font-bold">{users.toLocaleString()}</span>
-                <span className="text-xs text-muted-foreground">concurrent users</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className={cn(
-                  "rounded-lg border p-3 space-y-2",
-                  verticalMaxed ? "border-red-500/30 bg-red-500/5" : "border-blue-500/20 bg-blue-500/5"
-                )}>
-                  <div className="text-[11px] font-semibold text-blue-400">Vertical</div>
-                  <div className="text-xl font-mono font-bold">
-                    ${verticalCost.toLocaleString()}
-                    <span className="text-[10px] font-normal text-muted-foreground">/mo</span>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">1 large server</div>
-                  {verticalMaxed && (
-                    <div className="text-[10px] text-red-400 font-medium">
-                      Hardware limit reached -- cannot scale further!
-                    </div>
-                  )}
-                </div>
-                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
-                  <div className="text-[11px] font-semibold text-emerald-400">Horizontal</div>
-                  <div className="text-xl font-mono font-bold">
-                    ${horizontalCost.toLocaleString()}
-                    <span className="text-[10px] font-normal text-muted-foreground">/mo</span>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground">{nodes} x m6i.large nodes</div>
-                  <div className="text-[10px] text-emerald-400 font-medium">
-                    {verticalMaxed
-                      ? `Saving $${(verticalCost - horizontalCost).toLocaleString()}/mo`
-                      : users > 5000
-                      ? `${Math.round((1 - horizontalCost / verticalCost) * 100)}% cheaper`
-                      : "Higher base cost at low scale"}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        }}
-      </InteractiveDemo>
-
-      <ScaleSimulator
-        title="Scale It Yourself"
-        min={1000}
-        max={100000}
-        step={1000}
-        unit="users"
-        metrics={(value) => {
-          const verticalCost = Math.round(30 * Math.pow(value / 1000, 1.6));
-          const nodes = Math.ceil(value / 5000);
-          const horizontalCost = nodes * 70;
-          return [
-            { label: "Vertical Cost", value: Math.min(verticalCost, 6720), unit: "$/mo" },
-            { label: "Horizontal Cost", value: horizontalCost, unit: "$/mo" },
-            { label: "Nodes (Horizontal)", value: nodes, unit: "servers" },
-          ];
-        }}
-      >
-        {({ value }) => {
-          const nodes = Math.ceil(value / 5000);
-          const verticalCost = Math.min(Math.round(30 * Math.pow(value / 1000, 1.6)), 6720);
-          const horizontalCost = nodes * 70;
-          const savings = verticalCost - horizontalCost;
-          return (
-            <div className="space-y-3">
-              <div className="flex flex-wrap justify-center gap-2">
-                {Array.from({ length: Math.min(nodes, 16) }).map((_, i) => (
-                  <ServerNode
-                    key={i}
-                    type="server"
-                    label={`S${i + 1}`}
-                    status={value / nodes > 4500 ? "warning" : "healthy"}
-                  />
-                ))}
-                {nodes > 16 && (
-                  <span className="text-xs text-muted-foreground self-center">+{nodes - 16} more</span>
-                )}
-              </div>
-              <p className="text-xs text-center text-muted-foreground">
-                {value.toLocaleString()} users: horizontal uses {nodes} nodes at ${horizontalCost}/mo.
-                {savings > 0
-                  ? ` Saves $${savings.toLocaleString()}/mo vs vertical.`
-                  : " Vertical is cheaper at this scale -- start there!"}
-              </p>
-            </div>
-          );
-        }}
-      </ScaleSimulator>
-
-      <CorrectApproach title="The Real Answer: Use Both">
-        <p className="text-sm text-muted-foreground mb-3">
-          This is not an either/or decision. Every production system at scale uses a hybrid approach.
-          The art is knowing when to switch gears.
+      {/* ── Cost Comparison Chart ── */}
+      <div className="rounded-xl border border-border/50 p-5 space-y-4">
+        <h3 className="text-sm font-semibold">Cost at Each Scale Point</h3>
+        <p className="text-sm text-muted-foreground">
+          Vertical costs grow super-linearly as you jump to premium instance tiers.
+          Horizontal grows linearly — every additional server costs the same.
         </p>
-        <div className="grid gap-2">
-          {[
-            {
-              phase: "0-10K users",
-              strategy: "Vertical first",
-              detail: "Start with one moderately-sized server. Simpler ops, faster iteration. Upgrade instance type as you grow.",
-              color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-            },
-            {
-              phase: "10K-100K users",
-              strategy: "Horizontal for app servers",
-              detail: "Add a load balancer, run 3-10 stateless app servers. Keep the database vertical (larger RDS instance).",
-              color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-            },
-            {
-              phase: "100K+ users",
-              strategy: "Horizontal everything",
-              detail: "Shard the database, add read replicas, use a CDN for static assets, auto-scale the fleet. This is where system design gets interesting.",
-              color: "text-violet-400 bg-violet-500/10 border-violet-500/20",
-            },
-          ].map((item) => (
-            <div
-              key={item.phase}
-              className={cn("rounded-lg border p-3 flex items-start gap-3", item.color)}
-            >
-              <span className="text-[11px] font-mono font-bold shrink-0 w-20">{item.phase}</span>
-              <div>
-                <p className="text-xs font-semibold">{item.strategy}</p>
-                <p className="text-[11px] text-muted-foreground">{item.detail}</p>
-              </div>
-            </div>
-          ))}
+        <LiveChart
+          type="bar"
+          data={COST_DATA}
+          dataKeys={{
+            x: "users",
+            y: ["vertical", "horizontal"],
+            label: ["Vertical ($/mo)", "Horizontal ($/mo)"],
+          }}
+          height={260}
+          unit="$"
+          referenceLines={[
+            { y: 3364, label: "Vertical ceiling", color: "#ef4444" },
+          ]}
+        />
+        <p className="text-[11px] text-muted-foreground text-center">
+          Past the red line, vertical scaling simply cannot go further. Horizontal keeps growing.
+        </p>
+      </div>
+
+      {/* ── Failure Demo ── */}
+      <Playground
+        title="Failure Demo — What Happens When a Server Dies?"
+        canvas={<FailureDemo />}
+        canvasHeight="min-h-[160px]"
+        controls={false}
+      />
+
+      <ConversationalCallout type="warning">
+        Don&apos;t dismiss vertical scaling as &quot;bad.&quot; Stack Overflow served millions of
+        users from a handful of vertically-scaled SQL Server machines well past $10M ARR.
+        Premature horizontal scaling adds distributed systems complexity you may not need
+        yet. Start simple, scale when you must.
+      </ConversationalCallout>
+
+      {/* ── Decision Quiz ── */}
+      <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.02] p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="size-2 rounded-full bg-violet-500/50" />
+          <h3 className="text-sm font-semibold text-violet-400">Decision Quiz</h3>
         </div>
-      </CorrectApproach>
+        <DecisionQuiz />
+      </div>
 
       <AhaMoment
-        question="Why do databases often scale vertically while web servers scale horizontally?"
-        answer="Web servers are typically stateless -- any server can handle any request, so adding more is trivial. Databases hold state that must stay consistent across every read and write. Splitting data across machines (sharding) introduces enormous complexity: cross-shard joins, distributed transactions, rebalancing. That's why most teams scale the database vertically as long as possible, then introduce read replicas before resorting to full sharding."
+        question="Why do databases scale vertically while web servers scale horizontally?"
+        answer="Web servers are stateless — any server can handle any request, so adding more is trivial. Databases hold state that must stay consistent across every read and write. Splitting data across machines (sharding) introduces enormous complexity: cross-shard joins, distributed transactions, rebalancing. That's why most teams scale the DB vertically as long as possible, add read replicas next, then resort to full sharding only at extreme scale."
       />
 
       <ConversationalCallout type="tip">
-        In interviews, always mention that horizontal scaling requires a <strong>load balancer</strong> in
-        front of your servers and that your application must be <strong>stateless</strong> -- no local sessions,
-        no files on disk, no in-process caches that other instances cannot access. Sessions go in Redis.
-        Files go in S3. These prerequisites are what interviewers are listening for.
-      </ConversationalCallout>
-
-      <ConversationalCallout type="warning">
-        Do not dismiss vertical scaling as &quot;bad.&quot; Many successful companies run on a single
-        powerful database server well past $10M ARR. Stack Overflow famously served millions of users from
-        a handful of vertically-scaled SQL Server machines. Premature horizontal scaling adds complexity
-        you may not need yet.
+        In interviews, mention that horizontal scaling requires a <strong>load balancer</strong> and
+        a <strong>stateless application</strong> — no local sessions, no files on disk, no
+        in-process caches that other instances can&apos;t see. Sessions go in Redis. Files go in S3.
+        These prerequisites are exactly what interviewers listen for.
       </ConversationalCallout>
 
       <KeyTakeaway
         points={[
-          "Vertical scaling (bigger server) is simpler but has hard hardware limits -- the largest AWS instances top out at ~128 vCPUs / 512 GB RAM.",
-          "Horizontal scaling (more servers) offers near-infinite capacity but requires stateless design, load balancing, and externalized state.",
-          "Cost grows linearly with horizontal scaling but super-linearly with vertical -- at 100K users the difference can be 3-5x.",
-          "Most production systems use both: vertically scaled databases with horizontally scaled stateless app servers.",
-          "Horizontal scaling provides fault tolerance for free -- if one server dies, others keep serving traffic without interruption.",
-          "The need for horizontal scaling drives the most important system design decisions: load balancing, session management, shared storage, and database replication.",
+          "Vertical scaling (bigger server) is simpler but hits a hard hardware ceiling — the largest AWS instances top out around 128 vCPUs / 512 GB RAM.",
+          "Horizontal scaling (more servers) offers near-infinite capacity but requires stateless design, load balancing, and externalized state (Redis, S3).",
+          "Cost grows linearly with horizontal but super-linearly with vertical — at 100K users the difference can be 3-5×.",
+          "Most production systems use both: vertically-scaled databases with horizontally-scaled stateless app servers.",
+          "Horizontal scaling gives fault tolerance almost for free — if one server crashes, others absorb the load with zero downtime.",
+          "The need to scale horizontally drives the most important system design decisions: load balancing, session management, shared storage, and replication.",
         ]}
       />
     </div>

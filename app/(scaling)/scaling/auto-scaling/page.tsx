@@ -1,410 +1,521 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { ScaleSimulator } from "@/components/scale-simulator";
-import { ServerNode } from "@/components/server-node";
-import { MetricCounter } from "@/components/metric-counter";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { InteractiveDemo } from "@/components/interactive-demo";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { Playground } from "@/components/playground";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Activity, Clock, TrendingUp, TrendingDown, Flame, Snowflake, Timer } from "lucide-react";
 
-/* ── Server fleet with stable random offsets ── */
-function CpuTimelineServerFleet({ cpu, servers }: { cpu: number; servers: number }) {
-  const offsetsRef = useRef<number[]>([]);
-  if (offsetsRef.current.length < servers) {
-    offsetsRef.current = Array.from({ length: 20 }, () => Math.random() * 10 - 5);
-  }
-  return (
-    <div className="flex flex-wrap justify-center gap-2">
-      {Array.from({ length: servers }).map((_, i) => {
-        const perServerCpu = Math.round(cpu * (2 / servers) + offsetsRef.current[i]);
-        const clampedCpu = Math.max(10, Math.min(100, perServerCpu));
-        return (
-          <ServerNode
-            key={i}
-            type="server"
-            label={`S${i + 1}`}
-            sublabel={`~${clampedCpu}%`}
-            status={clampedCpu > 95 ? "unhealthy" : clampedCpu > 85 ? "warning" : "healthy"}
-          />
-        );
-      })}
-    </div>
-  );
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                           */
+/* ------------------------------------------------------------------ */
+
+function generateTraffic(tick: number): number {
+  const base = 50 + 30 * Math.sin((tick / 40) * Math.PI * 2);
+  const spike = tick % 60 > 25 && tick % 60 < 35 ? 40 : 0;
+  const noise = Math.sin(tick * 7.3) * 8;
+  return Math.max(10, Math.round(base + spike + noise));
 }
 
-/* ── CPU Timeline Visualization ── */
-function CpuTimelineViz() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 30), 500);
-    return () => clearInterval(t);
-  }, []);
-
-  // Simulated CPU pattern: normal → spike → scale out → cooldown → stabilize → low → scale in
-  const cpuPattern = [
-    35, 38, 42, 40, 55, 68, 78, 85, 92, 95, // 0-9: traffic spike
-    88, 72, 60, 55, 52, 50, 48, 45, 42, 40, // 10-19: servers added, CPU drops
-    38, 35, 30, 25, 22, 20, 18, 22, 28, 32, // 20-29: low traffic, scale in
-  ];
-
-  const serverCount = [
-    2, 2, 2, 2, 2, 2, 3, 3, 4, 5,   // scale out starts at tick 6
-    5, 5, 5, 5, 5, 5, 5, 5, 4, 3,   // cooldown, then scale in
-    3, 3, 2, 2, 2, 2, 2, 2, 2, 2,   // back to minimum
-  ];
-
-  const cooldownActive = [
-    false, false, false, false, false, false, false, false, false, true,
-    true, true, true, true, false, false, false, false, false, false,
-    false, false, false, false, false, false, false, false, false, false,
-  ];
-
-  const cpu = cpuPattern[tick];
-  const servers = serverCount[tick];
-  const inCooldown = cooldownActive[tick];
-
-  return (
-    <div className="space-y-4">
-      {/* Timeline bar chart */}
-      <div className="flex items-end gap-[2px] h-24">
-        {cpuPattern.map((val, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex-1 rounded-t-sm transition-all duration-200",
-              i === tick
-                ? "ring-1 ring-white/40"
-                : "",
-              i <= tick
-                ? val > 85
-                  ? "bg-red-500"
-                  : val > 70
-                  ? "bg-amber-500"
-                  : val > 50
-                  ? "bg-blue-500"
-                  : "bg-emerald-500"
-                : "bg-muted/20"
-            )}
-            style={{ height: `${val}%` }}
-          />
-        ))}
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground/60 font-mono px-0.5">
-        <span>t=0</span>
-        <span>Normal</span>
-        <span className="text-red-400">Spike</span>
-        <span className="text-emerald-400">Scaled Out</span>
-        <span>Cooldown</span>
-        <span>Scale In</span>
-      </div>
-
-      {/* Status dashboard */}
-      <div className="grid grid-cols-4 gap-2">
-        <div className="rounded-lg bg-muted/30 p-2 text-center">
-          <div className="text-[10px] text-muted-foreground">CPU</div>
-          <div className={cn(
-            "text-sm font-mono font-bold",
-            cpu > 85 ? "text-red-400" : cpu > 70 ? "text-amber-400" : "text-emerald-400"
-          )}>
-            {cpu}%
-          </div>
-        </div>
-        <div className="rounded-lg bg-muted/30 p-2 text-center">
-          <div className="text-[10px] text-muted-foreground">Servers</div>
-          <div className="text-sm font-mono font-bold">{servers}</div>
-        </div>
-        <div className="rounded-lg bg-muted/30 p-2 text-center">
-          <div className="text-[10px] text-muted-foreground">Cooldown</div>
-          <div className={cn(
-            "text-sm font-mono font-bold",
-            inCooldown ? "text-amber-400" : "text-emerald-400"
-          )}>
-            {inCooldown ? "ACTIVE" : "OFF"}
-          </div>
-        </div>
-        <div className="rounded-lg bg-muted/30 p-2 text-center">
-          <div className="text-[10px] text-muted-foreground">Action</div>
-          <div className="text-sm font-mono font-bold">
-            {cpu > 85 ? (
-              <span className="text-red-400 flex items-center justify-center gap-1">
-                <TrendingUp className="size-3" /> OUT
-              </span>
-            ) : cpu < 30 && servers > 2 ? (
-              <span className="text-blue-400 flex items-center justify-center gap-1">
-                <TrendingDown className="size-3" /> IN
-              </span>
-            ) : inCooldown ? (
-              <span className="text-amber-400 flex items-center justify-center gap-1">
-                <Timer className="size-3" /> WAIT
-              </span>
-            ) : (
-              <span className="text-emerald-400">OK</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Server fleet */}
-      <CpuTimelineServerFleet cpu={cpu} servers={servers} />
-
-      <p className="text-[10px] text-muted-foreground/60 text-center">
-        {tick < 5
-          ? "Normal traffic. 2 servers at ~40% CPU. Auto-scaler is monitoring."
-          : tick < 10
-          ? "Traffic spike detected! CPU > 70% for 2+ minutes. Auto-scaler adding instances..."
-          : tick < 14
-          ? "Cooldown period active. Auto-scaler waits 5 minutes before re-evaluating to prevent flapping."
-          : tick < 20
-          ? "Fleet stabilized at target CPU. Traffic being handled comfortably."
-          : tick < 25
-          ? "Traffic declining. CPU below 30%. After cooldown, auto-scaler removes excess servers."
-          : "Back to baseline. Only minimum 2 servers running. Cost savings realized."}
-      </p>
-    </div>
-  );
-}
-
-/* ── Scaling Policy Comparison ── */
-function ScalingPolicyViz() {
-  const [policy, setPolicy] = useState<"target" | "step" | "scheduled">("target");
-
-  const policies = {
-    target: {
-      name: "Target Tracking",
-      desc: "Set a target metric value and the auto-scaler continuously adjusts to maintain it. The simplest and most commonly recommended policy.",
-      config: [
-        { key: "Target Metric", value: "Average CPU" },
-        { key: "Target Value", value: "60%" },
-        { key: "Scale-out Cooldown", value: "300s" },
-        { key: "Scale-in Cooldown", value: "300s" },
-      ],
-      example: "\"Keep average CPU at 60%.\" If CPU hits 80%, add instances. If CPU drops to 40%, remove instances.",
-      awsName: "TargetTrackingScaling",
-    },
-    step: {
-      name: "Step Scaling",
-      desc: "Define graduated responses based on alarm severity. Bigger breaches trigger more aggressive scaling. Good for workloads with unpredictable spikes.",
-      config: [
-        { key: "CPU 60-70%", value: "+1 instance" },
-        { key: "CPU 70-85%", value: "+3 instances" },
-        { key: "CPU 85-95%", value: "+5 instances" },
-        { key: "CPU > 95%", value: "+8 instances" },
-      ],
-      example: "Moderate spike? Add 1 server. Severe spike? Add 5 at once. Proportional response.",
-      awsName: "StepScaling",
-    },
-    scheduled: {
-      name: "Scheduled Scaling",
-      desc: "Pre-scale based on known traffic patterns. Set the fleet size in advance for predictable events. Combine with reactive policies as a safety net.",
-      config: [
-        { key: "Weekdays 9AM", value: "min: 4 instances" },
-        { key: "Weekdays 6PM", value: "min: 2 instances" },
-        { key: "Black Friday", value: "min: 20 instances" },
-        { key: "Weekends", value: "min: 3 instances" },
-      ],
-      example: "Scale to 20 servers at 8AM on Black Friday. Don't wait for the spike to hit.",
-      awsName: "ScheduledScaling",
+function buildFleetNodes(serverCount: number, cpuPerServer: number): FlowNode[] {
+  const lbNode: FlowNode = {
+    id: "lb",
+    type: "loadBalancerNode",
+    position: { x: 250, y: 0 },
+    data: {
+      label: "Load Balancer",
+      sublabel: `${serverCount} targets`,
+      status: "healthy",
+      handles: { bottom: true },
     },
   };
 
-  const active = policies[policy];
+  const statusMap: Record<string, "healthy" | "warning" | "unhealthy"> = {
+    low: "healthy",
+    mid: "warning",
+    high: "unhealthy",
+  };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        {(["target", "step", "scheduled"] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPolicy(p)}
-            className={cn(
-              "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-              policy === p
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            )}
-          >
-            {policies[p].name}
-          </button>
-        ))}
-      </div>
+  const servers: FlowNode[] = Array.from({ length: serverCount }, (_, i) => {
+    const perCpu = Math.min(100, Math.max(5, cpuPerServer + (i % 3) * 4 - 4));
+    const band = perCpu > 90 ? "high" : perCpu > 70 ? "mid" : "low";
+    return {
+      id: `s-${i}`,
+      type: "serverNode" as const,
+      position: { x: i * 120, y: 120 },
+      data: {
+        label: `Server ${i + 1}`,
+        sublabel: `CPU ${perCpu}%`,
+        status: statusMap[band],
+        metrics: [{ label: "CPU", value: `${perCpu}%` }],
+        handles: { top: true },
+      },
+    };
+  });
 
-      <div className="rounded-lg border border-border/50 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">{active.name}</h4>
-          <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded">
-            {active.awsName}
-          </span>
-        </div>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">{active.desc}</p>
-
-        <div className="space-y-1">
-          {active.config.map((item) => (
-            <div
-              key={item.key}
-              className="flex items-center justify-between rounded-md bg-muted/20 px-3 py-1.5 border border-border/30"
-            >
-              <span className="text-[10px] text-muted-foreground">{item.key}</span>
-              <span className="text-[11px] font-mono font-medium">{item.value}</span>
-            </div>
-          ))}
-        </div>
-
-        <p className="text-[10px] text-muted-foreground/60 italic border-l-2 border-border/30 pl-2">
-          {active.example}
-        </p>
-      </div>
-    </div>
-  );
+  return [lbNode, ...servers];
 }
 
-/* ── Cooldown Period Explanation ── */
-function CooldownViz() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 12), 800);
-    return () => clearInterval(t);
-  }, []);
-
-  // Without cooldown: oscillating
-  const withoutCooldown = [2, 5, 2, 5, 2, 5, 2, 5, 2, 5, 2, 5];
-  // With cooldown: stable
-  const withCooldown = [2, 2, 3, 4, 5, 5, 5, 5, 5, 5, 5, 5];
-
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <Flame className="size-4 text-red-400" />
-          <h4 className="text-xs font-semibold text-red-400">Without Cooldown (Flapping)</h4>
-        </div>
-        <div className="flex items-end gap-[3px] h-16">
-          {withoutCooldown.map((val, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex-1 rounded-t-sm transition-all duration-200",
-                i <= tick ? "bg-red-400" : "bg-red-400/20"
-              )}
-              style={{ height: `${(val / 5) * 100}%` }}
-            />
-          ))}
-        </div>
-        <div className="flex gap-1 text-[9px] font-mono text-muted-foreground/50">
-          {withoutCooldown.map((v, i) => (
-            <div key={i} className="flex-1 text-center">{i <= tick ? v : ""}</div>
-          ))}
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Spike adds 3 servers → load drops → removes 3 → spike again → adds 3... An expensive oscillation loop.
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <Snowflake className="size-4 text-emerald-400" />
-          <h4 className="text-xs font-semibold text-emerald-400">With 5-min Cooldown (Stable)</h4>
-        </div>
-        <div className="flex items-end gap-[3px] h-16">
-          {withCooldown.map((val, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex-1 rounded-t-sm transition-all duration-200",
-                i <= tick ? "bg-emerald-400" : "bg-emerald-400/20"
-              )}
-              style={{ height: `${(val / 5) * 100}%` }}
-            />
-          ))}
-        </div>
-        <div className="flex gap-1 text-[9px] font-mono text-muted-foreground/50">
-          {withCooldown.map((v, i) => (
-            <div key={i} className="flex-1 text-center">{i <= tick ? v : ""}</div>
-          ))}
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Scale out, wait 5 minutes, re-evaluate. Fleet stabilizes. No wasted launches and terminations.
-        </p>
-      </div>
-    </div>
-  );
+function buildFleetEdges(serverCount: number): FlowEdge[] {
+  return Array.from({ length: serverCount }, (_, i) => ({
+    id: `lb-s${i}`,
+    source: "lb",
+    target: `s-${i}`,
+    animated: true,
+  }));
 }
 
-/* ── Instance Warmup Timeline ── */
-function WarmupTimelineViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 6), 1500);
-    return () => clearInterval(t);
-  }, []);
+/* ------------------------------------------------------------------ */
+/*  1. Auto-Scaling Simulator                                        */
+/* ------------------------------------------------------------------ */
 
-  const stages = [
-    { label: "Instance Launched", time: "0s", desc: "AWS starts the EC2 instance", duration: "~30s" },
-    { label: "OS Booting", time: "30s", desc: "Linux kernel loads, services start", duration: "~15s" },
-    { label: "App Starting", time: "45s", desc: "Application process initializes, loads config", duration: "~30s" },
-    { label: "Health Check Passes", time: "75s", desc: "ALB sends health check, gets 200 OK", duration: "~15s" },
-    { label: "Registered in LB", time: "90s", desc: "Added to target group, receives traffic", duration: "~5s" },
-    { label: "Handling Requests", time: "95s", desc: "New instance is fully operational", duration: "Ready!" },
-  ];
+function AutoScaleSimulator() {
+  const [threshold, setThreshold] = useState(70);
+  const historyRef = useRef<{ time: number; traffic: number; servers: number; cpu: number }[]>([]);
+  const serversRef = useRef(2);
+  const cooldownRef = useRef(0);
+
+  const sim = useSimulation({ intervalMs: 600, maxSteps: 120 });
+
+  const traffic = generateTraffic(sim.tick);
+  const cpuPerServer = Math.min(100, Math.round((traffic / Math.max(1, serversRef.current)) * 1.4));
+
+  useEffect(() => {
+    if (sim.tick === 0) {
+      historyRef.current = [];
+      serversRef.current = 2;
+      cooldownRef.current = 0;
+      return;
+    }
+    const t = generateTraffic(sim.tick);
+    const cpu = Math.min(100, Math.round((t / Math.max(1, serversRef.current)) * 1.4));
+
+    if (cooldownRef.current > 0) {
+      cooldownRef.current -= 1;
+    } else if (cpu > threshold && serversRef.current < 8) {
+      serversRef.current += 1;
+      cooldownRef.current = 5;
+    } else if (cpu < threshold - 25 && serversRef.current > 2) {
+      serversRef.current -= 1;
+      cooldownRef.current = 5;
+    }
+
+    historyRef.current = [
+      ...historyRef.current.slice(-39),
+      { time: sim.tick, traffic: t, servers: serversRef.current, cpu },
+    ];
+  }, [sim.tick, threshold]);
+
+  const nodes = useMemo(() => buildFleetNodes(serversRef.current, cpuPerServer), [serversRef.current, cpuPerServer]);
+  const edges = useMemo(() => buildFleetEdges(serversRef.current), [serversRef.current]);
 
   return (
-    <div className="space-y-1.5">
-      {stages.map((s, i) => (
-        <div key={s.label} className="flex items-center gap-3">
-          <span className="text-[10px] font-mono text-muted-foreground/50 w-10 text-right shrink-0">{s.time}</span>
-          <div className="flex-1 flex items-center gap-2">
-            <div
-              className={cn(
-                "h-7 rounded-md flex items-center px-3 text-xs font-medium transition-all duration-300 border",
-                step > i
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : step === i
-                  ? "bg-blue-500/10 border-blue-500/30 text-blue-400 ring-1 ring-blue-500/20"
-                  : "bg-muted/20 border-border/50 text-muted-foreground/40"
-              )}
-              style={{ width: `${50 + i * 8}%` }}
-            >
-              {s.label}
+    <Playground
+      title="Auto-Scaling Simulator"
+      simulation={sim}
+      canvasHeight="min-h-[420px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="text-xs text-muted-foreground">
+              CPU Threshold:
+              <span className="ml-1 font-mono text-violet-400">{threshold}%</span>
+            </label>
+            <input
+              type="range"
+              min={50}
+              max={90}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              className="w-32 accent-violet-500"
+            />
+            <div className="ml-auto flex gap-3 text-xs font-mono">
+              <span>Traffic: <span className="text-blue-400">{traffic}</span></span>
+              <span>Servers: <span className="text-emerald-400">{serversRef.current}</span></span>
+              <span>CPU: <span className={cn(
+                cpuPerServer > 90 ? "text-red-400" : cpuPerServer > 70 ? "text-amber-400" : "text-emerald-400"
+              )}>{cpuPerServer}%</span></span>
             </div>
-            <span className={cn(
-              "text-[10px] font-mono transition-opacity shrink-0",
-              step >= i ? "opacity-100 text-muted-foreground" : "opacity-0"
-            )}>
-              {s.duration}
-            </span>
+          </div>
+          <FlowDiagram nodes={nodes} edges={edges} minHeight={180} fitView interactive={false} />
+          <LiveChart
+            type="line"
+            data={historyRef.current}
+            dataKeys={{ x: "time", y: ["traffic", "servers"], label: ["Traffic", "Servers"] }}
+            height={150}
+            referenceLines={[{ y: threshold, label: `CPU ${threshold}%`, color: "#f59e0b" }]}
+            showLegend
+          />
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="text-sm font-medium">How it works</p>
+          <p className="text-xs text-muted-foreground">
+            Traffic follows a sine wave with random spikes. When average CPU exceeds your
+            threshold, the auto-scaler adds a server. When CPU drops well below threshold,
+            it removes one. A cooldown period prevents thrashing.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Notice the <strong>scaling lag</strong>: traffic spikes before new capacity is ready.
+            This is why pre-warming and predictive scaling matter in production.
+          </p>
+          <div className="rounded-lg bg-muted/30 p-2 text-xs space-y-1">
+            <div className="flex justify-between"><span className="text-muted-foreground">Min servers</span><span className="font-mono">2</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Max servers</span><span className="font-mono">8</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Cooldown</span><span className="font-mono">5 ticks</span></div>
           </div>
         </div>
-      ))}
-      <p className="text-[10px] text-muted-foreground/60 pl-[52px] pt-1">
-        {step < 4
-          ? "New instance is booting... cannot handle requests yet."
-          : step === 4
-          ? "Health check passed! Being added to load balancer pool."
-          : "Instance is live. Total warmup: ~90 seconds from launch to first request."}
-      </p>
-    </div>
+      }
+    />
   );
 }
 
-function computeAutoScale(users: number) {
-  const usersPerServer = 2000;
-  const minServers = 2;
-  const maxServers = 20;
-  const needed = Math.ceil(users / usersPerServer);
-  return Math.max(minServers, Math.min(maxServers, needed));
+/* ------------------------------------------------------------------ */
+/*  2. Scaling Policy Playground                                     */
+/* ------------------------------------------------------------------ */
+
+type PolicyKey = "target" | "step" | "scheduled";
+
+const policyLabels: Record<PolicyKey, string> = {
+  target: "Target Tracking (70% CPU)",
+  step: "Step Scaling",
+  scheduled: "Scheduled",
+};
+
+function applyPolicy(policy: PolicyKey, traffic: number, currentServers: number, tick: number): number {
+  const cpu = Math.min(100, Math.round((traffic / Math.max(1, currentServers)) * 1.4));
+  if (policy === "target") {
+    if (cpu > 70 && currentServers < 10) return currentServers + 1;
+    if (cpu < 45 && currentServers > 2) return currentServers - 1;
+  } else if (policy === "step") {
+    if (cpu > 90 && currentServers < 10) return Math.min(10, currentServers + 4);
+    if (cpu > 80 && currentServers < 10) return Math.min(10, currentServers + 2);
+    if (cpu < 40 && currentServers > 2) return currentServers - 1;
+  } else {
+    const hour = (tick % 48) / 2;
+    if (hour >= 9 && hour < 18) return Math.max(currentServers, 5);
+    return Math.max(2, currentServers - 1);
+  }
+  return currentServers;
 }
+
+function ScalingPolicyPlayground() {
+  const [activePolicy, setActivePolicy] = useState<PolicyKey>("target");
+  const sim = useSimulation({ intervalMs: 400, maxSteps: 96 });
+
+  const histories = useRef<Record<PolicyKey, { time: number; servers: number; cpu: number }[]>>({
+    target: [], step: [], scheduled: [],
+  });
+  const serverCounts = useRef<Record<PolicyKey, number>>({ target: 2, step: 2, scheduled: 2 });
+
+  useEffect(() => {
+    if (sim.tick === 0) {
+      histories.current = { target: [], step: [], scheduled: [] };
+      serverCounts.current = { target: 2, step: 2, scheduled: 2 };
+      return;
+    }
+    const t = generateTraffic(sim.tick);
+    for (const p of ["target", "step", "scheduled"] as PolicyKey[]) {
+      const prev = serverCounts.current[p];
+      serverCounts.current[p] = applyPolicy(p, t, prev, sim.tick);
+      const cpu = Math.min(100, Math.round((t / Math.max(1, serverCounts.current[p])) * 1.4));
+      histories.current[p] = [
+        ...histories.current[p].slice(-47),
+        { time: sim.tick, servers: serverCounts.current[p], cpu },
+      ];
+    }
+  }, [sim.tick]);
+
+  const chartData = histories.current.target.map((_, i) => ({
+    time: histories.current.target[i]?.time ?? i,
+    "Target Tracking": histories.current.target[i]?.servers ?? 2,
+    "Step Scaling": histories.current.step[i]?.servers ?? 2,
+    "Scheduled": histories.current.scheduled[i]?.servers ?? 2,
+  }));
+
+  const policyButtons: PolicyKey[] = ["target", "step", "scheduled"];
+
+  return (
+    <Playground
+      title="Scaling Policy Comparison"
+      simulation={sim}
+      canvasHeight="min-h-[350px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          <div className="flex gap-2 flex-wrap">
+            {policyButtons.map((p) => (
+              <button
+                key={p}
+                onClick={() => setActivePolicy(p)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                  activePolicy === p
+                    ? "bg-violet-500/20 text-violet-400 ring-1 ring-violet-500/30"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                )}
+              >
+                {policyLabels[p]}
+              </button>
+            ))}
+          </div>
+          <LiveChart
+            type="line"
+            data={chartData}
+            dataKeys={{
+              x: "time",
+              y: ["Target Tracking", "Step Scaling", "Scheduled"],
+              label: ["Target Tracking", "Step Scaling", "Scheduled"],
+            }}
+            height={220}
+            showLegend
+            unit="servers"
+          />
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Policy details</p>
+          {activePolicy === "target" && (
+            <p className="text-xs text-muted-foreground">
+              <strong>Target Tracking</strong> maintains 70% CPU. The simplest policy -- you set a target
+              and the auto-scaler adds or removes instances to stay close. Smooth and predictable.
+            </p>
+          )}
+          {activePolicy === "step" && (
+            <p className="text-xs text-muted-foreground">
+              <strong>Step Scaling</strong> uses graduated responses: above 80% CPU add 2, above 90%
+              add 4 at once. Responds more aggressively to major spikes, but can overshoot.
+            </p>
+          )}
+          {activePolicy === "scheduled" && (
+            <p className="text-xs text-muted-foreground">
+              <strong>Scheduled Scaling</strong> pre-warms 5 servers at 9am and scales down at 6pm.
+              Ideal for predictable daily patterns. Combine with reactive policies as a safety net.
+            </p>
+          )}
+          <div className="text-xs text-muted-foreground">
+            Watch the chart to compare how each policy reacts to the same traffic pattern.
+            Step scaling responds fastest to spikes; scheduled scaling anticipates demand.
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  3. Cost Optimization                                             */
+/* ------------------------------------------------------------------ */
+
+function CostOptimizationPlayground() {
+  const [minInstances, setMinInstances] = useState(2);
+  const [maxInstances, setMaxInstances] = useState(10);
+  const [targetCpu, setTargetCpu] = useState(70);
+
+  const costData = useMemo(() => {
+    const data: { hour: string; overProvisioned: number; rightSized: number; underProvisioned: number }[] = [];
+    for (let h = 0; h < 24; h++) {
+      const traffic = 40 + 35 * Math.sin(((h - 6) / 24) * Math.PI * 2) + (h >= 18 && h <= 20 ? 25 : 0);
+      const idealServers = Math.max(minInstances, Math.min(maxInstances, Math.ceil(traffic / targetCpu * 2)));
+      const overCount = maxInstances;
+      const underCount = minInstances;
+      const costPerHour = 0.096;
+      data.push({
+        hour: `${h.toString().padStart(2, "0")}:00`,
+        overProvisioned: Math.round(overCount * costPerHour * 100) / 100,
+        rightSized: Math.round(idealServers * costPerHour * 100) / 100,
+        underProvisioned: Math.round(underCount * costPerHour * 100) / 100,
+      });
+    }
+    return data;
+  }, [minInstances, maxInstances, targetCpu]);
+
+  const dailyCost = useMemo(() => {
+    const over = costData.reduce((s, d) => s + d.overProvisioned, 0);
+    const right = costData.reduce((s, d) => s + d.rightSized, 0);
+    const under = costData.reduce((s, d) => s + d.underProvisioned, 0);
+    return { over: over.toFixed(2), right: right.toFixed(2), under: under.toFixed(2) };
+  }, [costData]);
+
+  return (
+    <Playground
+      title="Cost Optimization Explorer"
+      controls={false}
+      canvasHeight="min-h-[380px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-3 gap-4 text-xs">
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Min instances: <span className="font-mono text-violet-400">{minInstances}</span></span>
+              <input type="range" min={1} max={5} value={minInstances} onChange={(e) => setMinInstances(Number(e.target.value))} className="w-full accent-violet-500" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Max instances: <span className="font-mono text-violet-400">{maxInstances}</span></span>
+              <input type="range" min={5} max={20} value={maxInstances} onChange={(e) => setMaxInstances(Number(e.target.value))} className="w-full accent-violet-500" />
+            </label>
+            <label className="space-y-1">
+              <span className="text-muted-foreground">Target CPU: <span className="font-mono text-violet-400">{targetCpu}%</span></span>
+              <input type="range" min={50} max={90} value={targetCpu} onChange={(e) => setTargetCpu(Number(e.target.value))} className="w-full accent-violet-500" />
+            </label>
+          </div>
+          <LiveChart
+            type="area"
+            data={costData}
+            dataKeys={{
+              x: "hour",
+              y: ["overProvisioned", "rightSized", "underProvisioned"],
+              label: ["Over-provisioned", "Right-sized", "Under-provisioned"],
+            }}
+            height={200}
+            unit="$"
+            showLegend
+          />
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2">
+              <div className="text-muted-foreground">Over-provisioned</div>
+              <div className="text-lg font-mono font-bold text-red-400">${dailyCost.over}</div>
+              <div className="text-muted-foreground/60">per day</div>
+            </div>
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2">
+              <div className="text-muted-foreground">Right-sized</div>
+              <div className="text-lg font-mono font-bold text-emerald-400">${dailyCost.right}</div>
+              <div className="text-muted-foreground/60">per day</div>
+            </div>
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-2">
+              <div className="text-muted-foreground">Under-provisioned</div>
+              <div className="text-lg font-mono font-bold text-amber-400">${dailyCost.under}</div>
+              <div className="text-muted-foreground/60">per day (+ downtime)</div>
+            </div>
+          </div>
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="text-sm font-medium">The goldilocks zone</p>
+          <p className="text-xs text-muted-foreground">
+            Over-provisioning runs max instances 24/7 -- safe but expensive.
+            Under-provisioning uses the minimum always -- cheap but crashes during peaks.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <strong>Right-sizing</strong> with auto-scaling dynamically adjusts between min and max
+            based on actual CPU load. Adjust the sliders to find the sweet spot where cost
+            stays low without risking availability.
+          </p>
+        </div>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  4. Cooldown Period Demo                                          */
+/* ------------------------------------------------------------------ */
+
+function CooldownDemo() {
+  const sim = useSimulation({ intervalMs: 500, maxSteps: 80 });
+
+  const noCooldownHistory = useRef<{ time: number; instances: number }[]>([]);
+  const withCooldownHistory = useRef<{ time: number; instances: number }[]>([]);
+  const noCooldownServers = useRef(3);
+  const withCooldownServers = useRef(3);
+  const cooldownTimer = useRef(0);
+
+  useEffect(() => {
+    if (sim.tick === 0) {
+      noCooldownHistory.current = [];
+      withCooldownHistory.current = [];
+      noCooldownServers.current = 3;
+      withCooldownServers.current = 3;
+      cooldownTimer.current = 0;
+      return;
+    }
+    const t = generateTraffic(sim.tick);
+    const noCpu = Math.min(100, Math.round((t / Math.max(1, noCooldownServers.current)) * 1.4));
+
+    // No cooldown: reacts immediately every tick
+    if (noCpu > 70 && noCooldownServers.current < 8) {
+      noCooldownServers.current += 1;
+    } else if (noCpu < 40 && noCooldownServers.current > 2) {
+      noCooldownServers.current -= 1;
+    }
+
+    // With cooldown: waits 8 ticks between changes
+    const wCpu = Math.min(100, Math.round((t / Math.max(1, withCooldownServers.current)) * 1.4));
+    if (cooldownTimer.current > 0) {
+      cooldownTimer.current -= 1;
+    } else if (wCpu > 70 && withCooldownServers.current < 8) {
+      withCooldownServers.current += 1;
+      cooldownTimer.current = 8;
+    } else if (wCpu < 40 && withCooldownServers.current > 2) {
+      withCooldownServers.current -= 1;
+      cooldownTimer.current = 8;
+    }
+
+    noCooldownHistory.current = [
+      ...noCooldownHistory.current.slice(-39),
+      { time: sim.tick, instances: noCooldownServers.current },
+    ];
+    withCooldownHistory.current = [
+      ...withCooldownHistory.current.slice(-39),
+      { time: sim.tick, instances: withCooldownServers.current },
+    ];
+  }, [sim.tick]);
+
+  const chartData = noCooldownHistory.current.map((d, i) => ({
+    time: d.time,
+    "No Cooldown": d.instances,
+    "With Cooldown": withCooldownHistory.current[i]?.instances ?? 3,
+  }));
+
+  return (
+    <Playground
+      title="Cooldown Period Demo"
+      simulation={sim}
+      canvasHeight="min-h-[300px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          <LiveChart
+            type="line"
+            data={chartData}
+            dataKeys={{
+              x: "time",
+              y: ["No Cooldown", "With Cooldown"],
+              label: ["No Cooldown (thrashing)", "With Cooldown (stable)"],
+            }}
+            height={220}
+            showLegend
+            unit="instances"
+          />
+        </div>
+      }
+      explanation={
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Why cooldowns matter</p>
+          <p className="text-xs text-muted-foreground">
+            <strong>Without cooldown</strong>, the auto-scaler reacts to every metric fluctuation.
+            Server count oscillates wildly -- add, remove, add, remove. Each launch/termination
+            costs money and takes 60-90 seconds of reduced capacity.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <strong>With cooldown</strong> (default 300s in AWS), the scaler waits after each action
+            before re-evaluating. The fleet stabilizes. Less churn, lower cost, more predictable behavior.
+          </p>
+        </div>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main Page                                                        */
+/* ------------------------------------------------------------------ */
 
 export default function AutoScalingPage() {
   return (
@@ -415,334 +526,130 @@ export default function AutoScalingPage() {
         difficulty="intermediate"
       />
 
-      <FailureScenario title="Black Friday: 40,000 users, 2 servers, 45 minutes of downtime">
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Watch Auto-Scaling in Action</h2>
         <p className="text-sm text-muted-foreground">
-          It is Black Friday. Your e-commerce site normally handles 3,000 users on two servers.
-          At 9 AM, traffic spikes to <strong className="text-red-400">40,000 concurrent users</strong>.
-          Your two servers melt -- CPU pinned at 100%, memory exhausted, and the Linux OOM killer
-          starts terminating processes. By the time your on-call engineer wakes up, logs into AWS,
-          manually launches instances, and waits for them to boot and pass health checks,
-          <strong> 45 minutes have passed</strong>. You lost $200,000 in revenue and 12,000 abandoned carts.
+          Hit play and drag the CPU threshold slider. When traffic pushes CPU above
+          your threshold, new servers appear in the diagram. When traffic drops, excess
+          servers are removed after a cooldown period. Watch the scaling lag -- servers
+          take time to spin up while traffic spikes ahead of capacity.
         </p>
-        <div className="flex justify-center gap-4 pt-3">
-          <ServerNode type="server" label="Server 1" sublabel="CPU 100%" status="unhealthy" />
-          <ServerNode type="server" label="Server 2" sublabel="OOM Killed" status="unhealthy" />
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-[10px] text-muted-foreground font-mono">40,000 users</span>
-            <span className="text-[10px] text-red-400 font-mono">503 errors</span>
-          </div>
-        </div>
-      </FailureScenario>
+        <AutoScaleSimulator />
+      </section>
 
-      <WhyItBreaks title="Manual provisioning cannot keep up with traffic">
+      <ConversationalCallout type="tip">
+        In system design interviews, always mention three things about auto-scaling:
+        (1) the <strong>metric</strong> that triggers scaling, (2) the <strong>policy type</strong> you
+        would use (target tracking for most cases), and (3) that servers must be <strong>stateless</strong> with
+        externalized state in Redis, S3, or a database.
+      </ConversationalCallout>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Scaling Policies Compared</h2>
         <p className="text-sm text-muted-foreground">
-          Manually provisioned infrastructure cannot react to traffic spikes. The timeline of a manual
-          response tells the whole story:
+          Three main strategies exist: Target Tracking (keep CPU at X%), Step Scaling (graduated
+          responses to severity), and Scheduled Scaling (pre-warm for known patterns). Run the
+          simulation to see how each reacts to identical traffic.
         </p>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { n: "0:00", label: "Traffic Spike Begins", desc: "CPU shoots to 100%" },
-            { n: "0:05", label: "Alert Fires", desc: "PagerDuty wakes up the on-call" },
-            { n: "0:15", label: "Engineer Logs In", desc: "Reads alerts, assesses the situation" },
-            { n: "0:20", label: "Launches Instances", desc: "Starts 5 new EC2 instances" },
-            { n: "0:22", label: "Instances Booting", desc: "OS loading, app starting..." },
-            { n: "0:30", label: "Health Checks Pass", desc: "ALB starts routing traffic" },
-            { n: "0:35", label: "Fleet Stabilizes", desc: "CPU drops to 60% across 7 servers" },
-            { n: "0:45", label: "Incident Resolved", desc: "$200K revenue already lost" },
-          ].map((item) => (
-            <div key={item.n} className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-2.5">
-              <span className="text-[10px] font-mono font-bold text-orange-400 bg-orange-500/10 rounded-md px-1.5 py-0.5 shrink-0">
-                {item.n}
-              </span>
-              <div>
-                <p className="text-[11px] font-semibold">{item.label}</p>
-                <p className="text-[10px] text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="text-sm text-muted-foreground mt-3">
-          Conversely, keeping 20 servers running 24/7 &quot;just in case&quot; costs $1,400/month in idle
-          instances during the 99% of time when 2-3 servers would suffice. You are either under-provisioned
-          or over-paying. Auto-scaling solves both.
-        </p>
-      </WhyItBreaks>
+        <ScalingPolicyPlayground />
+      </section>
 
-      <ConceptVisualizer title="How Auto-Scaling Works">
-        <p className="text-sm text-muted-foreground mb-4">
-          Auto-scaling is a feedback loop: monitor metrics, evaluate against a policy, scale if needed,
-          then cool down before evaluating again. AWS Auto Scaling Groups (ASGs) run this loop continuously.
-        </p>
-        <AnimatedFlow
-          steps={[
-            { id: "monitor", label: "Monitor Metrics", description: "CloudWatch: CPU, memory, request count, latency" },
-            { id: "evaluate", label: "Evaluate Policy", description: "Is avg CPU > 70% for 2+ datapoints?" },
-            { id: "decide", label: "Scale Decision", description: "Add 2 instances (or remove if underutilized)" },
-            { id: "launch", label: "Launch & Register", description: "Boot instances, pass health checks, join ALB" },
-            { id: "cooldown", label: "Cooldown Period", description: "Wait 300s before next scaling decision" },
-          ]}
-          direction="horizontal"
-          interval={2000}
-        />
-      </ConceptVisualizer>
+      <AhaMoment
+        question="Why can't auto-scaling handle truly instant spikes (like a Super Bowl ad)?"
+        answer={
+          <span>
+            Launching a new instance takes 60-90 seconds: boot the OS (~30s), start the application
+            (~30s), pass health checks (~15s), register with the load balancer (~5s). For predictable
+            mega-events, use <strong>scheduled scaling</strong> to pre-warm instances before the spike.
+            Reactive auto-scaling is a safety net, not the primary strategy for known events.
+          </span>
+        }
+      />
 
-      <ConceptVisualizer title="CPU Timeline -- Watch Auto-Scaling React">
-        <p className="text-sm text-muted-foreground mb-4">
-          This timeline shows a real auto-scaling cycle: normal traffic, a CPU spike, instances scaling out,
-          a cooldown period, stabilization, then scaling back in when demand drops. Watch how the server
-          count and CPU percentage change together.
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Cost Optimization</h2>
+        <p className="text-sm text-muted-foreground">
+          Finding the right balance between cost and availability is the core challenge. Adjust
+          min/max instances and target CPU to see how daily costs change across three strategies:
+          always over-provisioned, always under-provisioned, and right-sized with auto-scaling.
         </p>
-        <CpuTimelineViz />
-      </ConceptVisualizer>
-
-      <CorrectApproach title="Scaling Policies -- Choose the Right Strategy">
-        <p className="text-sm text-muted-foreground mb-4">
-          AWS offers three types of scaling policies. Target Tracking is recommended for most workloads.
-          Step Scaling handles unpredictable spikes. Scheduled Scaling pre-warms for known events.
-        </p>
-        <ScalingPolicyViz />
-      </CorrectApproach>
-
-      <ConceptVisualizer title="Cooldown Periods -- Preventing the Flapping Disaster">
-        <p className="text-sm text-muted-foreground mb-4">
-          Without cooldowns, auto-scaling can oscillate wildly: add servers, load drops, remove servers,
-          load spikes, add servers again. This &quot;flapping&quot; wastes money on launch/termination
-          cycles and destabilizes your fleet. The default cooldown is <strong>300 seconds (5 minutes)</strong>.
-        </p>
-        <CooldownViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Instance Warmup -- Why New Servers Need Time">
-        <p className="text-sm text-muted-foreground mb-4">
-          A newly launched instance is not immediately ready to handle production traffic. The
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">EstimatedInstanceWarmup</code> setting
-          tells the auto-scaler to exclude new instances from metrics until they are fully ready.
-          Without this, the auto-scaler sees low CPU on the new (idle) instance and stops scaling
-          too early.
-        </p>
-        <WarmupTimelineViz />
-      </ConceptVisualizer>
+        <CostOptimizationPlayground />
+      </section>
 
       <BeforeAfter
         before={{
           title: "Without Auto-Scaling",
           content: (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p>Fixed fleet of 2 servers, provisioned for average load.</p>
-              <div className="grid grid-cols-2 gap-2">
-                <MetricCounter label="Normal Load" value={40} unit="% CPU" />
-                <MetricCounter label="Black Friday" value={100} unit="% CPU" trend="up" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <MetricCounter label="Monthly Cost" value={140} unit="$" />
-                <MetricCounter label="Revenue Lost" value={200} unit="K$" trend="up" />
-              </div>
-              <p className="text-[11px]">
-                Site crashes during peaks, wastes money during valleys. Each incident costs more
-                than a year of auto-scaling.
-              </p>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>Fixed fleet of 2 servers provisioned for average load.</p>
+              <ul className="list-disc pl-4 space-y-1 text-xs">
+                <li>Crashes during traffic spikes (CPU 100%)</li>
+                <li>Idle servers waste money during low traffic</li>
+                <li>Manual intervention takes 30-45 minutes</li>
+                <li>Revenue loss during every outage</li>
+              </ul>
             </div>
           ),
         }}
         after={{
           title: "With Auto-Scaling",
           content: (
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p>Fleet grows from 2 to 20 servers as demand rises, then shrinks back.</p>
-              <div className="grid grid-cols-2 gap-2">
-                <MetricCounter label="Normal Load" value={55} unit="% CPU" />
-                <MetricCounter label="Black Friday" value={65} unit="% CPU" trend="down" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <MetricCounter label="Avg Monthly Cost" value={210} unit="$" />
-                <MetricCounter label="Revenue Lost" value={0} unit="K$" trend="down" />
-              </div>
-              <p className="text-[11px]">
-                Consistent performance at every load level. Pay only for what you use. Zero-downtime
-                scaling.
-              </p>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>Fleet adjusts from 2 to 20 servers automatically.</p>
+              <ul className="list-disc pl-4 space-y-1 text-xs">
+                <li>CPU stays near target (60-70%) at all times</li>
+                <li>Scales down overnight, saves 40-60% on compute</li>
+                <li>New capacity in 60-90 seconds, no human needed</li>
+                <li>Zero-downtime scaling with health checks</li>
+              </ul>
             </div>
           ),
         }}
       />
 
-      <ScaleSimulator
-        title="Auto-Scale Simulator"
-        min={1000}
-        max={40000}
-        step={500}
-        unit="users"
-        metrics={(value) => {
-          const servers = computeAutoScale(value);
-          const cpuPerServer = Math.round((value / servers / 2000) * 100);
-          return [
-            { label: "Active Servers", value: servers, unit: "nodes" },
-            { label: "CPU per Server", value: Math.min(cpuPerServer, 100), unit: "%" },
-            { label: "Monthly Cost", value: servers * 70, unit: "$" },
-          ];
-        }}
-      >
-        {({ value }) => {
-          const servers = computeAutoScale(value);
-          return (
-            <div className="space-y-3">
-              <div className="flex flex-wrap justify-center gap-2">
-                {Array.from({ length: servers }).map((_, i) => {
-                  const load = (value / servers / 2000) * 100;
-                  return (
-                    <ServerNode
-                      key={i}
-                      type="server"
-                      label={`S${i + 1}`}
-                      sublabel={`~${Math.round(load)}%`}
-                      status={load > 90 ? "unhealthy" : load > 75 ? "warning" : "healthy"}
-                    />
-                  );
-                })}
-              </div>
-              <p className="text-xs text-center text-muted-foreground">
-                {value <= 4000
-                  ? "Low traffic -- auto-scaler maintains the minimum of 2 servers. Cost: $140/mo."
-                  : value <= 20000
-                  ? `Moderate traffic -- ${servers} servers keeping CPU around ${Math.round((value / servers / 2000) * 100)}%. Cost: $${servers * 70}/mo.`
-                  : `High traffic -- ${servers} servers at max. For predictable spikes this large, combine with scheduled scaling to pre-warm.`}
-              </p>
-            </div>
-          );
-        }}
-      </ScaleSimulator>
-
-      <InteractiveDemo title="Scaling Decision Simulator">
-        {({ isPlaying, tick }) => {
-          // Simulate a day's traffic pattern
-          const hour = isPlaying ? tick % 24 : 12;
-          const trafficPatterns: Record<number, number> = {
-            0: 500, 1: 300, 2: 200, 3: 200, 4: 300, 5: 500,
-            6: 1000, 7: 2000, 8: 4000, 9: 6000, 10: 8000, 11: 9000,
-            12: 10000, 13: 9500, 14: 8000, 15: 7000, 16: 6000, 17: 8000,
-            18: 12000, 19: 15000, 20: 10000, 21: 6000, 22: 3000, 23: 1000,
-          };
-          const users = trafficPatterns[hour];
-          const servers = computeAutoScale(users);
-          const cpu = Math.round((users / servers / 2000) * 100);
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to simulate a 24-hour traffic cycle. Watch the fleet grow during peak hours
-                and shrink overnight.
-              </p>
-              <div className="flex items-center justify-center gap-6">
-                <div className="text-center">
-                  <Clock className="size-5 text-muted-foreground mx-auto mb-1" />
-                  <span className="text-lg font-mono font-bold">{hour.toString().padStart(2, "0")}:00</span>
-                </div>
-                <div className="text-center">
-                  <Activity className="size-5 text-blue-400 mx-auto mb-1" />
-                  <span className="text-lg font-mono font-bold">{users.toLocaleString()}</span>
-                  <span className="text-[10px] text-muted-foreground block">users</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-lg font-mono font-bold">{servers}</span>
-                  <span className="text-[10px] text-muted-foreground block">servers</span>
-                </div>
-                <div className="text-center">
-                  <span className={cn(
-                    "text-lg font-mono font-bold",
-                    cpu > 80 ? "text-red-400" : cpu > 60 ? "text-amber-400" : "text-emerald-400"
-                  )}>
-                    {cpu}%
-                  </span>
-                  <span className="text-[10px] text-muted-foreground block">avg CPU</span>
-                </div>
-              </div>
-
-              {/* Mini bar chart of the day */}
-              <div className="flex items-end gap-[2px] h-12">
-                {Array.from({ length: 24 }).map((_, h) => {
-                  const u = trafficPatterns[h];
-                  return (
-                    <div
-                      key={h}
-                      className={cn(
-                        "flex-1 rounded-t-sm transition-all",
-                        h === hour ? "bg-blue-400" : h < hour && isPlaying ? "bg-blue-400/40" : "bg-muted/30"
-                      )}
-                      style={{ height: `${(u / 15000) * 100}%` }}
-                    />
-                  );
-                })}
-              </div>
-              <div className="flex justify-between text-[9px] font-mono text-muted-foreground/40 px-0.5">
-                <span>00:00</span>
-                <span>06:00</span>
-                <span>12:00</span>
-                <span>18:00</span>
-                <span>23:00</span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <MetricCounter label="Cost This Hour" value={Math.round(servers * 0.096 * 100) / 100} unit="$" />
-                <MetricCounter label="Daily Cost" value={Math.round(servers * 0.096 * 24)} unit="$" />
-                <MetricCounter
-                  label="vs Fixed 10 Servers"
-                  value={Math.round((1 - (servers * 0.096) / (10 * 0.096)) * 100)}
-                  unit="% saved"
-                  trend="down"
-                />
-              </div>
-            </div>
-          );
-        }}
-      </InteractiveDemo>
-
-      <AhaMoment
-        question="Why can't auto-scaling handle truly instant spikes (like a Super Bowl ad)?"
-        answer={
-          <span>
-            Launching a new EC2 instance takes 60-90 seconds: boot the OS (~30s), start the application
-            (~30s), pass health checks (~15s), register with the load balancer (~5s). For predictable
-            mega-events, use <strong>scheduled scaling</strong> to pre-warm 20+ instances before the spike.
-            Reactive auto-scaling is a safety net, not the primary strategy for known events. Netflix
-            pre-scales hours before major releases.
-          </span>
-        }
-      />
-
-      <AhaMoment
-        question="What metrics should trigger auto-scaling besides CPU?"
-        answer={
-          <span>
-            CPU is the most common, but often not the best. Consider: <strong>ALB Request Count Per Target</strong> (how
-            many requests each server handles -- great for web APIs), <strong>SQS Queue Depth</strong> (for
-            worker fleets processing background jobs), or <strong>custom CloudWatch metrics</strong> like
-            response latency P99. The best metric is the one most directly correlated with user experience.
-          </span>
-        }
-      />
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Cooldown: Preventing Thrashing</h2>
+        <p className="text-sm text-muted-foreground">
+          Without a cooldown period, auto-scaling can oscillate wildly: add servers, load drops,
+          remove servers, load spikes, add servers again. This flapping wastes money and
+          destabilizes your fleet. Compare the two behaviors below.
+        </p>
+        <CooldownDemo />
+      </section>
 
       <ConversationalCallout type="warning">
-        Auto-scaling requires <strong>stateless servers</strong>. A new instance must be able to handle
-        requests immediately without needing state from other servers. Sessions go in Redis or DynamoDB.
-        Files go in S3. Application config goes in Parameter Store or environment variables. If your
-        servers are stateful, auto-scaling will cause data loss and inconsistency.
+        Auto-scaling requires <strong>stateless servers</strong>. A new instance must handle requests
+        immediately without state from other servers. Sessions go in Redis or DynamoDB. Files go in S3.
+        Config goes in Parameter Store. If your servers are stateful, auto-scaling causes data loss.
       </ConversationalCallout>
 
-      <ConversationalCallout type="tip">
-        In system design interviews, mention three things about auto-scaling: (1) what <strong>metric</strong> triggers
-        scaling, (2) what <strong>policy type</strong> you would use (target tracking for most cases), and
-        (3) that servers must be <strong>stateless</strong> with externalized state. Bonus: mention
-        pre-warming AMIs with your application already installed to reduce warmup time from 90s to 30s.
+      <AhaMoment
+        question="What metrics should trigger scaling besides CPU?"
+        answer={
+          <span>
+            CPU is common but often not the best choice. Consider: <strong>Request Count Per Target</strong> (requests
+            each server handles), <strong>SQS Queue Depth</strong> (for worker fleets),
+            or <strong>custom metrics</strong> like P99 latency. The best metric is the one most
+            directly correlated with user experience degradation.
+          </span>
+        }
+      />
+
+      <ConversationalCallout type="question">
+        If you could only pick one scaling policy for a typical web application, which would you
+        choose and why? Think about target tracking vs step scaling for a moment before reading on.
+        Most teams start with target tracking at 60-70% CPU because it is the simplest to reason about
+        and works well for steady-state workloads.
       </ConversationalCallout>
 
       <KeyTakeaway
         points={[
-          "Auto-scaling automatically adjusts server count based on real-time metrics like CPU, request rate, or queue depth.",
-          "Target tracking is the simplest and most recommended policy: set a target CPU% and the auto-scaler handles the rest.",
-          "Step scaling provides graduated responses: small spikes add 1 server, large spikes add 5+ at once.",
-          "Cooldown periods (default 300s) prevent flapping -- the expensive oscillation of adding and removing servers rapidly.",
-          "Instance warmup takes 60-90 seconds (boot → app start → health check → LB registration). For known spikes, use scheduled scaling to pre-warm.",
-          "Auto-scaling requires stateless servers with externalized state (sessions in Redis, files in S3, config in Parameter Store).",
+          "Auto-scaling adjusts server count based on real-time metrics like CPU, request rate, or queue depth.",
+          "Target tracking is the simplest policy: set a target CPU% and the scaler handles the rest.",
+          "Step scaling provides graduated responses: small spikes add 1 server, large spikes add 5+.",
+          "Cooldown periods (default 300s) prevent flapping -- the expensive oscillation of rapidly adding and removing servers.",
+          "Instance warmup takes 60-90s. For known spikes, use scheduled scaling to pre-warm capacity.",
+          "Auto-scaling requires stateless servers with externalized state (sessions in Redis, files in S3).",
         ]}
       />
     </div>

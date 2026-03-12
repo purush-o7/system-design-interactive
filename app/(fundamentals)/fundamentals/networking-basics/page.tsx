@@ -1,731 +1,697 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { ServerNode } from "@/components/server-node";
-import { InteractiveDemo } from "@/components/interactive-demo";
-import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
-import { BeforeAfter } from "@/components/before-after";
-import { MetricCounter } from "@/components/metric-counter";
+import { ConversationalCallout } from "@/components/conversational-callout";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { Playground } from "@/components/playground";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { MarkerType } from "@xyflow/react";
 
-const osiActiveStyles: Record<string, string> = {
-  "bg-purple-500": "bg-purple-500/10 border-current ring-1 ring-current/20",
-  "bg-indigo-500": "bg-indigo-500/10 border-current ring-1 ring-current/20",
-  "bg-blue-500": "bg-blue-500/10 border-current ring-1 ring-current/20",
-  "bg-cyan-500": "bg-cyan-500/10 border-current ring-1 ring-current/20",
-  "bg-green-500": "bg-green-500/10 border-current ring-1 ring-current/20",
-  "bg-yellow-500": "bg-yellow-500/10 border-current ring-1 ring-current/20",
-  "bg-red-500": "bg-red-500/10 border-current ring-1 ring-current/20",
+// --- OSI layer data ---
+
+const osiLayers = [
+  { num: 7, name: "Application",  protocols: "HTTP, DNS, SMTP, gRPC",       headerSize: 0,  color: "#a855f7", example: "GET /api/users HTTP/1.1\nHost: example.com\nAccept: application/json",         desc: "Where your code lives. HTTP requests, API calls, DNS lookups all happen here." },
+  { num: 6, name: "Presentation", protocols: "TLS/SSL, UTF-8, gzip",        headerSize: 5,  color: "#6366f1", example: "TLS record header (5B)\nEncrypt payload with AES-256-GCM\nAdd MAC for integrity",   desc: "Encryption, compression, character encoding. TLS lives here." },
+  { num: 5, name: "Session",      protocols: "Sockets, NetBIOS",            headerSize: 0,  color: "#3b82f6", example: "Open TCP socket: fd=7\nKeep-alive ping every 30s\nHandle reconnect on drop",    desc: "Manages connections: open, keep alive, close, and reconnect." },
+  { num: 4, name: "Transport",    protocols: "TCP, UDP",                    headerSize: 20, color: "#06b6d4", example: "SrcPort:49152 DstPort:443\nSeq:1001 Ack:2001 Flags:ACK\nWindow:65535",          desc: "Port numbers, reliable delivery (TCP) or raw speed (UDP)." },
+  { num: 3, name: "Network",      protocols: "IP, ICMP, ARP",               headerSize: 20, color: "#22c55e", example: "Src: 192.168.1.5  Dst: 93.184.216.34\nTTL: 64  Protocol: TCP",                 desc: "IP addressing and routing. Decides how packets hop from host to host." },
+  { num: 2, name: "Data Link",    protocols: "Ethernet, Wi-Fi",             headerSize: 14, color: "#f59e0b", example: "Dst MAC: aa:bb:cc:dd:ee:ff\nSrc MAC: 11:22:33:44:55:66\nEtherType: 0x0800",    desc: "MAC addresses and local frames. Gets bits across one hop." },
+  { num: 1, name: "Physical",     protocols: "Ethernet cable, Wi-Fi, fiber", headerSize: 8, color: "#ef4444", example: "10101010 10101010 (preamble)\n... bits as voltage or light ...\n10101011 (SFD)", desc: "Raw bits on copper, fiber, or radio. Volts, photons, and radio waves." },
+];
+
+const layerRingStyles = [
+  "ring-purple-500/40 bg-purple-500/10 text-purple-400",
+  "ring-indigo-500/40 bg-indigo-500/10 text-indigo-400",
+  "ring-blue-500/40 bg-blue-500/10 text-blue-400",
+  "ring-cyan-500/40 bg-cyan-500/10 text-cyan-400",
+  "ring-green-500/40 bg-green-500/10 text-green-400",
+  "ring-amber-500/40 bg-amber-500/10 text-amber-400",
+  "ring-red-500/40 bg-red-500/10 text-red-400",
+];
+
+// --- Port database ---
+
+const portDatabase: Record<number, { name: string; proto: string; desc: string; cat: string }> = {
+  22:    { name: "SSH",        proto: "TCP",     desc: "Secure Shell — remote terminal access",     cat: "Infra" },
+  25:    { name: "SMTP",       proto: "TCP",     desc: "Sending email between mail servers",        cat: "Infra" },
+  53:    { name: "DNS",        proto: "TCP/UDP", desc: "Domain Name System — hostname to IP",       cat: "Infra" },
+  80:    { name: "HTTP",       proto: "TCP",     desc: "Unencrypted web traffic",                   cat: "Web"  },
+  443:   { name: "HTTPS",      proto: "TCP",     desc: "Encrypted web traffic over TLS",            cat: "Web"  },
+  3000:  { name: "Dev Server", proto: "TCP",     desc: "Default for Node.js / Next.js local dev",   cat: "Web"  },
+  3306:  { name: "MySQL",      proto: "TCP",     desc: "MySQL / MariaDB database server",           cat: "DB"   },
+  5432:  { name: "PostgreSQL", proto: "TCP",     desc: "PostgreSQL relational database",            cat: "DB"   },
+  5672:  { name: "RabbitMQ",   proto: "TCP",     desc: "RabbitMQ AMQP message broker",              cat: "Msg"  },
+  6379:  { name: "Redis",      proto: "TCP",     desc: "Redis in-memory cache and key-value store", cat: "DB"   },
+  8080:  { name: "Alt HTTP",   proto: "TCP",     desc: "Alt HTTP — proxies and dev servers",        cat: "Web"  },
+  9092:  { name: "Kafka",      proto: "TCP",     desc: "Apache Kafka distributed event broker",     cat: "Msg"  },
+  27017: { name: "MongoDB",    proto: "TCP",     desc: "MongoDB document database",                 cat: "DB"   },
 };
 
-const osiPassedStyles: Record<string, string> = {
-  "bg-purple-500": "bg-purple-500/5 border-purple-500/20",
-  "bg-indigo-500": "bg-indigo-500/5 border-indigo-500/20",
-  "bg-blue-500": "bg-blue-500/5 border-blue-500/20",
-  "bg-cyan-500": "bg-cyan-500/5 border-cyan-500/20",
-  "bg-green-500": "bg-green-500/5 border-green-500/20",
-  "bg-yellow-500": "bg-yellow-500/5 border-yellow-500/20",
-  "bg-red-500": "bg-red-500/5 border-red-500/20",
+const catBadge: Record<string, string> = {
+  Web:  "bg-blue-500/10 text-blue-400 border-blue-500/30",
+  Infra:"bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+  DB:   "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  Msg:  "bg-purple-500/10 text-purple-400 border-purple-500/30",
 };
 
-const osiDotActiveStyles: Record<string, string> = {
-  "bg-purple-500": "bg-purple-500 shadow-lg",
-  "bg-indigo-500": "bg-indigo-500 shadow-lg",
-  "bg-blue-500": "bg-blue-500 shadow-lg",
-  "bg-cyan-500": "bg-cyan-500 shadow-lg",
-  "bg-green-500": "bg-green-500 shadow-lg",
-  "bg-yellow-500": "bg-yellow-500 shadow-lg",
-  "bg-red-500": "bg-red-500 shadow-lg",
-};
+// --- Overhead chart data ---
 
-const osiDotPassedStyles: Record<string, string> = {
-  "bg-purple-500": "bg-purple-500/50",
-  "bg-indigo-500": "bg-indigo-500/50",
-  "bg-blue-500": "bg-blue-500/50",
-  "bg-cyan-500": "bg-cyan-500/50",
-  "bg-green-500": "bg-green-500/50",
-  "bg-yellow-500": "bg-yellow-500/50",
-  "bg-red-500": "bg-red-500/50",
-};
+const overheadData = [
+  { layer: "App",      payload: 1460, headers: 0  },
+  { layer: "TLS",      payload: 1460, headers: 5  },
+  { layer: "TCP",      payload: 1460, headers: 25 },
+  { layer: "IP",       payload: 1460, headers: 45 },
+  { layer: "Ethernet", payload: 1460, headers: 59 },
+  { layer: "Physical", payload: 1460, headers: 67 },
+];
 
-const osiBorderColorVars: Record<string, string> = {
-  "bg-purple-500": "var(--color-purple-500)",
-  "bg-indigo-500": "var(--color-indigo-500)",
-  "bg-blue-500": "var(--color-blue-500)",
-  "bg-cyan-500": "var(--color-cyan-500)",
-  "bg-green-500": "var(--color-green-500)",
-  "bg-yellow-500": "var(--color-yellow-500)",
-  "bg-red-500": "var(--color-red-500)",
-};
+// --- TCP vs UDP protocol steps ---
 
-function OSIStackDiagram() {
-  const [activeLayer, setActiveLayer] = useState(0);
-  const [direction, setDirection] = useState<"down" | "up">("down");
-  const directionRef = useRef(direction);
-  directionRef.current = direction;
-  useEffect(() => {
-    const t = setInterval(() => {
-      setActiveLayer((prev) => {
-        if (directionRef.current === "down" && prev >= 6) {
-          setDirection("up");
-          return 6;
-        }
-        if (directionRef.current === "up" && prev <= 0) {
-          setDirection("down");
-          return 0;
-        }
-        return directionRef.current === "down" ? prev + 1 : prev - 1;
-      });
-    }, 800);
-    return () => clearInterval(t);
+type ProtocolMode = "tcp" | "udp";
+type Step = { label: string; dir: "toServer" | "toClient"; note?: string };
+
+const tcpSteps: Step[] = [
+  { label: "SYN →",     dir: "toServer", note: "Client initiates" },
+  { label: "← SYN-ACK", dir: "toClient", note: "Server acknowledges" },
+  { label: "ACK →",     dir: "toServer", note: "Connection open!" },
+  { label: "DATA →",    dir: "toServer", note: "Payload segment" },
+  { label: "← ACK",     dir: "toClient", note: "Server confirms receipt" },
+  { label: "FIN →",     dir: "toServer", note: "Client closes" },
+  { label: "← FIN-ACK", dir: "toClient", note: "Fully closed" },
+];
+
+const udpSteps: Step[] = [
+  { label: "Datagram 1 →", dir: "toServer", note: "No handshake" },
+  { label: "Datagram 2 →", dir: "toServer", note: "Fire and forget" },
+  { label: "Datagram 3 →", dir: "toServer", note: "Packet lost!" },
+  { label: "Datagram 4 →", dir: "toServer", note: "No retransmit" },
+  { label: "Datagram 5 →", dir: "toServer", note: "Out-of-order ok" },
+];
+
+// --- OSI FlowDiagram nodes / edges builder ---
+
+function buildOSIFlow(selectedIdx: number): { nodes: FlowNode[]; edges: FlowEdge[] } {
+  const layer = osiLayers[selectedIdx];
+  const color = layer.color;
+  const edgeBase = { animated: true, style: { stroke: color, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color }, labelStyle: { fontSize: 10, fill: "#a1a1aa" }, labelBgStyle: { fill: "transparent" } };
+  return {
+    nodes: [
+      { id: "client", type: "clientNode", position: { x: 30, y: 120 }, data: { label: "Your App", sublabel: "sends data", status: "healthy", handles: { right: true } } },
+      { id: "wire",   type: "serverNode", position: { x: 250, y: 35 }, data: { label: `L${layer.num}: ${layer.name}`, sublabel: layer.protocols, status: "healthy", metrics: layer.headerSize > 0 ? [{ label: "overhead", value: `+${layer.headerSize}B` }] : undefined, handles: { left: true, right: true, top: true, bottom: true } } },
+      { id: "server", type: "serverNode", position: { x: 470, y: 120 }, data: { label: "Remote", sublabel: "receives", status: "idle", handles: { left: true } } },
+    ],
+    edges: [
+      { id: "c-w", source: "client", target: "wire",   ...edgeBase, label: "packet" },
+      { id: "w-s", source: "wire",   target: "server", ...edgeBase, label: layer.headerSize > 0 ? `+${layer.headerSize}B header` : "pass-through" },
+    ],
+  };
+}
+
+// --- OSI Layer Explorer ---
+
+function OSILayerExplorer() {
+  const [sel, setSel] = useState(0);
+  const layer = osiLayers[sel];
+  const ringStyle = layerRingStyles[sel];
+
+  const { nodes, edges } = useMemo(() => buildOSIFlow(sel), [sel]);
+
+  // Running overhead total as we go down layers
+  const cumulativeOverhead = useMemo(() => {
+    let total = 0;
+    return osiLayers.map((l) => { total += l.headerSize; return total; });
   }, []);
 
-  const layers = [
-    { num: 7, name: "Application", protocol: "HTTP, DNS, SMTP, FTP", color: "bg-purple-500", desc: "Where your app code lives. HTTP requests, API calls." },
-    { num: 6, name: "Presentation", protocol: "TLS/SSL, JPEG, UTF-8", color: "bg-indigo-500", desc: "Encryption, compression, data format translation." },
-    { num: 5, name: "Session", protocol: "Sockets, NetBIOS", color: "bg-blue-500", desc: "Connection management, session tokens." },
-    { num: 4, name: "Transport", protocol: "TCP, UDP", color: "bg-cyan-500", desc: "Port numbers, reliable delivery, flow control." },
-    { num: 3, name: "Network", protocol: "IP, ICMP, ARP", color: "bg-green-500", desc: "IP addressing, routing between networks." },
-    { num: 2, name: "Data Link", protocol: "Ethernet, Wi-Fi, MAC", color: "bg-yellow-500", desc: "MAC addresses, local network frames." },
-    { num: 1, name: "Physical", protocol: "Cables, radio signals", color: "bg-red-500", desc: "Raw bits on the wire: electrical, optical, radio." },
-  ];
-
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between mb-2 text-[10px] text-muted-foreground">
-        <span>Sender side: data flows {direction === "down" ? "DOWN ↓" : "UP ↑"}</span>
-        <span className={cn(
-          "px-2 py-0.5 rounded-full border",
-          direction === "down"
-            ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-        )}>
-          {direction === "down" ? "Encapsulating" : "Decapsulating"}
-        </span>
-      </div>
-      {layers.map((layer, i) => {
-        const isActive = i === activeLayer;
-        const isPassed = direction === "down" ? i < activeLayer : i > activeLayer;
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Click a layer to see what it adds to your packet and how it fits in the flow.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Layer list */}
+        <div className="space-y-1">
+          {osiLayers.map((l, i) => {
+            const ring = layerRingStyles[i];
+            const active = sel === i;
+            return (
+              <button
+                key={l.num}
+                onClick={() => setSel(i)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border ring-1 transition-all text-left group",
+                  active
+                    ? ring + " border-transparent"
+                    : "bg-muted/10 border-border/30 ring-transparent hover:ring-border/20"
+                )}
+              >
+                <span className={cn(
+                  "text-[11px] font-mono font-bold w-5 shrink-0",
+                  active ? "" : "text-muted-foreground/40"
+                )}>L{l.num}</span>
+                <div
+                  className="size-2 rounded-full shrink-0 transition-opacity"
+                  style={{ backgroundColor: active ? l.color : undefined }}
+                />
+                <div className="flex-1 min-w-0">
+                  <span className={cn("text-xs font-semibold", active ? "text-foreground" : "text-muted-foreground/60")}>
+                    {l.name}
+                  </span>
+                  <span className={cn("text-[10px] ml-2", active ? "text-muted-foreground" : "text-muted-foreground/30")}>
+                    {l.protocols}
+                  </span>
+                </div>
+                {l.headerSize > 0 && (
+                  <span className={cn(
+                    "text-[10px] font-mono shrink-0 px-1.5 py-0.5 rounded",
+                    active ? "bg-black/20 text-foreground" : "text-muted-foreground/20"
+                  )}>
+                    +{l.headerSize}B
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        return (
-          <div
-            key={layer.num}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-lg border transition-all duration-300",
-              isActive
-                ? osiActiveStyles[layer.color]
-                : isPassed
-                ? osiPassedStyles[layer.color]
-                : "bg-muted/10 border-border/30"
-            )}
-            style={isActive ? { borderColor: osiBorderColorVars[layer.color] } : {}}
-          >
-            <span className={cn(
-              "text-xs font-mono font-bold w-5 shrink-0",
-              isActive ? "text-foreground" : "text-muted-foreground/50"
-            )}>
-              {layer.num}
-            </span>
-            <div className={cn(
-              "size-2 rounded-full shrink-0 transition-all",
-              isActive ? osiDotActiveStyles[layer.color] : isPassed ? osiDotPassedStyles[layer.color] : "bg-muted-foreground/20"
-            )} />
-            <div className="flex-1 min-w-0">
-              <span className={cn(
-                "text-xs font-semibold",
-                isActive ? "text-foreground" : "text-muted-foreground/60"
-              )}>
-                {layer.name}
-              </span>
-              <span className={cn(
-                "text-[10px] ml-2 transition-opacity",
-                isActive ? "text-muted-foreground" : "text-muted-foreground/30"
-              )}>
-                {layer.protocol}
-              </span>
-            </div>
-            {isActive && (
-              <span className="text-[10px] text-muted-foreground italic shrink-0 hidden sm:block">
-                {layer.desc}
-              </span>
-            )}
+        {/* Detail panel */}
+        <div className="space-y-3">
+          {/* Flow diagram showing this layer */}
+          <div className="rounded-lg border border-border/30 overflow-hidden" style={{ minHeight: 160 }}>
+            <FlowDiagram nodes={nodes} edges={edges} interactive={false} allowDrag={false} minHeight={155} />
           </div>
-        );
-      })}
-      <p className="text-[10px] text-muted-foreground text-center pt-1">
-        {direction === "down"
-          ? "Each layer adds its header (encapsulation). Data grows larger as it descends."
-          : "Each layer strips its header (decapsulation). Data shrinks as it ascends."}
-      </p>
+
+          {/* Layer info */}
+          <div className={cn("rounded-lg border p-3 space-y-2 ring-1", ringStyle)}>
+            <div className="flex items-center gap-2">
+              <div className="size-2 rounded-full shrink-0" style={{ backgroundColor: layer.color }} />
+              <h4 className="text-sm font-semibold text-foreground">
+                Layer {layer.num}: {layer.name}
+              </h4>
+              {cumulativeOverhead[sel] > 0 && (
+                <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+                  total overhead: +{cumulativeOverhead[sel]}B
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{layer.desc}</p>
+            <div className="bg-black/20 rounded-md p-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">Packet at this layer</p>
+              <pre className="text-[11px] font-mono text-foreground/80 whitespace-pre-wrap">{layer.example}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function PacketEncapsulation() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 6), 1200);
-    return () => clearInterval(t);
-  }, []);
+// --- TCP vs UDP Playground ---
 
-  const layers = [
-    { name: "Data", header: "", color: "bg-purple-500/30 border-purple-500/30", size: 40 },
-    { name: "TCP Header", header: "Src:49152 Dst:443 Seq:1", color: "bg-cyan-500/30 border-cyan-500/30", size: 20 },
-    { name: "IP Header", header: "Src:192.168.1.5 Dst:93.184.216.34", color: "bg-green-500/30 border-green-500/30", size: 20 },
-    { name: "Ethernet", header: "MAC: aa:bb:cc:dd:ee:ff", color: "bg-yellow-500/30 border-yellow-500/30", size: 14 },
-    { name: "Preamble", header: "10101010...", color: "bg-red-500/30 border-red-500/30", size: 8 },
-  ];
+function TCPvsUDPPlayground() {
+  const [mode, setMode] = useState<ProtocolMode>("tcp");
+  const steps = mode === "tcp" ? tcpSteps : udpSteps;
+  const sim = useSimulation({ intervalMs: 900, maxSteps: steps.length });
 
-  const visibleLayers = Math.min(tick + 1, layers.length);
+  const handleSwitch = (m: ProtocolMode) => { setMode(m); sim.reset(); };
+
+  const tcpColor = "#3b82f6";
+  const udpColor = "#22c55e";
+  const activeColor = mode === "tcp" ? tcpColor : udpColor;
+
+  const nodes: FlowNode[] = useMemo(() => [
+    {
+      id: "client",
+      type: "clientNode",
+      position: { x: 40, y: 80 },
+      data: {
+        label: "Client",
+        sublabel: mode === "tcp" ? "TCP sender" : "UDP sender",
+        status: sim.tick > 0 ? "healthy" : "idle",
+        handles: { right: true },
+      },
+    },
+    {
+      id: "server",
+      type: "serverNode",
+      position: { x: 390, y: 80 },
+      data: {
+        label: "Server",
+        sublabel: mode === "tcp" ? "reliable recv" : "best-effort recv",
+        status: sim.tick >= (mode === "tcp" ? 3 : 1) ? "healthy" : "idle",
+        handles: { left: true },
+      },
+    },
+  ], [sim.tick, mode]);
+
+  const edges: FlowEdge[] = useMemo(() => {
+    if (sim.tick === 0) return [];
+    const currentStep = steps[sim.tick - 1];
+    if (!currentStep) return [];
+    const isLost = mode === "udp" && sim.tick === 3;
+    const toServer = currentStep.dir === "toServer";
+    return [{
+      id: "flow",
+      source: toServer ? "client" : "server",
+      target: toServer ? "server" : "client",
+      animated: !isLost,
+      style: {
+        stroke: isLost ? "#ef4444" : activeColor,
+        strokeWidth: 2,
+        strokeDasharray: isLost ? "6 4" : undefined,
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: isLost ? "#ef4444" : activeColor },
+      label: isLost ? "LOST!" : currentStep.label,
+      labelStyle: { fontSize: 11, fill: isLost ? "#ef4444" : "#a1a1aa" },
+      labelBgStyle: { fill: "transparent" },
+    }];
+  }, [sim.tick, mode, steps, activeColor]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-center">
-        <div className="flex items-stretch h-12 rounded-lg overflow-hidden border border-border/50">
-          {layers.slice(0, visibleLayers).reverse().map((layer, i) => (
-            <div
-              key={layer.name}
+    <Playground
+      title="TCP vs UDP — Handshake Visualiser"
+      simulation={sim}
+      canvasHeight="min-h-[260px]"
+      canvas={
+        <div className="h-full flex flex-col">
+          <div className="flex gap-1 p-2 border-b border-violet-500/10">
+            <button
+              onClick={() => handleSwitch("tcp")}
               className={cn(
-                "flex items-center justify-center px-2 border-r border-border/30 transition-all duration-500",
-                layer.color,
-                i === 0 && tick < 5 ? "animate-pulse" : ""
+                "px-4 py-1.5 rounded text-xs font-semibold transition-all",
+                mode === "tcp"
+                  ? "bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/40"
+                  : "text-muted-foreground hover:bg-muted/30"
               )}
-              style={{ minWidth: `${layer.size * 1.5}px` }}
             >
-              <div className="text-center">
-                <div className="text-[9px] font-semibold whitespace-nowrap">{layer.name}</div>
-                <div className="text-[7px] text-muted-foreground font-mono whitespace-nowrap hidden sm:block">
-                  {layer.header}
-                </div>
-              </div>
-            </div>
-          ))}
+              TCP — Reliable
+            </button>
+            <button
+              onClick={() => handleSwitch("udp")}
+              className={cn(
+                "px-4 py-1.5 rounded text-xs font-semibold transition-all",
+                mode === "udp"
+                  ? "bg-green-500/20 text-green-400 ring-1 ring-green-500/40"
+                  : "text-muted-foreground hover:bg-muted/30"
+              )}
+            >
+              UDP — Fast
+            </button>
+          </div>
+          <div className="flex-1">
+            <FlowDiagram nodes={nodes} edges={edges} interactive={false} allowDrag={false} minHeight={210} />
+          </div>
         </div>
-      </div>
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-        <span>Outer headers (added last)</span>
-        <span>
-          Total: ~{layers.slice(0, visibleLayers).reduce((a, l) => a + l.size, 0) + 1460} bytes
-          ({Math.round(((layers.slice(0, visibleLayers).reduce((a, l) => a + l.size, 0)) / (layers.slice(0, visibleLayers).reduce((a, l) => a + l.size, 0) + 1460)) * 100)}% overhead)
-        </span>
-        <span>Inner data (original payload)</span>
-      </div>
-      <p className="text-[10px] text-muted-foreground text-center">
-        {tick === 0 ? "Starting with application data (your HTTP request)..." :
-         tick === 1 ? "Transport layer adds TCP header: ports, sequence numbers..." :
-         tick === 2 ? "Network layer adds IP header: source and destination addresses..." :
-         tick === 3 ? "Data Link layer adds Ethernet frame: MAC addresses..." :
-         tick === 4 ? "Physical layer adds preamble for signal synchronization..." :
-         "Complete frame ready to send on the wire. Each layer wraps the previous one."}
+      }
+      explanation={(state) => (
+        <div className="space-y-3">
+          <div>
+            <h4 className={cn("text-sm font-semibold", mode === "tcp" ? "text-blue-400" : "text-green-400")}>
+              {mode === "tcp" ? "TCP — 3-way handshake" : "UDP — fire and forget"}
+            </h4>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {mode === "tcp"
+                ? "Every segment is acknowledged. Lost packets are retransmitted."
+                : "No connection, no ACKs. Datagrams may arrive out of order or not at all."}
+            </p>
+          </div>
+          <div className="space-y-1">
+            {steps.map((s, i) => {
+              const done = i < state.tick;
+              const current = i === state.tick - 1;
+              const lost = mode === "udp" && i === 2;
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-1 rounded text-xs transition-all",
+                    lost && done
+                      ? "bg-red-500/10 text-red-400"
+                      : done
+                      ? "bg-emerald-500/10 text-foreground"
+                      : current
+                      ? "bg-violet-500/10 text-foreground animate-pulse"
+                      : "text-muted-foreground/30"
+                  )}
+                >
+                  <span className="font-mono text-[10px] w-4 text-right shrink-0">{i + 1}.</span>
+                  <span className="flex-1">{s.label}</span>
+                  {s.note && done && (
+                    <span className="text-[10px] text-muted-foreground shrink-0">{s.note}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {state.tick >= steps.length && (
+            <p className={cn("text-xs font-medium", mode === "tcp" ? "text-blue-400" : "text-green-400")}>
+              {mode === "tcp"
+                ? "Reliable connection complete. 7 messages, every byte guaranteed."
+                : "Done. Fast! But datagram 3 was dropped and never retransmitted."}
+            </p>
+          )}
+        </div>
+      )}
+    />
+  );
+}
+
+// --- Port Lookup ---
+
+function PortLookup() {
+  const [input, setInput] = useState("");
+  const port = parseInt(input, 10);
+  const match = !isNaN(port) ? portDatabase[port] : null;
+  const quickPorts = [22, 53, 80, 443, 3000, 5432, 6379, 8080, 9092, 27017];
+
+  const portRangeLabel = !isNaN(port) && input
+    ? port <= 1023 ? "Well-Known" : port <= 49151 ? "Registered" : "Ephemeral"
+    : null;
+
+  const portRangeStyle = portRangeLabel === "Well-Known"
+    ? "bg-red-500/10 text-red-400 border-red-500/20"
+    : portRangeLabel === "Registered"
+    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+    : "bg-green-500/10 text-green-400 border-green-500/20";
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Type any port number or click a common one to identify what service runs there.
       </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value.replace(/\D/g, "").slice(0, 5))}
+          placeholder="e.g. 443"
+          className="w-40 px-3 py-2 rounded-lg border border-border/50 bg-muted/20 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+        />
+        {portRangeLabel && (
+          <span className={cn("text-xs font-mono px-2 py-1 rounded border", portRangeStyle)}>
+            {portRangeLabel}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {quickPorts.map((p) => (
+          <button
+            key={p}
+            onClick={() => setInput(String(p))}
+            className={cn(
+              "px-2 py-1 rounded text-xs font-mono border transition-colors",
+              port === p
+                ? "bg-violet-500/20 border-violet-500/30 text-violet-400"
+                : "bg-muted/20 border-border/30 text-muted-foreground hover:bg-muted/40"
+            )}
+          >
+            :{p}
+          </button>
+        ))}
+      </div>
+
+      {input && !isNaN(port) && (
+        <div className={cn(
+          "rounded-lg border p-4",
+          match
+            ? catBadge[match.cat].includes("blue")
+              ? "bg-blue-500/5 border-blue-500/20"
+              : match.cat === "DB"
+              ? "bg-amber-500/5 border-amber-500/20"
+              : match.cat === "Infra"
+              ? "bg-emerald-500/5 border-emerald-500/20"
+              : "bg-purple-500/5 border-purple-500/20"
+            : "bg-muted/20 border-border/30"
+        )}>
+          {match ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xl font-mono font-bold text-foreground">:{port}</span>
+                <span className={cn("text-sm font-semibold px-2 py-0.5 rounded border", catBadge[match.cat])}>
+                  {match.name}
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground">
+                  {match.proto}
+                </span>
+                <span className={cn("text-[10px] font-mono px-1.5 py-0.5 rounded border ml-auto", catBadge[match.cat])}>
+                  {match.cat}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">{match.desc}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {port < 0 || port > 65535
+                ? "Invalid — ports range from 0 to 65535."
+                : `Port ${port} has no well-known registered service.`}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function TCPvsUDPComparison() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((s) => (s + 1) % 20), 400);
-    return () => clearInterval(t);
-  }, []);
+// --- DNS Resolution Flow ---
 
-  const tcpPackets = [1, 2, 3, 4, 5];
-  const udpPackets = [1, 2, null, 4, 5]; // packet 3 lost
-  const tcpActive = Math.min(Math.floor(tick / 2), 6);
-  const udpActive = Math.min(Math.floor(tick / 1.5), 6);
+const dnsEdgeDefs: [number, string, string, string, string][] = [
+  [1, "browser",  "resolver", "Who is example.com?", "#3b82f6"],
+  [2, "resolver", "root",     "Ask root for .com",   "#22c55e"],
+  [3, "root",     "auth",     "Auth NS address",     "#a855f7"],
+  [4, "auth",     "browser",  "93.184.216.34",       "#f59e0b"],
+  [5, "browser",  "server",   "TCP connect!",        "#06b6d4"],
+];
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* TCP side */}
-      <div className="rounded-lg border p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-blue-500" />
-          <span className="text-xs font-semibold text-blue-400">TCP</span>
-          <span className="text-[10px] text-muted-foreground">Reliable, ordered</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {tcpPackets.map((p, i) => (
-            <div key={i} className="flex flex-col items-center gap-1">
-              <div
-                className={cn(
-                  "size-8 rounded border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
-                  i < tcpActive
-                    ? "bg-blue-500/20 border-blue-500/30 text-blue-400"
-                    : "bg-muted/20 border-border/50 text-muted-foreground/30"
-                )}
-              >
-                {p}
-              </div>
-              {i < tcpActive && (
-                <span className="text-[8px] text-emerald-400">ACK</span>
-              )}
-            </div>
-          ))}
-          {tcpActive >= 5 && (
-            <div className="text-[10px] text-emerald-400 font-mono ml-2">All delivered &#10003;</div>
-          )}
-        </div>
-        <div className="text-[10px] text-muted-foreground space-y-0.5">
-          <p>&#10003; Handshake before sending</p>
-          <p>&#10003; Every packet acknowledged</p>
-          <p>&#10003; Lost packets retransmitted</p>
-          <p>&#10003; Packets reassembled in order</p>
-        </div>
-        <div className="bg-muted/30 rounded p-2">
-          <p className="text-[10px] font-semibold mb-0.5">Use cases:</p>
-          <p className="text-[10px] text-muted-foreground">HTTP/HTTPS, database connections, file transfers, email (SMTP), SSH</p>
-        </div>
-      </div>
+const dnsSteps = [
+  "Press play to trace a DNS lookup...",
+  "Browser asks its resolver: who is example.com?",
+  "Resolver queries a root nameserver (.com TLD)",
+  "Root returns the authoritative NS address",
+  "Auth NS returns the real IP: 93.184.216.34",
+  "Browser opens a TCP connection to the IP!",
+];
 
-      {/* UDP side */}
-      <div className="rounded-lg border p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-green-500" />
-          <span className="text-xs font-semibold text-green-400">UDP</span>
-          <span className="text-[10px] text-muted-foreground">Fast, fire-and-forget</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {udpPackets.map((p, i) => (
-            <div key={i} className="flex flex-col items-center gap-1">
-              <div
-                className={cn(
-                  "size-8 rounded border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
-                  p === null
-                    ? i < udpActive
-                      ? "bg-red-500/20 border-red-500/30 text-red-400 line-through"
-                      : "bg-muted/20 border-border/50 text-muted-foreground/30"
-                    : i < udpActive
-                    ? "bg-green-500/20 border-green-500/30 text-green-400"
-                    : "bg-muted/20 border-border/50 text-muted-foreground/30"
-                )}
-              >
-                {p ?? "X"}
-              </div>
-              {p === null && i < udpActive && (
-                <span className="text-[8px] text-red-400">lost</span>
-              )}
-            </div>
-          ))}
-          {udpActive >= 5 && (
-            <div className="text-[10px] text-orange-400 font-mono ml-2">4/5 delivered</div>
-          )}
-        </div>
-        <div className="text-[10px] text-muted-foreground space-y-0.5">
-          <p>&#10007; No handshake (send immediately)</p>
-          <p>&#10007; No acknowledgments</p>
-          <p>&#10007; Lost packets stay lost</p>
-          <p>&#10007; No ordering guarantee</p>
-        </div>
-        <div className="bg-muted/30 rounded p-2">
-          <p className="text-[10px] font-semibold mb-0.5">Use cases:</p>
-          <p className="text-[10px] text-muted-foreground">Video streaming, online gaming, VoIP calls, DNS lookups, IoT telemetry</p>
-        </div>
-      </div>
-    </div>
+function DNSResolutionFlow() {
+  const sim = useSimulation({ intervalMs: 1000, maxSteps: 5 });
+  const s = (i: number): "healthy" | "idle" => (sim.tick > i ? "healthy" : "idle");
+
+  const nodes: FlowNode[] = useMemo(() => [
+    { id: "browser",  type: "clientNode", position: { x: 10,  y: 110 }, data: { label: "Browser",      sublabel: "example.com?",   status: s(0), handles: { right: true, bottom: true } } },
+    { id: "resolver", type: "serverNode", position: { x: 200, y: 20  }, data: { label: "DNS Resolver", sublabel: "8.8.8.8",        status: s(1), handles: { left: true, right: true } } },
+    { id: "root",     type: "serverNode", position: { x: 400, y: 20  }, data: { label: "Root NS",      sublabel: ".com TLD",       status: s(2), handles: { left: true, bottom: true } } },
+    { id: "auth",     type: "serverNode", position: { x: 400, y: 170 }, data: { label: "Auth NS",      sublabel: "example.com",    status: s(3), handles: { top: true, left: true } } },
+    { id: "server",   type: "serverNode", position: { x: 10,  y: 230 }, data: { label: "Web Server",   sublabel: "93.184.216.34",  status: s(4), handles: { top: true, right: true } } },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [sim.tick]);
+
+  const edges: FlowEdge[] = useMemo(
+    () => dnsEdgeDefs
+      .filter(([t]) => sim.tick >= t)
+      .map(([, src, tgt, label, color]) => ({
+        id: `${src}-${tgt}`, source: src, target: tgt, animated: true, label,
+        labelStyle: { fontSize: 9, fill: "#a1a1aa" }, labelBgStyle: { fill: "transparent" },
+        style: { stroke: color, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color },
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sim.tick]
   );
-}
-
-function PortDiscovery() {
-  const [hoveredPort, setHoveredPort] = useState<number | null>(null);
-
-  const portGroups = [
-    {
-      category: "Web",
-      color: "border-blue-500/30 bg-blue-500/5",
-      textColor: "text-blue-400",
-      ports: [
-        { port: 80, name: "HTTP", desc: "Unencrypted web traffic. Browsers default here." },
-        { port: 443, name: "HTTPS", desc: "Encrypted web traffic (TLS). Standard for production." },
-        { port: 8080, name: "Alt HTTP", desc: "Common for dev servers, proxies, and alt HTTP." },
-        { port: 3000, name: "Dev Server", desc: "Node.js, Next.js, React dev server default." },
-      ],
-    },
-    {
-      category: "Infrastructure",
-      color: "border-emerald-500/30 bg-emerald-500/5",
-      textColor: "text-emerald-400",
-      ports: [
-        { port: 22, name: "SSH", desc: "Secure shell. Remote server access." },
-        { port: 53, name: "DNS", desc: "Domain name resolution. Uses UDP (and TCP for large responses)." },
-        { port: 25, name: "SMTP", desc: "Email sending. Often blocked by ISPs." },
-        { port: 123, name: "NTP", desc: "Network Time Protocol. Clock synchronization." },
-      ],
-    },
-    {
-      category: "Databases",
-      color: "border-amber-500/30 bg-amber-500/5",
-      textColor: "text-amber-400",
-      ports: [
-        { port: 5432, name: "PostgreSQL", desc: "Postgres default. Most popular SQL DB." },
-        { port: 3306, name: "MySQL", desc: "MySQL/MariaDB default." },
-        { port: 27017, name: "MongoDB", desc: "MongoDB default. Document database." },
-        { port: 6379, name: "Redis", desc: "Redis default. Cache and key-value store." },
-      ],
-    },
-    {
-      category: "Messaging",
-      color: "border-purple-500/30 bg-purple-500/5",
-      textColor: "text-purple-400",
-      ports: [
-        { port: 9092, name: "Kafka", desc: "Apache Kafka broker default." },
-        { port: 5672, name: "RabbitMQ", desc: "RabbitMQ AMQP protocol." },
-        { port: 4222, name: "NATS", desc: "NATS messaging default." },
-        { port: 2181, name: "ZooKeeper", desc: "ZooKeeper coordination service." },
-      ],
-    },
-  ];
 
   return (
-    <div className="space-y-3">
-      {portGroups.map((group) => (
-        <div key={group.category}>
-          <p className={cn("text-[10px] font-semibold mb-1.5 uppercase tracking-wider", group.textColor)}>
-            {group.category}
+    <Playground
+      title="DNS Resolution — hostname to IP"
+      simulation={sim}
+      canvasHeight="min-h-[340px]"
+      canvas={<FlowDiagram nodes={nodes} edges={edges} interactive={false} allowDrag={false} minHeight={330} />}
+      explanation={
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold text-foreground">How DNS finds an IP</h4>
+          <p className="text-xs text-muted-foreground">
+            DNS is a distributed hierarchy. Your browser typically has the answer cached after the first lookup.
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            {group.ports.map((item) => (
-              <div
-                key={item.port}
-                className={cn(
-                  "p-2 rounded-lg border text-center transition-all cursor-default",
-                  hoveredPort === item.port ? group.color + " ring-1 ring-current/20" : "bg-muted/20 border-border/30"
-                )}
-                onMouseEnter={() => setHoveredPort(item.port)}
-                onMouseLeave={() => setHoveredPort(null)}
-              >
-                <div className={cn(
-                  "font-mono text-sm font-bold transition-colors",
-                  hoveredPort === item.port ? group.textColor : "text-muted-foreground/60"
-                )}>
-                  {item.port}
-                </div>
-                <div className="text-[10px] font-medium mt-0.5">{item.name}</div>
-                {hoveredPort === item.port && (
-                  <div className="text-[9px] text-muted-foreground mt-1">{item.desc}</div>
-                )}
+          <div className="space-y-1">
+            {dnsSteps.map((label, i) => (
+              <div key={i} className={cn(
+                "text-xs px-2 py-1 rounded transition-all",
+                i > 0 && i <= sim.tick ? "bg-emerald-500/10 text-foreground"
+                  : i === 0 && sim.tick === 0 ? "text-muted-foreground"
+                  : "text-muted-foreground/30"
+              )}>
+                {i === 0 ? label : `${i}. ${label}`}
               </div>
             ))}
           </div>
+          {sim.tick >= 5 && (
+            <p className="text-xs text-emerald-400 font-medium">
+              DNS resolved! The result is cached so subsequent lookups skip steps 2-4.
+            </p>
+          )}
         </div>
-      ))}
-      <p className="text-[10px] text-muted-foreground">
-        Ports 0-1023 are &quot;well-known&quot; and require root/admin privileges. Ports 1024-49151
-        are &quot;registered&quot; for specific services. Ports 49152-65535 are &quot;ephemeral&quot;
-        and used for outgoing connections.
-      </p>
-    </div>
+      }
+    />
   );
 }
+
+// --- Main Page ---
 
 export default function NetworkingBasicsPage() {
   return (
     <div className="space-y-8">
       <TopicHero
         title="Networking Basics"
-        subtitle="Every distributed system is a collection of machines talking over a network. If you don't understand the network, you're building on a foundation you can't see."
+        subtitle="Every distributed system is machines talking over a network. If you don't understand the network, you're building on a foundation you can't see."
         difficulty="beginner"
       />
 
-      <FailureScenario title="Two services can't talk to each other">
-        <p className="text-sm text-muted-foreground">
-          You deploy a new microservice. It needs to call another service in your cluster.
-          You configure the URL, deploy, and... connection refused. No route to host. Connection
-          timed out. You try a different port. Same thing. You SSH into the machine and can
-          ping the other service just fine. But your app still cannot connect.
-        </p>
-        <div className="flex items-center justify-center gap-6 py-4">
-          <ServerNode type="server" label="Auth Service" sublabel="Port 3000" status="healthy" />
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-red-500 text-2xl">&#10005;</span>
-            <span className="text-xs text-red-500 font-mono">ECONNREFUSED</span>
-          </div>
-          <ServerNode type="server" label="User Service" sublabel="Port 8080" status="warning" />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          After an hour of debugging, you discover the problem: the Auth Service is listening on
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">127.0.0.1:3000</code> (localhost only) instead of
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">0.0.0.0:3000</code> (all interfaces). Or a firewall
-          rule is blocking port 3000. Or the service is using TCP but the other expects UDP.
-          Without networking fundamentals, every failure looks the same: &quot;it doesn&apos;t work.&quot;
-        </p>
-      </FailureScenario>
-
-      <WhyItBreaks title="Networking has layers, and failures can happen at any of them">
-        <p className="text-sm text-muted-foreground">
-          Networks are not magic pipes. They are stacks of protocols, each solving a different
-          problem. When two machines fail to communicate, the problem could be at any layer:
-          a DNS misconfiguration, a firewall blocking a port, an IP address conflict, a protocol
-          mismatch, or a physical cable unplugged. Debugging requires knowing which layer to check.
-        </p>
-        <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
-          <li><strong>Wrong port</strong> &mdash; the service is listening on a different port than expected</li>
-          <li><strong>Wrong interface</strong> &mdash; binding to localhost instead of all interfaces</li>
-          <li><strong>Firewall rules</strong> &mdash; ingress or egress blocked for that port/protocol</li>
-          <li><strong>Protocol mismatch</strong> &mdash; one side speaks TCP, the other expects UDP</li>
-          <li><strong>DNS not resolving</strong> &mdash; the hostname does not map to the right IP</li>
-        </ul>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="The OSI Model — Networking in Layers">
-        <p className="text-sm text-muted-foreground mb-4">
-          The OSI model divides networking into 7 layers. Watch data flow down the stack
-          (encapsulation, where each layer adds a header) and back up (decapsulation, where
-          each layer strips its header). In practice, you mostly care about layers 3 (Network),
-          4 (Transport), and 7 (Application).
-        </p>
-        <OSIStackDiagram />
+      {/* OSI Layer Explorer */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">The OSI Model — Click Each Layer</h2>
+        <OSILayerExplorer />
         <ConversationalCallout type="tip">
-          In the real world, the internet uses the TCP/IP model which collapses layers 5-7 into
-          a single &quot;Application&quot; layer. But the concept of layered protocols &mdash; each
-          layer building on the one below, each solving one problem &mdash; is fundamental to
-          understanding how networks work and where failures occur.
+          In practice the internet uses TCP/IP, which collapses layers 5-7 into a single
+          &quot;Application&quot; layer. But the 7-layer mental model is invaluable for pinpointing
+          where failures occur — is the packet even leaving the NIC, or is DNS broken?
         </ConversationalCallout>
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="Packet Encapsulation — How Data Grows as It Descends">
-        <p className="text-sm text-muted-foreground mb-4">
-          When your application sends an HTTP request, each network layer wraps the data with its
-          own header. By the time the data reaches the wire, your original payload is wrapped in
-          TCP headers, IP headers, Ethernet frames, and physical-layer preambles. This is called
-          <strong> encapsulation</strong>. The receiver reverses the process (decapsulation).
+      {/* Packet overhead chart */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">Protocol Overhead — Layer by Layer</h2>
+        <p className="text-sm text-muted-foreground">
+          Each layer wraps your data in a header. A 1460-byte payload exits the NIC as 1527 bytes.
         </p>
-        <PacketEncapsulation />
+        <LiveChart
+          type="bar"
+          data={overheadData}
+          dataKeys={{ x: "layer", y: ["payload", "headers"], label: ["Payload (1460B)", "Header overhead"] }}
+          height={230}
+          unit="B"
+          referenceLines={[{ y: 1500, label: "MTU 1500B", color: "#ef4444" }]}
+        />
         <AhaMoment
-          question="Why do we need all these headers? Isn't it wasteful?"
+          question="Why does MTU matter for system design?"
           answer={
             <p>
-              Each header serves a different purpose that no other layer handles. The IP header
-              tells routers <em>where</em> to send the packet (addressing). The TCP header tells
-              the OS <em>which application</em> gets it (port) and ensures reliable delivery
-              (sequence numbers, ACKs). The Ethernet header handles the <em>local network hop</em>.
-              Without layering, every protocol would have to reinvent addressing, reliability, and
-              routing &mdash; and changing one would break everything else.
+              The Maximum Transmission Unit for Ethernet is 1500B. Packets larger than this get
+              fragmented — split into multiple frames, each with its own headers. Fragmentation
+              increases overhead and creates additional opportunities for loss. TCP limits payload
+              size to ~1460B (MSS) to avoid it. In cloud systems, VPN or tunnel encapsulation
+              shrinks the effective MTU further, causing hard-to-debug &quot;works locally but
+              fails over VPN&quot; issues.
             </p>
           }
         />
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="TCP vs UDP — Reliability vs Speed">
-        <p className="text-sm text-muted-foreground mb-4">
-          At the Transport layer, you have a critical choice: TCP or UDP. This is not a matter of
-          preference &mdash; it depends entirely on what your application needs. TCP guarantees
-          delivery at the cost of latency. UDP is fast but packets can be lost without notice.
-          Watch both protocols handle the same 5 packets, with packet 3 lost on the network:
+      {/* TCP vs UDP */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">TCP vs UDP — See the Difference</h2>
+        <p className="text-sm text-muted-foreground">
+          Step through the handshake to feel why TCP takes more round trips but guarantees delivery.
         </p>
-        <TCPvsUDPComparison />
+        <TCPvsUDPPlayground />
         <ConversationalCallout type="question">
-          Why does video streaming use UDP instead of TCP? Because a retransmitted video frame
-          that arrives 200ms late is useless &mdash; the viewer has already moved past that moment.
-          It is better to skip the lost frame and show the next one. TCP would stall the entire
-          stream waiting for the retransmission. For real-time media, &quot;good enough now&quot;
-          beats &quot;perfect but late.&quot;
+          Why does video streaming use UDP? A retransmitted video frame that arrives 300ms late
+          is already past its display time — useless. For real-time media, &quot;close enough
+          now&quot; beats &quot;perfect but stale.&quot;
         </ConversationalCallout>
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="Port Numbers — Addressing Applications">
-        <p className="text-sm text-muted-foreground mb-4">
-          An IP address identifies a machine. A port identifies a specific application on that
-          machine. Think of the IP address as a building address and the port as an apartment
-          number. Hover over any port to see what it is used for.
-        </p>
-        <PortDiscovery />
-      </ConceptVisualizer>
+      {/* Port Lookup */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">Port Lookup — What Runs Where?</h2>
+        <PortLookup />
+        <AhaMoment
+          question="Why can't two apps share the same port?"
+          answer={
+            <p>
+              The OS uses the 4-tuple (src-IP, src-port, dst-IP, dst-port) to route incoming
+              packets to the right socket. Two processes listening on the same port would make that
+              routing ambiguous. The OS refuses it. The exception: TCP and UDP share the same
+              port number space but are separate — so one app can bind TCP:80 and another UDP:80
+              simultaneously.
+            </p>
+          }
+        />
+      </section>
 
-      <AhaMoment
-        question="Why can't two applications use the same port on the same machine?"
-        answer={
-          <p>
-            A port is like a mailbox number. When a packet arrives at an IP address, the OS
-            uses the port number to decide which application gets it. If two apps claim the
-            same port, the OS would not know where to deliver the packet. This is why you get
-            &quot;port already in use&quot; errors &mdash; another process has already claimed that
-            mailbox. However, the combination of (protocol, IP, port) must be unique &mdash; two
-            apps <em>can</em> share a port if one uses TCP and the other uses UDP.
-          </p>
-        }
-      />
+      {/* DNS Resolution */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">DNS Resolution — Hostname to IP</h2>
+        <DNSResolutionFlow />
+        <ConversationalCallout type="warning">
+          DNS failures are silent in many apps. A misconfigured DNS TTL that&apos;s too long means
+          clients cache stale IPs during deployments. Too short and you hammer nameservers.
+          Common prod gotcha: servers can&apos;t reach each other by hostname because internal DNS
+          isn&apos;t configured in the container network.
+        </ConversationalCallout>
+      </section>
 
-      <ConceptVisualizer title="IP Addresses — Finding Machines on a Network">
-        <p className="text-sm text-muted-foreground mb-4">
-          Every device on a network gets an IP address. IPv4 addresses look like
-          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">192.168.1.42</code> &mdash;
-          four numbers between 0 and 255. Some ranges are special:
-        </p>
+      {/* IP Address reference */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">IP Addresses — The Ones That Trip You Up</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3">
-            <p className="text-xs font-semibold text-blue-400">127.0.0.1</p>
-            <p className="text-[10px] font-medium mt-0.5">Localhost (loopback)</p>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Always refers to the current machine. Traffic never leaves the host.
-              Used for local development and inter-process communication.
-            </p>
-          </div>
-          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
-            <p className="text-xs font-semibold text-green-400">192.168.x.x / 10.x.x.x</p>
-            <p className="text-[10px] font-medium mt-0.5">Private IPs</p>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Used inside local networks (home, office, VPC). Not routable on the
-              public internet. NAT translates them to public IPs at the gateway.
-            </p>
-          </div>
-          <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
-            <p className="text-xs font-semibold text-purple-400">0.0.0.0</p>
-            <p className="text-[10px] font-medium mt-0.5">All interfaces</p>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              When a server binds to this, it accepts connections from any network
-              interface. Essential for containers and cloud deployments.
-            </p>
-          </div>
+          {[
+            { ip: "127.0.0.1",             label: "Loopback (localhost)",   note: "Traffic never leaves the host. Bind here and nothing external can reach your service.",           cls: "bg-blue-500/5 border-blue-500/20",    text: "text-blue-400" },
+            { ip: "192.168.x.x / 10.x.x.x", label: "Private (RFC 1918)",   note: "Not routable on the public internet. NAT at the gateway translates to a public IP.",             cls: "bg-emerald-500/5 border-emerald-500/20", text: "text-emerald-400" },
+            { ip: "0.0.0.0",               label: "All interfaces",          note: "Accepts on every NIC. Mandatory in containers and cloud VMs to receive external traffic.",       cls: "bg-purple-500/5 border-purple-500/20", text: "text-purple-400" },
+          ].map(({ ip, label, note, cls, text }) => (
+            <div key={ip} className={cn("border rounded-lg p-3 space-y-1", cls)}>
+              <p className={cn("text-xs font-semibold font-mono", text)}>{ip}</p>
+              <p className="text-[11px] font-medium text-foreground">{label}</p>
+              <p className="text-[11px] text-muted-foreground">{note}</p>
+            </div>
+          ))}
         </div>
-        <BeforeAfter
-          before={{
-            title: "IPv4 (32-bit)",
-            content: (
-              <div className="text-sm space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  4.3 billion addresses. We ran out in 2011. NAT buys time by sharing IPs.
-                </p>
-                <p className="text-[10px] font-mono text-muted-foreground">192.168.1.42</p>
-              </div>
-            ),
-          }}
-          after={{
-            title: "IPv6 (128-bit)",
-            content: (
-              <div className="text-sm space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  340 undecillion addresses. Enough for every grain of sand. Adoption is gradual.
-                </p>
-                <p className="text-[10px] font-mono text-muted-foreground">2001:0db8:85a3::8a2e:0370:7334</p>
-              </div>
-            ),
-          }}
-        />
-      </ConceptVisualizer>
+      </section>
 
-      <CorrectApproach title="Debugging Network Issues Systematically">
-        <p className="text-sm text-muted-foreground mb-4">
-          When two services cannot communicate, work through the layers from bottom to top.
-          Each tool checks a specific layer of the stack. This sequence eliminates possibilities
-          methodically.
-        </p>
-        <AnimatedFlow
-          steps={[
-            { id: "dns", label: "nslookup / dig", description: "Can the hostname resolve to an IP? (DNS, Layer 7)" },
-            { id: "ping", label: "ping", description: "Can I reach the machine at all? (ICMP, Layer 3)" },
-            { id: "telnet", label: "telnet / nc", description: "Is the specific port open and accepting connections? (Layer 4)" },
-            { id: "curl", label: "curl -v", description: "Does the HTTP endpoint respond correctly? (Layer 7)" },
-            { id: "logs", label: "Application Logs", description: "What does the application itself report?" },
-          ]}
-          interval={2000}
-        />
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <MetricCounter label="Packet Loss" value={0} unit="%" trend="down" />
-          <MetricCounter label="Round Trip" value={1.2} unit="ms" trend="down" />
-          <MetricCounter label="Open Ports" value={3} trend="neutral" />
-          <MetricCounter label="Active Connections" value={247} trend="neutral" />
+      {/* Debug cheatsheet */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-foreground">Debugging Network Issues — Layer by Layer</h2>
+        <p className="text-sm text-muted-foreground">Work from the bottom up. Each tool validates a different layer.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {[
+            { tool: "nslookup", layer: "DNS (L7)", desc: "Does the name resolve?" },
+            { tool: "ping",     layer: "ICMP (L3)", desc: "Is the host reachable?" },
+            { tool: "telnet",   layer: "TCP (L4)",  desc: "Is the port open?" },
+            { tool: "curl -v",  layer: "HTTP (L7)", desc: "Does the endpoint respond?" },
+            { tool: "logs",     layer: "App",       desc: "What is the app saying?" },
+          ].map((item) => (
+            <div key={item.tool} className="bg-muted/20 border border-border/30 rounded-lg p-3 text-center space-y-1">
+              <div className="text-xs font-mono font-bold text-foreground">{item.tool}</div>
+              <div className="text-[10px] text-violet-400">{item.layer}</div>
+              <div className="text-[10px] text-muted-foreground">{item.desc}</div>
+            </div>
+          ))}
         </div>
         <ConversationalCallout type="warning">
-          A common gotcha: <code className="text-xs bg-muted px-1 rounded">ping</code> uses ICMP, not TCP.
-          A server can be reachable via ping but still refuse TCP connections on a specific port.
-          Many cloud firewalls block ICMP entirely, so <code className="text-xs bg-muted px-1 rounded">ping</code> failing
-          does not necessarily mean the host is down. Always test the specific port and protocol
-          your application uses with <code className="text-xs bg-muted px-1 rounded">telnet</code> or
-          <code className="text-xs bg-muted px-1 rounded"> nc</code>.
+          <code className="text-xs bg-muted px-1 rounded">ping</code> uses ICMP, not TCP.
+          A host can be pingable but refuse TCP connections on every port. Cloud firewalls often
+          block ICMP entirely — so a failed ping doesn&apos;t mean the host is down. Always test
+          the exact port and protocol your application uses.
         </ConversationalCallout>
-      </CorrectApproach>
-
-      <InteractiveDemo title="Trace a Request Through the Network Stack">
-        {({ isPlaying, tick }) => {
-          const layers = [
-            { name: "Application", action: "HTTP GET /api/users", header: "+0 bytes", color: "bg-purple-500/20 border-purple-500/30" },
-            { name: "Transport", action: "TCP segment, src:49152 dst:443, seq:1", header: "+20 bytes", color: "bg-cyan-500/20 border-cyan-500/30" },
-            { name: "Network", action: "IP packet, 192.168.1.5 → 93.184.216.34, TTL:64", header: "+20 bytes", color: "bg-green-500/20 border-green-500/30" },
-            { name: "Data Link", action: "Ethernet frame, MAC aa:bb → cc:dd, CRC check", header: "+14 bytes", color: "bg-yellow-500/20 border-yellow-500/30" },
-            { name: "Physical", action: "Electrical signals: 10110011010...", header: "+8 bytes", color: "bg-red-500/20 border-red-500/30" },
-          ];
-          const activeLayer = isPlaying ? tick % (layers.length + 1) : -1;
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to watch an HTTP request flow down the network stack. Each layer adds
-                its own header (encapsulation), growing the packet before it hits the wire.
-              </p>
-              <div className="space-y-2">
-                {layers.map((layer, i) => (
-                  <div
-                    key={layer.name}
-                    className={cn(
-                      "flex items-center justify-between p-3 rounded-lg border transition-all duration-500",
-                      i <= activeLayer ? layer.color : "bg-muted/30 border-muted"
-                    )}
-                    style={{ marginLeft: `${i * 10}px`, marginRight: `${i * 10}px` }}
-                  >
-                    <span className="text-xs font-semibold">{layer.name}</span>
-                    <span className={cn(
-                      "text-[10px] font-mono",
-                      i <= activeLayer ? "text-foreground" : "text-muted-foreground/30"
-                    )}>
-                      {layer.action}
-                    </span>
-                    <span className={cn(
-                      "text-[9px] font-mono",
-                      i <= activeLayer ? "text-muted-foreground" : "text-transparent"
-                    )}>
-                      {layer.header}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {activeLayer >= layers.length && (
-                <p className="text-xs text-emerald-400 text-center font-medium">
-                  Frame transmitted! Total overhead: 62 bytes of headers wrapping your data.
-                </p>
-              )}
-            </div>
-          );
-        }}
-      </InteractiveDemo>
-
-      <AhaMoment
-        question="Why does HTTPS use a different port (443) than HTTP (80)?"
-        answer={
-          <p>
-            Historically, it was practical: a server could run both HTTP and HTTPS on the same
-            machine without ambiguity. The port tells the server whether to expect a TLS handshake
-            before the HTTP request. Modern servers often redirect port 80 traffic to port 443,
-            but the distinction remains for backward compatibility. With HTTP/2 and ALPN (Application
-            Layer Protocol Negotiation), the port distinction is becoming less important &mdash;
-            but the convention persists.
-          </p>
-        }
-      />
+      </section>
 
       <ConversationalCallout type="tip">
-        In system design interviews, you rarely need to discuss layers 1-3. Focus on the
-        Transport layer (TCP vs UDP, ports) and the Application layer (HTTP, WebSockets, gRPC).
-        But knowing the full stack shows depth and helps when the interviewer asks &quot;what
-        could go wrong?&quot; or &quot;why is this slow?&quot; Network latency, packet loss,
-        and MTU limits are all lower-layer concerns that affect application performance.
+        In system design interviews focus on Transport (TCP vs UDP, ports) and Application
+        (HTTP, WebSockets, gRPC). Knowing the full OSI stack shows depth when asked &quot;what
+        could go wrong?&quot; or &quot;why is this slow?&quot; — most candidates can&apos;t name
+        a layer below HTTP.
       </ConversationalCallout>
 
       <KeyTakeaway
         points={[
-          "The OSI model has 7 layers, but for system design you mainly care about Transport (TCP/UDP, ports) and Application (HTTP, DNS, gRPC).",
-          "Each layer adds a header during encapsulation. A ~1460-byte HTTP payload becomes ~1522 bytes on the wire after all headers.",
-          "TCP provides reliable, ordered delivery at the cost of latency (handshake + ACKs). UDP is faster but offers no guarantees. Choose based on your use case.",
-          "Ports identify applications on a machine. Know the common ones: 80 (HTTP), 443 (HTTPS), 22 (SSH), 53 (DNS), 5432 (Postgres), 6379 (Redis).",
-          "When services can't communicate, debug layer by layer: nslookup → ping → telnet → curl → app logs.",
-          "Binding to 127.0.0.1 means local-only access. Binding to 0.0.0.0 means accepting connections from any network interface. This is the most common deployment mistake.",
+          "The OSI model has 7 layers. In practice focus on L4 (TCP/UDP/ports) and L7 (HTTP/DNS/gRPC).",
+          "Each layer adds a header. A 1460B payload exits the wire as ~1527B — stay under the 1500B MTU.",
+          "TCP: reliable ordered delivery via 3-way handshake + ACKs. UDP: no handshake, no guarantees, far lower latency.",
+          "Ports identify apps on a host. Memorise: 22 SSH, 53 DNS, 80 HTTP, 443 HTTPS, 5432 Postgres, 6379 Redis.",
+          "DNS resolves hostnames through root → TLD → authoritative nameservers. Results are cached by TTL.",
+          "Bind 0.0.0.0 in containers/VMs to receive traffic. Bind 127.0.0.1 to keep a service local-only.",
+          "Debug layer by layer: nslookup → ping → telnet → curl → app logs.",
         ]}
       />
     </div>

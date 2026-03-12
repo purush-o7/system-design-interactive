@@ -1,445 +1,527 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { ServerNode } from "@/components/server-node";
-import { MetricCounter } from "@/components/metric-counter";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
-import { ScaleSimulator } from "@/components/scale-simulator";
-import { InteractiveDemo } from "@/components/interactive-demo";
+import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
+import { LiveChart } from "@/components/live-chart";
+import { Playground } from "@/components/playground";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Users, Zap, Clock, TrendingUp, Filter, Star, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Users, Zap, Star, Filter, TrendingUp, GripVertical } from "lucide-react";
 
-function FanoutViz() {
-  const [mode, setMode] = useState<"write" | "read">("write");
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 900);
-    return () => clearInterval(t);
-  }, []);
+// ─── Fanout Comparison FlowDiagram ──────────────────────────────────────────
 
-  const followers = ["Alice", "Bob", "Charlie", "Diana", "Eve", "...49,995 more"];
+function useFanoutNodes(mode: "push" | "pull", step: number) {
+  return useMemo(() => {
+    const active = (s: number): "healthy" | "idle" => (step >= s ? "healthy" : "idle");
+    const highlight = (s: number): "healthy" | "warning" | "idle" =>
+      step === s ? "warning" : step > s ? "healthy" : "idle";
 
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        <button
-          onClick={() => { setMode("write"); setStep(0); }}
-          className={cn(
-            "text-xs px-3 py-1.5 rounded-md border transition-all",
-            mode === "write"
-              ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
-              : "bg-muted/20 border-border/50 text-muted-foreground/60 hover:text-muted-foreground"
-          )}
-        >
-          Fanout-on-Write (Push)
-        </button>
-        <button
-          onClick={() => { setMode("read"); setStep(0); }}
-          className={cn(
-            "text-xs px-3 py-1.5 rounded-md border transition-all",
-            mode === "read"
-              ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-              : "bg-muted/20 border-border/50 text-muted-foreground/60 hover:text-muted-foreground"
-          )}
-        >
-          Fanout-on-Read (Pull)
-        </button>
-      </div>
+    if (mode === "push") {
+      const nodes: FlowNode[] = [
+        {
+          id: "poster", type: "clientNode",
+          position: { x: 20, y: 120 },
+          data: { label: "User Posts", sublabel: "1 new tweet", status: active(0), handles: { right: true } },
+        },
+        {
+          id: "service", type: "serverNode",
+          position: { x: 200, y: 120 },
+          data: { label: "Feed Service", sublabel: "Fanout engine", status: highlight(1), handles: { left: true, right: true } },
+        },
+        {
+          id: "queue", type: "queueNode",
+          position: { x: 400, y: 120 },
+          data: { label: "Fanout Queue", sublabel: "50K write jobs", status: highlight(2), handles: { left: true, right: true } },
+        },
+        {
+          id: "cache1", type: "cacheNode",
+          position: { x: 620, y: 30 },
+          data: { label: "Alice Cache", sublabel: step >= 3 ? "Updated" : "Waiting", status: active(3), handles: { left: true } },
+        },
+        {
+          id: "cache2", type: "cacheNode",
+          position: { x: 620, y: 120 },
+          data: { label: "Bob Cache", sublabel: step >= 4 ? "Updated" : "Waiting", status: active(4), handles: { left: true } },
+        },
+        {
+          id: "cache3", type: "cacheNode",
+          position: { x: 620, y: 210 },
+          data: { label: "...49,998 more", sublabel: step >= 5 ? "Updating..." : "Waiting", status: active(5), handles: { left: true } },
+        },
+      ];
+      const edges: FlowEdge[] = [
+        { id: "e1", source: "poster", target: "service", animated: step >= 1 },
+        { id: "e2", source: "service", target: "queue", animated: step >= 2 },
+        { id: "e3", source: "queue", target: "cache1", animated: step >= 3 },
+        { id: "e4", source: "queue", target: "cache2", animated: step >= 4 },
+        { id: "e5", source: "queue", target: "cache3", animated: step >= 5 },
+      ];
+      return { nodes, edges };
+    }
 
-      {mode === "write" ? (
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className={cn(
-              "rounded-lg border px-3 py-2 text-xs font-medium transition-all",
-              step >= 1 ? "bg-blue-500/10 border-blue-500/30 text-blue-400" : "bg-muted/20 border-border/30"
-            )}>
-              @celebrity posts &quot;Hello world!&quot;
-            </div>
-            {step >= 2 && (
-              <ArrowRight className="size-4 text-muted-foreground/30" />
-            )}
-            {step >= 2 && (
-              <div className="text-[10px] text-orange-400 font-mono animate-pulse">
-                Fanning out to 50K timelines...
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-3 gap-1.5">
-            {followers.map((f, i) => (
-              <div key={f} className={cn(
-                "rounded border px-2 py-1.5 text-[10px] font-mono transition-all duration-500",
-                step >= 3 + Math.min(i, 3)
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : "bg-muted/10 border-border/20 text-muted-foreground/30"
-              )}>
-                {f}&apos;s timeline {step >= 3 + Math.min(i, 3) ? "✓" : "..."}
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-4 text-[10px]">
-            <span className="text-orange-400 font-mono">Write cost: 50,000 operations</span>
-            <span className="text-muted-foreground">|</span>
-            <span className="text-emerald-400 font-mono">Read cost: 1 cache lookup</span>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className={cn(
-            "rounded-lg border px-3 py-2 text-xs font-medium transition-all",
-            step >= 1 ? "bg-blue-500/10 border-blue-500/30 text-blue-400" : "bg-muted/20 border-border/30"
-          )}>
-            Alice opens her feed
-          </div>
-          <div className="space-y-1.5">
-            {["@celebrity (50M followers)", "@friend1 (200 followers)", "@friend2 (80 followers)", "@news_account (5M followers)", "@colleague (50 followers)"].map((source, i) => (
-              <div key={source} className={cn(
-                "flex items-center gap-2 rounded border px-2 py-1.5 text-[10px] font-mono transition-all duration-500",
-                step >= 2 + i
-                  ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                  : "bg-muted/10 border-border/20 text-muted-foreground/30"
-              )}>
-                <span>Fetch latest from {source}</span>
-                {step >= 2 + i && <span className="text-emerald-400 ml-auto">fetched</span>}
-              </div>
-            ))}
-          </div>
-          {step >= 7 && (
-            <div className={cn(
-              "rounded border px-2 py-1.5 text-[10px] font-mono bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-            )}>
-              Merge + Sort + Rank → Display feed
-            </div>
-          )}
-          <div className="flex items-center gap-4 text-[10px]">
-            <span className="text-emerald-400 font-mono">Write cost: 1 operation</span>
-            <span className="text-muted-foreground">|</span>
-            <span className="text-orange-400 font-mono">Read cost: N fetches + merge</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    // pull mode
+    const nodes: FlowNode[] = [
+      {
+        id: "reader", type: "clientNode",
+        position: { x: 20, y: 120 },
+        data: { label: "Alice Opens Feed", sublabel: "GET /feed", status: active(0), handles: { right: true } },
+      },
+      {
+        id: "service", type: "serverNode",
+        position: { x: 220, y: 120 },
+        data: { label: "Feed Service", sublabel: "Merge engine", status: highlight(1), handles: { left: true, right: true } },
+      },
+      {
+        id: "db1", type: "databaseNode",
+        position: { x: 460, y: 20 },
+        data: { label: "@celebrity", sublabel: "50M followers", status: active(2), handles: { left: true } },
+      },
+      {
+        id: "db2", type: "databaseNode",
+        position: { x: 460, y: 120 },
+        data: { label: "@friend1", sublabel: "200 followers", status: active(3), handles: { left: true } },
+      },
+      {
+        id: "db3", type: "databaseNode",
+        position: { x: 460, y: 220 },
+        data: { label: "@colleague", sublabel: "50 followers", status: active(4), handles: { left: true } },
+      },
+    ];
+    const edges: FlowEdge[] = [
+      { id: "e1", source: "reader", target: "service", animated: step >= 1 },
+      { id: "e2", source: "service", target: "db1", animated: step >= 2 },
+      { id: "e3", source: "service", target: "db2", animated: step >= 3 },
+      { id: "e4", source: "service", target: "db3", animated: step >= 4 },
+    ];
+    return { nodes, edges };
+  }, [mode, step]);
 }
 
-function CelebrityProblemViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 10), 1000);
-    return () => clearInterval(t);
-  }, []);
+function FanoutPlayground() {
+  const [mode, setMode] = useState<"push" | "pull">("push");
+  const sim = useSimulation({ maxSteps: 6, intervalMs: 900 });
+  const { nodes, edges } = useFanoutNodes(mode, sim.step);
 
-  const users = [
-    { name: "Normal User", followers: 500, fanoutTime: "10ms", method: "push", color: "emerald" },
-    { name: "Popular User", followers: 50000, fanoutTime: "1s", method: "push", color: "blue" },
-    { name: "Celebrity", followers: 5000000, fanoutTime: "100s", method: "push → BREAKS", color: "red" },
-    { name: "Celebrity (hybrid)", followers: 5000000, fanoutTime: "1 write", method: "pull on read", color: "emerald" },
-  ];
+  const handleModeSwitch = useCallback((m: "push" | "pull") => {
+    setMode(m);
+    sim.reset();
+  }, [sim]);
 
   return (
-    <div className="space-y-3">
-      {users.map((user, i) => {
-        const isActive = step >= i * 2;
-        const isCurrent = step >= i * 2 && step < (i + 1) * 2;
+    <Playground
+      title="Fanout-on-Write vs Fanout-on-Read"
+      simulation={sim}
+      canvas={
+        <div className="h-full flex flex-col">
+          <div className="flex gap-2 p-3 border-b border-violet-500/10">
+            <button
+              onClick={() => handleModeSwitch("push")}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-md border transition-all",
+                mode === "push"
+                  ? "bg-orange-500/10 border-orange-500/30 text-orange-400"
+                  : "bg-muted/20 border-border/50 text-muted-foreground/60 hover:text-muted-foreground"
+              )}
+            >
+              Push (Fan-out-on-Write)
+            </button>
+            <button
+              onClick={() => handleModeSwitch("pull")}
+              className={cn(
+                "text-xs px-3 py-1.5 rounded-md border transition-all",
+                mode === "pull"
+                  ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                  : "bg-muted/20 border-border/50 text-muted-foreground/60 hover:text-muted-foreground"
+              )}
+            >
+              Pull (Fan-out-on-Read)
+            </button>
+          </div>
+          <div className="flex-1">
+            <FlowDiagram nodes={nodes} edges={edges} minHeight={280} />
+          </div>
+        </div>
+      }
+      explanation={(state) => {
+        if (mode === "push") {
+          const explanations = [
+            "A user publishes a new tweet. The system must deliver it to all followers.",
+            "The Feed Service receives the post and begins the fanout process.",
+            "The post is queued for async delivery to every follower's timeline cache.",
+            "Alice's cached timeline is updated with the new post.",
+            "Bob's cached timeline is updated next.",
+            "The remaining 49,998 followers are being updated one by one. This takes time.",
+            "All done! Write cost: 50,000 cache operations. But reads are instant - just one cache lookup per user.",
+          ];
+          return (
+            <div className="space-y-3">
+              <p>{explanations[Math.min(state.step, explanations.length - 1)]}</p>
+              <div className="space-y-1 text-xs font-mono">
+                <p className="text-orange-400">Write cost: O(followers) = 50,000 ops</p>
+                <p className="text-emerald-400">Read cost: O(1) = 1 cache lookup</p>
+              </div>
+            </div>
+          );
+        }
+        const explanations = [
+          "Alice opens her feed. Nothing is precomputed - the system must assemble it now.",
+          "The Feed Service starts pulling recent posts from every account Alice follows.",
+          "Fetching latest posts from @celebrity (50M followers, but that does not affect us).",
+          "Fetching latest posts from @friend1.",
+          "Fetching latest posts from @colleague. All fetches run in parallel in practice.",
+          "All sources fetched. Now merge, sort by time, rank, and return the feed.",
+        ];
         return (
-          <div key={user.name} className={cn(
-            "flex items-center gap-3 rounded-lg border p-3 transition-all duration-500",
-            isCurrent
-              ? user.color === "red"
-                ? "bg-red-500/10 border-red-500/30 ring-1 ring-red-500/20"
-                : user.color === "emerald"
-                ? "bg-emerald-500/10 border-emerald-500/30 ring-1 ring-emerald-500/20"
-                : "bg-blue-500/10 border-blue-500/30 ring-1 ring-blue-500/20"
-              : isActive
-              ? "bg-muted/20 border-border/30"
-              : "bg-muted/10 border-border/20"
-          )}>
-            <div className="w-28">
-              <p className="text-xs font-semibold">{user.name}</p>
-              <p className="text-[10px] text-muted-foreground">{user.followers.toLocaleString()} followers</p>
-            </div>
-            <div className="flex-1">
-              <div
-                className={cn(
-                  "h-4 rounded-full transition-all duration-700",
-                  user.color === "red" ? "bg-red-500/30" :
-                  user.color === "emerald" ? "bg-emerald-500/30" :
-                  "bg-blue-500/30"
-                )}
-                style={{
-                  width: isActive
-                    ? user.name === "Celebrity (hybrid)" ? "2%" : `${Math.min(100, (user.followers / 5000000) * 100)}%`
-                    : "0%",
-                }}
-              />
-            </div>
-            <div className="w-20 text-right">
-              <p className={cn(
-                "text-[10px] font-mono",
-                user.color === "red" ? "text-red-400" :
-                user.color === "emerald" ? "text-emerald-400" :
-                "text-blue-400"
-              )}>
-                {user.fanoutTime}
-              </p>
-              <p className="text-[9px] text-muted-foreground">{user.method}</p>
+          <div className="space-y-3">
+            <p>{explanations[Math.min(state.step, explanations.length - 1)]}</p>
+            <div className="space-y-1 text-xs font-mono">
+              <p className="text-emerald-400">Write cost: O(1) = 1 database insert</p>
+              <p className="text-orange-400">Read cost: O(followees) = N fetches + merge</p>
             </div>
           </div>
         );
-      })}
-      <p className="text-[11px] text-muted-foreground/60">
-        The bar represents relative fanout cost. Notice how the hybrid approach for celebrities (last row)
-        has the same cost as a normal user — because it does not fan out at all.
-      </p>
-    </div>
+      }}
+    />
   );
 }
 
-function RankingPipelineViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 1200);
-    return () => clearInterval(t);
-  }, []);
+// ─── Celebrity Problem Demo ─────────────────────────────────────────────────
 
-  const stages = [
-    {
-      label: "Candidate Retrieval",
-      desc: "Pull 500 posts from push cache + celebrity pull",
-      count: 500,
-      icon: <Filter className="size-3.5" />,
-    },
-    {
-      label: "First-Pass Ranking",
-      desc: "Lightweight model filters to top 200",
-      count: 200,
-      icon: <TrendingUp className="size-3.5" />,
-    },
-    {
-      label: "Feature Enrichment",
-      desc: "Add engagement signals, social graph, content type",
-      count: 200,
-      icon: <Star className="size-3.5" />,
-    },
-    {
-      label: "Deep Ranking",
-      desc: "Heavy ML model scores P(engagement) for each post",
-      count: 200,
-      icon: <Zap className="size-3.5" />,
-    },
-    {
-      label: "Diversity & Dedup",
-      desc: "Avoid 5 posts from same author, remove near-dupes",
-      count: 50,
-      icon: <Users className="size-3.5" />,
-    },
-    {
-      label: "Final Feed",
-      desc: "Top 50 posts, ordered by score, ready to render",
-      count: 50,
-      icon: <CheckCircle2 className="size-3.5" />,
-    },
-  ];
+const CELEBRITY_DATA = [
+  { user: "Normal (500)", followers: 500, time: 0.01, strategy: "Push" },
+  { user: "Popular (50K)", followers: 50000, time: 1, strategy: "Push" },
+  { user: "Celebrity (5M)", followers: 5000000, time: 100, strategy: "Push" },
+  { user: "Mega-star (50M)", followers: 50000000, time: 1000, strategy: "Push" },
+];
 
-  return (
-    <div className="space-y-2">
-      {stages.map((stage, i) => (
-        <div key={stage.label} className="flex items-center gap-3">
-          <div className={cn(
-            "size-7 rounded-lg border flex items-center justify-center transition-all duration-300",
-            step > i
-              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-              : step === i
-              ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-              : "bg-muted/20 border-border/30 text-muted-foreground/30"
-          )}>
-            {stage.icon}
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className={cn(
-                "text-xs font-semibold transition-all",
-                step >= i ? "text-foreground" : "text-muted-foreground/40"
-              )}>
-                {stage.label}
-              </span>
-              <span className={cn(
-                "text-[9px] font-mono px-1.5 py-0.5 rounded-full border transition-all",
-                step >= i
-                  ? "bg-muted/30 border-border/50 text-muted-foreground"
-                  : "border-transparent text-transparent"
-              )}>
-                {stage.count} posts
-              </span>
-            </div>
-            <p className={cn(
-              "text-[10px] transition-all",
-              step >= i ? "text-muted-foreground/60" : "text-transparent"
-            )}>
-              {stage.desc}
-            </p>
-          </div>
-          <div
-            className={cn(
-              "h-3 rounded-full transition-all duration-500",
-              step >= i ? "bg-blue-500/20" : "bg-muted/10"
-            )}
-            style={{ width: `${(stage.count / 500) * 80}px` }}
-          />
-        </div>
-      ))}
-      <p className="text-[11px] text-muted-foreground/60 pt-1">
-        This funnel runs in under 200ms. Twitter&apos;s ranking pipeline processes millions of candidate
-        tweets per second across their inference fleet.
-      </p>
-    </div>
-  );
-}
+const HYBRID_DATA = [
+  { user: "Normal (500)", followers: 500, time: 0.01, strategy: "Push" },
+  { user: "Popular (50K)", followers: 50000, time: 1, strategy: "Push" },
+  { user: "Celebrity (5M)", followers: 5000000, time: 0.001, strategy: "Pull" },
+  { user: "Mega-star (50M)", followers: 50000000, time: 0.001, strategy: "Pull" },
+];
 
-function HybridFeedViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 10), 1000);
-    return () => clearInterval(t);
-  }, []);
+function CelebrityProblemDemo() {
+  const [showHybrid, setShowHybrid] = useState(false);
+  const data = showHybrid ? HYBRID_DATA : CELEBRITY_DATA;
+
+  const chartData = data.map((d) => ({
+    name: d.user,
+    writeTime: d.time,
+    strategy: d.strategy,
+  }));
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">Push Cache (precomputed)</p>
-          <div className="space-y-1">
-            {["Friend's photo (2m ago)", "Colleague's link (5m ago)", "Family update (8m ago)"].map((post, i) => (
-              <div key={post} className={cn(
-                "rounded border px-2 py-1.5 text-[10px] transition-all duration-300",
-                step >= 1 + i
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                  : "bg-muted/10 border-border/20 text-muted-foreground/30"
-              )}>
-                {post}
-              </div>
-            ))}
-          </div>
-          <p className="text-[9px] text-muted-foreground/50 font-mono">Latency: 1ms (cache read)</p>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">Pull (celebrity merge)</p>
-          <div className="space-y-1">
-            {["@elonmusk (30s ago)", "@taylorswift (3m ago)", "@nytimes (7m ago)"].map((post, i) => (
-              <div key={post} className={cn(
-                "rounded border px-2 py-1.5 text-[10px] transition-all duration-300",
-                step >= 4 + i
-                  ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                  : "bg-muted/10 border-border/20 text-muted-foreground/30"
-              )}>
-                {post}
-              </div>
-            ))}
-          </div>
-          <p className="text-[9px] text-muted-foreground/50 font-mono">Latency: 10-50ms (fetch + merge)</p>
-        </div>
+      <div className="flex items-center gap-3">
+        <h3 className="text-lg font-bold">The Celebrity Problem</h3>
+        <button
+          onClick={() => setShowHybrid(!showHybrid)}
+          className={cn(
+            "text-xs px-3 py-1.5 rounded-md border transition-all",
+            showHybrid
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+              : "bg-red-500/10 border-red-500/30 text-red-400"
+          )}
+        >
+          {showHybrid ? "Hybrid Fix Applied" : "Show Pure Push (Broken)"}
+        </button>
       </div>
-
-      {step >= 8 && (
-        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-1.5">
-          <p className="text-[10px] font-semibold text-emerald-400">Merged & Ranked Feed</p>
-          {["@elonmusk: 'Mars update...' (30s ago)", "Friend's photo (2m ago)", "@taylorswift: 'New album...' (3m ago)"].map((post) => (
-            <div key={post} className="text-[10px] font-mono text-muted-foreground/80 pl-2 border-l border-emerald-500/20">
-              {post}
-            </div>
-          ))}
-        </div>
-      )}
+      <p className="text-sm text-muted-foreground">
+        When a celebrity with 10M+ followers posts, fanout-on-write tries to update millions of
+        timelines. At 50K writes/sec per worker, a single 50M-follower post takes
+        <strong> 16 minutes</strong> on one worker. Toggle to see how the hybrid approach fixes this.
+      </p>
+      <LiveChart
+        type="bar"
+        data={chartData}
+        dataKeys={{ x: "name", y: "writeTime", label: "Fanout Time (sec)" }}
+        height={220}
+        unit="sec"
+        referenceLines={[
+          { y: 1, label: "Acceptable limit (1s)", color: "#f59e0b" },
+        ]}
+      />
+      <div className="grid grid-cols-2 gap-3">
+        {data.map((d) => (
+          <div
+            key={d.user}
+            className={cn(
+              "rounded-lg border p-3 text-xs space-y-1",
+              d.strategy === "Pull"
+                ? "bg-emerald-500/5 border-emerald-500/20"
+                : d.time > 1
+                ? "bg-red-500/5 border-red-500/20"
+                : "bg-muted/30 border-border/30"
+            )}
+          >
+            <p className="font-semibold">{d.user}</p>
+            <p className="text-muted-foreground">
+              {d.followers.toLocaleString()} followers
+              <span className="mx-1">|</span>
+              <span className={cn(
+                "font-mono",
+                d.strategy === "Pull" ? "text-emerald-400" : d.time > 1 ? "text-red-400" : "text-muted-foreground"
+              )}>
+                {d.time >= 1 ? `${d.time}s` : `${d.time * 1000}ms`}
+              </span>
+              <span className="mx-1">|</span>
+              <span className={d.strategy === "Pull" ? "text-emerald-400" : ""}>{d.strategy}</span>
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+
+// ─── Feed Ranking Playground ────────────────────────────────────────────────
+
+type FeedPost = {
+  id: number;
+  author: string;
+  text: string;
+  recency: number;
+  engagement: number;
+  relationship: number;
+  score: number;
+};
+
+const SAMPLE_POSTS: FeedPost[] = [
+  { id: 1, author: "@bestfriend", text: "Just got promoted!", recency: 9, engagement: 3, relationship: 10, score: 0 },
+  { id: 2, author: "@elonmusk", text: "Mars update: first greenhouse built", recency: 7, engagement: 10, relationship: 1, score: 0 },
+  { id: 3, author: "@colleague", text: "Great talk at the conference", recency: 5, engagement: 2, relationship: 7, score: 0 },
+  { id: 4, author: "@news_daily", text: "Breaking: major policy change", recency: 10, engagement: 8, relationship: 2, score: 0 },
+  { id: 5, author: "@college_pal", text: "Throwback to our road trip", recency: 3, engagement: 4, relationship: 6, score: 0 },
+  { id: 6, author: "@techblog", text: "Why Rust is eating the world", recency: 6, engagement: 6, relationship: 3, score: 0 },
+];
+
+function FeedRankingPlayground() {
+  const [weights, setWeights] = useState({ recency: 0.3, engagement: 0.4, relationship: 0.3 });
+
+  const rankedPosts = useMemo(() => {
+    return SAMPLE_POSTS
+      .map((p) => ({
+        ...p,
+        score: Math.round(
+          (p.recency * weights.recency + p.engagement * weights.engagement + p.relationship * weights.relationship) * 100
+        ) / 100,
+      }))
+      .sort((a, b) => b.score - a.score);
+  }, [weights]);
+
+  return (
+    <Playground
+      title="Feed Ranking Playground"
+      controls={false}
+      canvas={
+        <div className="p-4 space-y-2">
+          {rankedPosts.map((post, i) => (
+            <div
+              key={post.id}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3 transition-all duration-300",
+                i === 0
+                  ? "bg-emerald-500/5 border-emerald-500/20"
+                  : "bg-muted/10 border-border/30"
+              )}
+            >
+              <span className="text-xs font-mono font-bold text-muted-foreground w-5">
+                #{i + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold truncate">{post.author}</p>
+                <p className="text-xs text-muted-foreground truncate">{post.text}</p>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] font-mono shrink-0">
+                <span className="text-blue-400" title="Recency">R:{post.recency}</span>
+                <span className="text-orange-400" title="Engagement">E:{post.engagement}</span>
+                <span className="text-violet-400" title="Relationship">S:{post.relationship}</span>
+              </div>
+              <span className={cn(
+                "text-xs font-mono font-bold px-2 py-0.5 rounded-full",
+                i === 0
+                  ? "bg-emerald-500/10 text-emerald-400"
+                  : "bg-muted/30 text-muted-foreground"
+              )}>
+                {post.score.toFixed(1)}
+              </span>
+            </div>
+          ))}
+        </div>
+      }
+      explanation={
+        <div className="space-y-4">
+          <p className="text-sm font-semibold">Adjust ranking weights</p>
+          <p className="text-xs text-muted-foreground">
+            Drag the sliders to change how recency, engagement, and social relationship
+            affect the final feed order. Watch the posts re-rank in real time.
+          </p>
+          {([
+            { key: "recency" as const, label: "Recency", color: "text-blue-400", desc: "How recent is the post?" },
+            { key: "engagement" as const, label: "Engagement", color: "text-orange-400", desc: "Likes, retweets, replies" },
+            { key: "relationship" as const, label: "Relationship", color: "text-violet-400", desc: "How close is the author?" },
+          ]).map(({ key, label, color, desc }) => (
+            <div key={key} className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className={cn("text-xs font-semibold", color)}>{label}</span>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {(weights[key] * 100).toFixed(0)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={weights[key] * 100}
+                onChange={(e) => setWeights((w) => ({ ...w, [key]: Number(e.target.value) / 100 }))}
+                className="w-full h-1.5 rounded-full accent-violet-500 cursor-pointer"
+              />
+              <p className="text-[10px] text-muted-foreground">{desc}</p>
+            </div>
+          ))}
+        </div>
+      }
+    />
+  );
+}
+
+// ─── Full Architecture FlowDiagram ──────────────────────────────────────────
+
+function useArchitectureNodes(step: number) {
+  return useMemo(() => {
+    const active = (s: number): "healthy" | "idle" => (step >= s ? "healthy" : "idle");
+
+    const nodes: FlowNode[] = [
+      {
+        id: "client", type: "clientNode",
+        position: { x: 20, y: 150 },
+        data: { label: "User", sublabel: "Posts a tweet", status: active(0), handles: { right: true } },
+      },
+      {
+        id: "gateway", type: "gatewayNode",
+        position: { x: 180, y: 150 },
+        data: { label: "API Gateway", sublabel: "Auth + rate limit", status: active(1), handles: { left: true, right: true } },
+      },
+      {
+        id: "feedsvc", type: "serverNode",
+        position: { x: 370, y: 150 },
+        data: { label: "Feed Service", sublabel: "Push/Pull router", status: active(2), handles: { left: true, right: true, bottom: true } },
+      },
+      {
+        id: "fanout", type: "queueNode",
+        position: { x: 580, y: 60 },
+        data: { label: "Fanout Workers", sublabel: "Async push (<100K)", status: active(3), handles: { left: true, right: true } },
+      },
+      {
+        id: "postdb", type: "databaseNode",
+        position: { x: 580, y: 240 },
+        data: { label: "Post Store", sublabel: "All posts (write-once)", status: active(2), handles: { left: true, right: true } },
+      },
+      {
+        id: "timeline", type: "cacheNode",
+        position: { x: 780, y: 60 },
+        data: { label: "Timeline Cache", sublabel: "Per-user feed", status: active(4), handles: { left: true } },
+      },
+      {
+        id: "celeb", type: "cacheNode",
+        position: { x: 780, y: 160 },
+        data: { label: "Celebrity Cache", sublabel: "Hot posts (pull)", status: active(3), handles: { left: true } },
+      },
+      {
+        id: "ranker", type: "serverNode",
+        position: { x: 780, y: 260 },
+        data: { label: "Ranking Service", sublabel: "ML scoring", status: active(5), handles: { left: true } },
+      },
+    ];
+
+    const edges: FlowEdge[] = [
+      { id: "e1", source: "client", target: "gateway", animated: step >= 1 },
+      { id: "e2", source: "gateway", target: "feedsvc", animated: step >= 2 },
+      { id: "e3", source: "feedsvc", target: "fanout", animated: step >= 3 },
+      { id: "e4", source: "feedsvc", target: "postdb", animated: step >= 2 },
+      { id: "e5", source: "fanout", target: "timeline", animated: step >= 4 },
+      { id: "e6", source: "postdb", target: "celeb", animated: step >= 3 },
+      { id: "e7", source: "postdb", target: "ranker", animated: step >= 5 },
+    ];
+
+    return { nodes, edges };
+  }, [step]);
+}
+
+function ArchitecturePlayground() {
+  const sim = useSimulation({ maxSteps: 6, intervalMs: 1200 });
+  const { nodes, edges } = useArchitectureNodes(sim.step);
+
+  return (
+    <Playground
+      title="Full Hybrid Feed Architecture"
+      simulation={sim}
+      canvasHeight="min-h-[380px]"
+      canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={380} />}
+      explanation={(state) => {
+        const explanations = [
+          "A user is about to post a tweet. The request will flow through the entire system.",
+          "The API Gateway authenticates the user and applies rate limiting.",
+          "The Feed Service receives the post and writes it to the Post Store. It then checks the poster's follower count to decide: push or pull?",
+          "For normal users (<100K followers): posts are queued for async fanout. For celebrities: the post is stored in the Celebrity Cache for pull-on-read.",
+          "Fanout workers push the post into each follower's Timeline Cache. This is the precomputed feed.",
+          "When a reader opens their feed, the Ranking Service merges timeline cache + celebrity cache, applies ML scoring, and returns the top 50 posts.",
+          "The full pipeline completes in under 200ms for the reader. Writers with <100K followers see near-instant delivery.",
+        ];
+        return <p>{explanations[Math.min(state.step, explanations.length - 1)]}</p>;
+      }}
+    />
+  );
+}
+
+// ─── Write Amplification Chart ──────────────────────────────────────────────
+
+const WRITE_AMP_DATA = [
+  { followers: "100", push: 100, hybrid: 100 },
+  { followers: "1K", push: 1000, hybrid: 1000 },
+  { followers: "10K", push: 10000, hybrid: 10000 },
+  { followers: "100K", push: 100000, hybrid: 1 },
+  { followers: "1M", push: 1000000, hybrid: 1 },
+  { followers: "10M", push: 10000000, hybrid: 1 },
+  { followers: "50M", push: 50000000, hybrid: 1 },
+];
+
+// ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function NewsFeedPage() {
   return (
     <div className="space-y-8">
       <TopicHero
         title="Design a News Feed"
-        subtitle="A celebrity tweets and your fanout-on-write system tries to update 50 million timelines at once. Twitter solved this with a hybrid that took years to get right."
+        subtitle="A celebrity tweets and 50 million timelines need updating. Twitter solved this with a hybrid push/pull architecture that took years to perfect."
         difficulty="advanced"
       />
 
-      <FailureScenario title="A single celebrity tweet crashes your entire feed pipeline">
+      {/* ── Fanout Comparison ─────────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Two Approaches to Feed Delivery</h2>
         <p className="text-sm text-muted-foreground">
-          You design a Twitter-like feed using fanout-on-write: when a user posts, you immediately
-          push that post into every follower&apos;s precomputed timeline. Works great for 99% of users.
-          Then a user with <strong>50 million followers</strong> tweets. Your fanout workers spike to
-          100% CPU trying to write 50 million timeline entries. The fanout queue backs up, and
-          <em> every user&apos;s</em> feed delivery stalls for minutes. One tweet from one person broke
-          the entire system.
+          Every feed system must choose: precompute timelines at write time (push), or assemble
+          them at read time (pull). Neither is universally better. Step through each approach
+          to see the cost tradeoff.
         </p>
-        <div className="grid grid-cols-3 gap-3 pt-2">
-          <MetricCounter label="Fanout Writes" value={50000000} trend="up" />
-          <MetricCounter label="Worker CPU" value={100} unit="%" trend="up" />
-          <MetricCounter label="Feed Delay" value={180} unit="sec" trend="up" />
-        </div>
-        <div className="flex items-center justify-center gap-4 pt-3">
-          <ServerNode type="client" label="Celebrity" sublabel="1 tweet" />
-          <span className="text-red-500 text-xs font-mono">50M writes →</span>
-          <ServerNode type="server" label="Fanout Workers" sublabel="CPU: 100%" status="unhealthy" />
-          <span className="text-red-500 text-xs font-mono">backed up →</span>
-          <ServerNode type="cache" label="Timeline Cache" sublabel="stale feeds" status="warning" />
-        </div>
-      </FailureScenario>
+        <FanoutPlayground />
 
-      <WhyItBreaks title="Write amplification scales with follower count — unboundedly">
-        <p className="text-sm text-muted-foreground">
-          Fanout-on-write precomputes every user&apos;s timeline so reads are instant (single cache hit).
-          But the write cost scales linearly with the poster&apos;s follower count. For a user with
-          500 followers, a post costs 500 writes — done in milliseconds. For a celebrity with 50 million
-          followers, the same post costs 50 million writes. At Twitter&apos;s rate of 50,000 writes per
-          second per fanout worker, that takes <strong>16 minutes</strong> on a single worker. And during
-          those 16 minutes, every other user&apos;s posts are stuck in the queue.
-        </p>
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          {[
-            { n: "1", label: "Celebrity Amplification", desc: "1 post → 50M writes, 16+ min to complete" },
-            { n: "2", label: "Queue Starvation", desc: "Normal users' posts blocked behind celebrity fanout" },
-            { n: "3", label: "Memory Pressure", desc: "50M timeline cache entries need multi-GB allocation" },
-            { n: "4", label: "Wasted Writes", desc: "Most followers won't check their feed today" },
-          ].map((item) => (
-            <div key={item.n} className="flex items-start gap-2.5 rounded-lg bg-muted/30 p-3">
-              <span className="text-xs font-mono font-bold text-orange-400 bg-orange-500/10 rounded-md size-6 flex items-center justify-center shrink-0">
-                {item.n}
-              </span>
-              <div>
-                <p className="text-xs font-semibold">{item.label}</p>
-                <p className="text-[11px] text-muted-foreground">{item.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="Fanout-on-Write vs Fanout-on-Read — Interactive">
-        <p className="text-sm text-muted-foreground mb-4">
-          These are the two fundamental approaches to building a feed. Switch between them to see
-          how the cost shifts between write time and read time. Neither is universally better — the
-          right choice depends on the poster&apos;s follower count.
-        </p>
-        <FanoutViz />
         <BeforeAfter
           before={{
             title: "Fanout-on-Write (Push)",
             content: (
               <ul className="text-sm space-y-1 text-muted-foreground">
                 <li>Post pushed to all followers&apos; timelines at write time</li>
-                <li>Feed reads are a single cache lookup — instant</li>
+                <li>Feed reads are a single cache lookup -- instant</li>
                 <li>Write cost = O(follower_count) per post</li>
-                <li>Works great for users with &lt;100K followers</li>
+                <li>Works great for users with fewer than 100K followers</li>
                 <li>Breaks catastrophically for celebrities</li>
               </ul>
             ),
@@ -448,214 +530,122 @@ export default function NewsFeedPage() {
             title: "Fanout-on-Read (Pull)",
             content: (
               <ul className="text-sm space-y-1 text-muted-foreground">
-                <li>Post stored only in author&apos;s timeline</li>
+                <li>Post stored only in the author&apos;s post table</li>
                 <li>Feed assembled at read time from all followees</li>
                 <li>Write cost = O(1) per post</li>
                 <li>Read cost = O(followee_count) merge operations</li>
-                <li>Read latency grows with number of people you follow</li>
+                <li>Read latency grows with number of accounts you follow</li>
               </ul>
             ),
           }}
         />
-      </ConceptVisualizer>
+      </section>
 
-      <ConceptVisualizer title="The Celebrity Problem — Visualized with Real Numbers">
-        <p className="text-sm text-muted-foreground mb-4">
-          Twitter has reported that a single tweet from a celebrity with tens of millions of followers
-          can take minutes to fan out. During that window, the fanout pipeline is saturated. Watch
-          how the cost explodes as follower count grows, and how the hybrid approach fixes it:
-        </p>
-        <CelebrityProblemViz />
-      </ConceptVisualizer>
+      {/* ── Celebrity Problem ─────────────────────────────────────── */}
+      <section className="space-y-4">
+        <CelebrityProblemDemo />
 
-      <CorrectApproach title="Twitter's Hybrid Architecture">
-        <p className="text-sm text-muted-foreground mb-4">
-          Twitter&apos;s actual architecture uses a hybrid. Normal users (under ~100K followers) use
-          fanout-on-write — their posts are pushed to follower timelines. Celebrities (above the threshold)
-          use fanout-on-read — their posts are stored once and merged into your timeline when you load
-          it. Your feed is the union of your precomputed push cache plus a real-time merge of
-          celebrity posts, all run through a ranking model.
-        </p>
-        <AnimatedFlow
-          steps={[
-            { id: "post", label: "New Post", description: "User publishes a tweet", icon: <Zap className="size-4" /> },
-            { id: "check", label: "Check Threshold", description: "Followers > 100K? → celebrity path", icon: <Users className="size-4" /> },
-            { id: "fanout", label: "Push (Normal)", description: "Async fanout to follower caches", icon: <ArrowRight className="size-4" /> },
-            { id: "store", label: "Store (Celebrity)", description: "Write only to author's post store", icon: <Star className="size-4" /> },
-            { id: "merge", label: "Merge on Read", description: "Combine push + pull at feed load time", icon: <Filter className="size-4" /> },
-          ]}
-          interval={1800}
-        />
-      </CorrectApproach>
-
-      <ConceptVisualizer title="The Hybrid Feed Assembly — How Push + Pull Merge">
-        <p className="text-sm text-muted-foreground mb-4">
-          When you open your feed, two things happen in parallel: your precomputed timeline is fetched
-          from the push cache (instant), and the latest posts from celebrities you follow are fetched
-          and merged in (10-50ms). The result is sorted, ranked, and returned. You never notice the
-          merge — it all happens in under 200ms.
-        </p>
-        <HybridFeedViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Feed Architecture — Full System">
-        <div className="flex flex-col items-center gap-6">
-          <ServerNode type="client" label="User Posts" sublabel="new tweet" />
-          <ServerNode type="server" label="Feed Service" sublabel="fanout decision engine" status="healthy" />
-          <div className="flex gap-4 flex-wrap justify-center">
-            <ServerNode type="cloud" label="Fanout Workers" sublabel="async push (<100K followers)" status="healthy" />
-            <ServerNode type="database" label="Posts Store" sublabel="all posts (write-once)" status="healthy" />
-          </div>
-          <div className="flex gap-4 flex-wrap justify-center">
-            <ServerNode type="cache" label="Timeline Cache" sublabel="per-user precomputed feed" status="healthy" />
-            <ServerNode type="cache" label="Celebrity Cache" sublabel="hot posts from high-follower users" status="healthy" />
-          </div>
-          <ServerNode type="server" label="Ranking Service" sublabel="ML-scored engagement prediction" status="healthy" />
-          <ServerNode type="client" label="User Feed" sublabel="ranked, merged, ready" />
-        </div>
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Ranking Pipeline — From 500 Candidates to 50 Results">
-        <p className="text-sm text-muted-foreground mb-4">
-          Once you have the candidate posts (from push + pull), a ranking pipeline scores them.
-          Twitter&apos;s pipeline processes millions of candidates per second using a multi-stage
-          funnel. Each stage filters more aggressively, from lightweight heuristics to heavy ML models.
-        </p>
-        <RankingPipelineViz />
-        <ConversationalCallout type="tip">
-          The ranking model predicts P(engagement) — the probability you will like, retweet, reply,
-          or click. Features include: recency, author relationship strength, content type (image vs text),
-          your past engagement with similar posts, and real-time engagement velocity (is this post going
-          viral right now?).
+        <ConversationalCallout type="warning">
+          At Twitter, a single tweet from a celebrity with 50M followers can trigger 50 million
+          cache writes. At 50K writes/sec, that is 16+ minutes on one worker -- during which
+          every other user&apos;s posts are stuck in the fanout queue. One tweet, entire system stalled.
         </ConversationalCallout>
-      </ConceptVisualizer>
-
-      <ScaleSimulator
-        title="Fanout Cost Simulator"
-        min={100}
-        max={50000000}
-        step={100000}
-        unit="followers"
-        metrics={(v) => [
-          { label: "Timeline Writes", value: v, unit: "ops" },
-          { label: "Fanout Time (1 worker)", value: Math.round(v / 50000), unit: "sec" },
-          { label: "Workers to <1s", value: Math.max(1, Math.ceil(v / 50000)), unit: "workers" },
-          { label: "Cache Memory", value: Math.round(v * 0.0005), unit: "MB" },
-          { label: "Strategy", value: v < 100000 ? 0 : 1, unit: v < 100000 ? "push" : "pull" },
-          { label: "Wasted Writes (30% inactive)", value: Math.round(v * 0.3), unit: "ops" },
-        ]}
-      >
-        {({ value }) => (
-          <p className="text-xs text-muted-foreground">
-            {value < 5000
-              ? `At ${value.toLocaleString()} followers, fanout-on-write completes in ${Math.max(1, Math.round(value / 50000))} second. No issue.`
-              : value < 100000
-              ? `At ${(value / 1000).toFixed(0)}K followers, fanout takes ${Math.round(value / 50000)} seconds across a single worker. Still manageable with ${Math.ceil(value / 50000)} parallel workers.`
-              : value < 1000000
-              ? `At ${(value / 1000).toFixed(0)}K followers, fanout takes ${Math.round(value / 50000)} seconds. This exceeds the threshold — switch to fanout-on-read. Also, ${Math.round(value * 0.3).toLocaleString()} writes are wasted on inactive users who won't check today.`
-              : `At ${(value / 1000000).toFixed(1)}M followers, fanout-on-write is catastrophic: ${Math.round(value / 50000)} seconds on one worker. The hybrid approach writes once and merges on read — saving ${value.toLocaleString()} write operations per post.`}
-          </p>
-        )}
-      </ScaleSimulator>
-
-      <InteractiveDemo title="Build a Feed Request">
-        {({ isPlaying, tick }) => {
-          const stages = [
-            { name: "Auth", time: "~2ms", desc: "Validate session token, extract user_id" },
-            { name: "Push", time: "~1ms", desc: "Fetch precomputed timeline from Redis (200 posts)" },
-            { name: "Pull", time: "~15ms", desc: "Fetch latest from 12 followed celebrities" },
-            { name: "Merge", time: "~5ms", desc: "Union push + pull candidates (500 total)" },
-            { name: "Rank", time: "~50ms", desc: "ML model scores P(engagement) for each" },
-            { name: "Filter", time: "~3ms", desc: "Dedup, diversity, seen-post filtering" },
-            { name: "Return", time: "~2ms", desc: "Top 50 posts, serialized as JSON" },
-          ];
-          const active = isPlaying ? Math.min(tick % 9, stages.length) : 0;
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to trace a feed request from authentication through ranking to final delivery.
-              </p>
-              <div className="space-y-1.5">
-                {stages.map((stage, i) => (
-                  <div
-                    key={stage.name}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg border px-3 py-2 transition-all duration-400",
-                      i < active
-                        ? "bg-emerald-500/8 border-emerald-500/20"
-                        : i === active && isPlaying
-                        ? "bg-blue-500/8 border-blue-500/20 ring-1 ring-blue-500/15"
-                        : "bg-muted/10 border-border/30 text-muted-foreground/40"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-xs font-mono font-bold w-14",
-                      i < active ? "text-emerald-400" : i === active && isPlaying ? "text-blue-400" : ""
-                    )}>
-                      {stage.name}
-                    </span>
-                    <div className="flex-1 text-xs text-muted-foreground truncate">
-                      {i < active ? stage.desc : "—"}
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-mono shrink-0",
-                      i < active ? "text-muted-foreground" : "text-transparent"
-                    )}>
-                      {stage.time}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {active >= stages.length && (
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-                  <CheckCircle2 className="size-3.5" />
-                  Total: ~78ms — feed feels instant to the user
-                </div>
-              )}
-            </div>
-          );
-        }}
-      </InteractiveDemo>
+      </section>
 
       <AhaMoment
         question="Why not just use fanout-on-read for everyone?"
         answer={
           <p>
             Because 99% of users have fewer than 1,000 followers. For them, fanout-on-write is cheaper:
-            1,000 writes at post time, but reads are a single cache hit. Fanout-on-read would require
-            merging posts from hundreds of followed accounts on every single feed load — and reads happen
-            <strong> far more often</strong> than writes. If each user checks their feed 20 times a day
-            and follows 300 accounts, that is 6,000 merge operations per user per day vs. pre-paying
-            once at write time.
+            1,000 writes at post time, but reads are a single cache hit. If each user checks their feed
+            20 times a day and follows 300 accounts, fanout-on-read would mean 6,000 merge operations
+            per user per day -- vs. pre-paying once at write time. Reads happen <strong>far more
+            often</strong> than writes.
           </p>
         }
       />
 
-      <ConversationalCallout type="warning">
-        Cache invalidation for timelines is tricky. When a user deletes a post, you must remove it
-        from potentially millions of cached timelines. Twitter handles this lazily — the deleted post
-        is filtered out at read time rather than eagerly purged from every cache. This means a deleted
-        tweet might appear briefly in some users&apos; feeds before the filter catches it.
-      </ConversationalCallout>
+      {/* ── Feed Ranking ──────────────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Feed Ranking: From Candidates to Your Screen</h2>
+        <p className="text-sm text-muted-foreground">
+          Once you have candidate posts (from push + pull), a ranking model scores them.
+          The model predicts P(engagement) -- the probability you will like, retweet, or reply.
+          Adjust the weights below to see how different ranking priorities change the feed order.
+        </p>
+        <FeedRankingPlayground />
 
-      <ConversationalCallout type="tip">
-        Twitter&apos;s actual celebrity threshold has been reported at different numbers over the years
-        — from 5,000 to 100,000+ followers. The exact number is tuned based on infrastructure capacity.
-        The key insight is that there IS a threshold, and the system dynamically chooses push vs. pull
-        per user. Some implementations also consider posting frequency — a celebrity who tweets once
-        a week is less disruptive than one who tweets 50 times a day.
-      </ConversationalCallout>
+        <ConversationalCallout type="tip">
+          Real ranking models use hundreds of features: recency, author relationship strength,
+          content type (image vs text), your past engagement with similar posts, and real-time
+          engagement velocity (is this post going viral right now?). The playground above simplifies
+          this to three core dimensions.
+        </ConversationalCallout>
+      </section>
+
+      {/* ── Full Architecture ─────────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Twitter&apos;s Hybrid Architecture</h2>
+        <p className="text-sm text-muted-foreground">
+          The real solution is a hybrid: push for normal users (under 100K followers), pull for
+          celebrities. Your feed is the union of your precomputed push cache plus a real-time merge
+          of celebrity posts, all run through a ranking model. Step through to see each component.
+        </p>
+        <ArchitecturePlayground />
+      </section>
+
+      {/* ── Write Amplification Chart ─────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold">Write Amplification: Push vs Hybrid</h2>
+        <p className="text-sm text-muted-foreground">
+          This chart shows why the hybrid approach matters. Pure push scales linearly with followers --
+          a 50M-follower user triggers 50M writes. The hybrid approach caps write amplification
+          at the celebrity threshold (100K followers), switching to pull above that.
+        </p>
+        <LiveChart
+          type="bar"
+          data={WRITE_AMP_DATA}
+          dataKeys={{
+            x: "followers",
+            y: ["push", "hybrid"],
+            label: ["Pure Push (writes)", "Hybrid (writes)"],
+          }}
+          height={260}
+          unit="ops"
+          referenceLines={[
+            { y: 100000, label: "Celebrity threshold (100K)", color: "#f59e0b" },
+          ]}
+        />
+
+        <ConversationalCallout type="question">
+          What happens when a celebrity deletes a tweet? In pure push, you would need to remove it from
+          millions of cached timelines. Twitter handles this lazily -- deleted posts are filtered
+          at read time rather than eagerly purged from every cache. A deleted tweet might briefly
+          appear before the filter catches it.
+        </ConversationalCallout>
+      </section>
+
+      <AhaMoment
+        question="How does the system decide who is a 'celebrity'?"
+        answer={
+          <p>
+            Twitter&apos;s threshold has shifted over the years -- from 5,000 to 100K+ followers. The exact
+            number is tuned based on infrastructure capacity. Some implementations also factor in posting
+            frequency: a celebrity who tweets once a week is far less disruptive than one who tweets
+            50 times a day. The key insight is that there IS a threshold, and the system dynamically
+            routes each user&apos;s posts to push or pull based on it.
+          </p>
+        }
+      />
 
       <KeyTakeaway
         points={[
-          "Fanout-on-write gives instant reads (single cache hit) but breaks for celebrities with millions of followers.",
-          "Fanout-on-read is cheap to write (O(1)) but expensive to read — merging N followees' posts per feed load.",
-          "The hybrid approach is what Twitter actually uses: push for normal users, pull for celebrities, merge at read time.",
-          "The celebrity threshold (typically 100K followers) dynamically routes posts to push or pull paths.",
-          "Feed ranking is a multi-stage ML pipeline: candidate retrieval → lightweight scoring → deep ranking → diversity filtering.",
-          "Handle post deletions lazily — filter at read time rather than purging millions of caches.",
-          "30% of fanout writes are wasted on users who won't check their feed that day — the hybrid approach avoids this for celebrities.",
+          "Fanout-on-write gives instant reads (1 cache hit) but write cost scales linearly with followers -- catastrophic for celebrities.",
+          "Fanout-on-read is O(1) to write but O(followees) to read, requiring merge of all followed accounts per feed load.",
+          "Twitter uses a hybrid: push for normal users (<100K followers), pull for celebrities, merged at read time.",
+          "Feed ranking is a multi-stage ML pipeline: candidate retrieval, lightweight scoring, deep ranking, diversity filtering -- all under 200ms.",
+          "30% of fanout writes are wasted on users who will not check their feed that day. The hybrid approach avoids this for the costliest accounts.",
+          "Handle post deletions lazily: filter at read time rather than purging millions of cached timelines.",
         ]}
       />
     </div>

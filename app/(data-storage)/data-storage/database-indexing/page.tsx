@@ -1,432 +1,647 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { BeforeAfter } from "@/components/before-after";
-import { ScaleSimulator } from "@/components/scale-simulator";
-import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
-import { MetricCounter } from "@/components/metric-counter";
-import { InteractiveDemo } from "@/components/interactive-demo";
+import { Playground } from "@/components/playground";
+import { LiveChart } from "@/components/live-chart";
+import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
-import { Search, ArrowDown, Zap, Database } from "lucide-react";
+import { Search, Zap, Database, PenLine } from "lucide-react";
 
-function BTreeLookupViz() {
-  const [step, setStep] = useState(0);
-  const [targetValue] = useState(42);
+/* ------------------------------------------------------------------ */
+/*  1. B-Tree Search Visualizer                                       */
+/* ------------------------------------------------------------------ */
 
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 1200);
-    return () => clearInterval(t);
+type TreeNodeData = { keys: number[]; id: string };
+
+const TREE: { root: TreeNodeData; branches: TreeNodeData[]; leaves: TreeNodeData[] } = {
+  root: { keys: [30, 60], id: "root" },
+  branches: [
+    { keys: [10, 20], id: "b-left" },
+    { keys: [35, 42, 50], id: "b-mid" },
+    { keys: [70, 85], id: "b-right" },
+  ],
+  leaves: [
+    { keys: [5, 8, 10], id: "l-0" },
+    { keys: [15, 18, 20], id: "l-1" },
+    { keys: [35, 37, 40], id: "l-2" },
+    { keys: [42, 45, 48], id: "l-3" },
+    { keys: [50, 55, 58], id: "l-4" },
+    { keys: [62, 65, 70], id: "l-5" },
+    { keys: [75, 80, 85], id: "l-6" },
+    { keys: [90, 95, 99], id: "l-7" },
+  ],
+};
+
+function findPath(target: number) {
+  // Determine branch
+  let branchIdx = 0;
+  if (target > 60) branchIdx = 2;
+  else if (target > 30) branchIdx = 1;
+
+  // Determine leaf
+  const branchKeys = TREE.branches[branchIdx].keys;
+  let leafOffset = 0;
+  for (let i = 0; i < branchKeys.length; i++) {
+    if (target > branchKeys[i]) leafOffset = i + 1;
+  }
+  const leafGlobalIdx = branchIdx * 3 + Math.min(leafOffset, 2);
+  const safeLeafIdx = Math.min(leafGlobalIdx, TREE.leaves.length - 1);
+  const found = TREE.leaves[safeLeafIdx]?.keys.includes(target);
+  return {
+    branchIdx,
+    leafIdx: safeLeafIdx,
+    found,
+    comparisons: 3, // root comparison + branch comparison + leaf scan
+  };
+}
+
+function BTreePlayground() {
+  const [searchValue, setSearchValue] = useState("42");
+  const [animStep, setAnimStep] = useState(-1);
+  const [scanning, setScanning] = useState(false);
+
+  const target = parseInt(searchValue) || 42;
+  const path = useMemo(() => findPath(target), [target]);
+  const totalRows = 10_000_000;
+  const fullScanComparisons = totalRows;
+  const indexComparisons = path.comparisons;
+
+  const runSearch = useCallback(() => {
+    setAnimStep(0);
+    setScanning(true);
+    const timers = [
+      setTimeout(() => setAnimStep(1), 500),
+      setTimeout(() => setAnimStep(2), 1100),
+      setTimeout(() => setAnimStep(3), 1700),
+      setTimeout(() => { setAnimStep(3); setScanning(false); }, 2200),
+    ];
+    return () => timers.forEach(clearTimeout);
   }, []);
 
-  const tree = {
-    root: { keys: [30, 60], level: 0 },
-    branches: [
-      { keys: [10, 20], level: 1, parent: "left" },
-      { keys: [35, 42, 50], level: 1, parent: "mid" },
-      { keys: [70, 85], level: 1, parent: "right" },
-    ],
-    leaves: [
-      { keys: [35, 37], level: 2, parent: "mid-left", rowPtrs: ["row 891", "row 234"] },
-      { keys: [42, 45, 48], level: 2, parent: "mid-mid", rowPtrs: ["row 127", "row 556", "row 903"] },
-      { keys: [50, 55], level: 2, parent: "mid-right", rowPtrs: ["row 441", "row 672"] },
-    ],
-  };
+  useEffect(() => { setAnimStep(-1); setScanning(false); }, [searchValue]);
 
-  const getNodeStyle = (level: number, position: string) => {
-    if (step === 0) return "bg-muted/20 border-border/50";
-    if (level === 0 && step >= 1 && step <= 2) return "bg-blue-500/10 border-blue-500/30 ring-1 ring-blue-500/20";
-    if (level === 0 && step > 2) return "bg-emerald-500/10 border-emerald-500/20";
-    if (level === 1 && position === "mid" && step >= 3 && step <= 4) return "bg-blue-500/10 border-blue-500/30 ring-1 ring-blue-500/20";
-    if (level === 1 && position === "mid" && step > 4) return "bg-emerald-500/10 border-emerald-500/20";
-    if (level === 2 && position === "mid-mid" && step >= 5 && step <= 6) return "bg-blue-500/10 border-blue-500/30 ring-1 ring-blue-500/20";
-    if (level === 2 && position === "mid-mid" && step >= 7) return "bg-emerald-500/15 border-emerald-500/30 ring-1 ring-emerald-500/30";
-    return "bg-muted/20 border-border/30 opacity-40";
-  };
-
-  const stepMessages = [
-    "Looking for key 42...",
-    "Root: 42 > 30 and 42 < 60 → go to middle child",
-    "Root: 42 > 30 and 42 < 60 → go to middle child",
-    "Branch: 35 < 42 ≤ 42 → found range, go to leaf",
-    "Branch: 35 < 42 ≤ 42 → found range, go to leaf",
-    "Leaf: scanning... 42 found!",
-    "Leaf: key 42 → row pointer → row 127",
-    "Found in 3 comparisons (not 10,000,000)",
-  ];
+  const nodeClass = (active: boolean, found: boolean) =>
+    cn(
+      "rounded-lg border px-3 py-2 transition-all duration-500",
+      active && found ? "bg-emerald-500/15 border-emerald-500/40 ring-2 ring-emerald-500/30 scale-105" :
+      active ? "bg-blue-500/10 border-blue-500/40 ring-2 ring-blue-500/30 scale-105" :
+      "bg-muted/20 border-border/40 opacity-50"
+    );
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mb-2">
-        <Search className="size-3.5 text-blue-400" />
-        <span>Searching for key: <span className="font-mono font-bold text-foreground">{targetValue}</span></span>
-      </div>
+    <Playground
+      title="B-Tree Search Visualizer"
+      controls={false}
+      canvasHeight="min-h-[420px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          {/* Search bar */}
+          <div className="flex items-center gap-3 justify-center">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <input
+                type="number"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                className="w-28 rounded-lg border bg-muted/30 pl-8 pr-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                placeholder="Key..."
+                min={1}
+                max={99}
+              />
+            </div>
+            <button
+              onClick={runSearch}
+              disabled={scanning}
+              className="rounded-lg bg-violet-500/20 border border-violet-500/30 px-4 py-2 text-sm font-medium text-violet-400 hover:bg-violet-500/30 transition-colors disabled:opacity-40"
+            >
+              {scanning ? "Searching..." : "Search Tree"}
+            </button>
+          </div>
 
-      {/* Root */}
-      <div className="flex justify-center">
-        <div className={cn(
-          "rounded-lg border px-4 py-2 transition-all duration-500",
-          getNodeStyle(0, "root")
-        )}>
-          <p className="text-[9px] text-muted-foreground/60 mb-1">Root</p>
-          <div className="flex gap-2">
-            {tree.root.keys.map((k) => (
-              <span key={k} className={cn(
-                "font-mono text-sm font-bold px-2 py-0.5 rounded",
-                step >= 1 && k === 30 ? "text-emerald-400" : step >= 1 && k === 60 ? "text-amber-400" : ""
-              )}>
-                {k}
+          {/* Tree visualization */}
+          <div className="space-y-3">
+            {/* Root */}
+            <div className="flex justify-center">
+              <div className={nodeClass(animStep >= 0, false)}>
+                <p className="text-[9px] text-muted-foreground/60 mb-1 text-center">Root</p>
+                <div className="flex gap-3">
+                  {TREE.root.keys.map((k) => (
+                    <span key={k} className={cn(
+                      "font-mono text-sm font-bold px-2 py-0.5 rounded transition-colors",
+                      animStep >= 0 && target <= k && (k === TREE.root.keys[0] || target > (TREE.root.keys[TREE.root.keys.indexOf(k) - 1] ?? 0))
+                        ? "text-amber-400" : ""
+                    )}>{k}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Connector lines */}
+            <div className="flex justify-center gap-1 text-muted-foreground/20">
+              {TREE.branches.map((_, i) => (
+                <div key={i} className={cn(
+                  "w-px h-4 mx-8 transition-colors duration-500",
+                  animStep >= 1 && i === path.branchIdx ? "bg-blue-400" : "bg-border/40"
+                )} />
+              ))}
+            </div>
+
+            {/* Branches */}
+            <div className="flex justify-center gap-3">
+              {TREE.branches.map((branch, i) => (
+                <div key={branch.id} className={nodeClass(animStep >= 1 && i === path.branchIdx, false)}>
+                  <p className="text-[9px] text-muted-foreground/60 mb-1 text-center">Branch</p>
+                  <div className="flex gap-1.5">
+                    {branch.keys.map((k) => (
+                      <span key={k} className={cn(
+                        "font-mono text-xs font-medium px-1.5 py-0.5 rounded transition-colors",
+                        animStep >= 1 && i === path.branchIdx && k === target ? "text-blue-400 bg-blue-500/10" : ""
+                      )}>{k}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Connector lines */}
+            <div className="flex justify-center gap-0.5">
+              {TREE.leaves.map((_, i) => (
+                <div key={i} className={cn(
+                  "w-px h-4 mx-3 transition-colors duration-500",
+                  animStep >= 2 && i === path.leafIdx ? "bg-blue-400" : "bg-border/40"
+                )} />
+              ))}
+            </div>
+
+            {/* Leaves */}
+            <div className="flex justify-center gap-1.5 flex-wrap">
+              {TREE.leaves.map((leaf, i) => (
+                <div key={leaf.id} className={nodeClass(
+                  animStep >= 2 && i === path.leafIdx,
+                  animStep >= 3 && i === path.leafIdx && path.found
+                )}>
+                  <p className="text-[9px] text-muted-foreground/60 mb-1 text-center">Leaf</p>
+                  <div className="flex gap-1">
+                    {leaf.keys.map((k) => (
+                      <span key={k} className={cn(
+                        "font-mono text-[11px] font-medium px-1.5 py-0.5 rounded transition-all",
+                        animStep >= 3 && i === path.leafIdx && k === target
+                          ? "text-emerald-400 bg-emerald-500/20 ring-1 ring-emerald-500/40 font-bold"
+                          : ""
+                      )}>{k}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Linked leaf indicator */}
+            <div className="flex justify-center">
+              <span className="text-[9px] text-muted-foreground/40 font-mono">
+                ... linked leaves: [{TREE.leaves.map(l => l.keys[0]).join("] → [")}] → ...
               </span>
+            </div>
+          </div>
+
+          {/* Comparison counter */}
+          {animStep >= 3 && (
+            <div className="flex justify-center gap-6">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 text-center">
+                <p className="text-[10px] text-muted-foreground">Full Table Scan</p>
+                <p className="text-lg font-mono font-bold text-red-400">{fullScanComparisons.toLocaleString()}</p>
+                <p className="text-[9px] text-muted-foreground">comparisons</p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center">
+                <p className="text-[10px] text-muted-foreground">B-Tree Index</p>
+                <p className="text-lg font-mono font-bold text-emerald-400">{indexComparisons}</p>
+                <p className="text-[9px] text-muted-foreground">comparisons</p>
+              </div>
+              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-2 text-center">
+                <p className="text-[10px] text-muted-foreground">Result</p>
+                <p className={cn("text-lg font-mono font-bold", path.found ? "text-emerald-400" : "text-amber-400")}>
+                  {path.found ? "Found!" : "Not Found"}
+                </p>
+                <p className="text-[9px] text-muted-foreground">key {target}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  2. Query Performance Playground                                   */
+/* ------------------------------------------------------------------ */
+
+function QueryPerformancePlayground() {
+  const [tableSize, setTableSize] = useState(100_000);
+  const sim = useSimulation({ intervalMs: 100, maxSteps: 20 });
+
+  const scanRows = 20;
+  const scannedCount = Math.min(sim.step, scanRows);
+  const indexJumped = sim.step >= 3;
+
+  // Chart data for scaling
+  const chartData = useMemo(() => {
+    const points = [];
+    for (let rows = 1000; rows <= 1_000_000; rows += rows < 10_000 ? 1000 : rows < 100_000 ? 10_000 : 100_000) {
+      points.push({
+        rows: rows >= 1_000_000 ? "1M" : rows >= 1000 ? `${rows / 1000}K` : `${rows}`,
+        fullScan: Math.round(rows * 0.003),
+        bTreeIndex: Math.round(Math.log2(rows) * 0.15 * 10) / 10,
+      });
+    }
+    return points;
+  }, []);
+
+  const fullScanTime = Math.round(tableSize * 0.003);
+  const indexTime = Math.round(Math.log2(tableSize) * 0.15 * 100) / 100;
+
+  return (
+    <Playground
+      title="Query Performance: Scan vs Index"
+      simulation={sim}
+      canvasHeight="min-h-[500px]"
+      canvas={
+        <div className="p-4 space-y-5">
+          {/* Side by side scan animation */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Without Index */}
+            <div className="rounded-lg border border-red-500/20 bg-red-500/[0.03] p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Database className="size-3.5 text-red-400" />
+                <span className="text-xs font-medium text-red-400">Without Index (Full Scan)</span>
+              </div>
+              <div className="grid grid-cols-10 gap-1">
+                {Array.from({ length: scanRows }, (_, i) => {
+                  const isMatch = i === 4 || i === 11 || i === 17;
+                  const isChecked = i < scannedCount;
+                  const isCurrent = i === scannedCount - 1 && sim.isPlaying;
+                  return (
+                    <div key={i} className={cn(
+                      "h-7 rounded text-[8px] font-mono flex items-center justify-center border transition-all duration-150",
+                      isCurrent ? "bg-amber-500/20 border-amber-500/40 text-amber-400 ring-1 ring-amber-500/30" :
+                      isChecked && isMatch ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400" :
+                      isChecked ? "bg-red-500/5 border-red-500/10 text-muted-foreground/30" :
+                      "bg-muted/10 border-border/30 text-muted-foreground/40"
+                    )}>
+                      {i + 1}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Checked: <span className="font-mono font-bold text-foreground">{scannedCount}/{scanRows}</span> rows
+                {scannedCount >= scanRows && <span className="text-red-400 ml-1">-- scanned every row</span>}
+              </p>
+            </div>
+
+            {/* With Index */}
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Zap className="size-3.5 text-emerald-400" />
+                <span className="text-xs font-medium text-emerald-400">With Index (B-Tree Lookup)</span>
+              </div>
+              <div className="grid grid-cols-10 gap-1">
+                {Array.from({ length: scanRows }, (_, i) => {
+                  const isMatch = i === 4 || i === 11 || i === 17;
+                  return (
+                    <div key={i} className={cn(
+                      "h-7 rounded text-[8px] font-mono flex items-center justify-center border transition-all duration-150",
+                      indexJumped && isMatch
+                        ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/30"
+                        : "bg-muted/10 border-border/30 text-muted-foreground/40"
+                    )}>
+                      {i + 1}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Checked: <span className="font-mono font-bold text-foreground">{indexJumped ? "3" : "0"}/{scanRows}</span> rows
+                {indexJumped && <span className="text-emerald-400 ml-1">-- jumped directly to matches</span>}
+              </p>
+            </div>
+          </div>
+
+          {/* Table size slider + chart */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <label className="text-xs text-muted-foreground whitespace-nowrap">Table Size:</label>
+              <input
+                type="range"
+                min={1000}
+                max={1000000}
+                step={1000}
+                value={tableSize}
+                onChange={(e) => setTableSize(Number(e.target.value))}
+                className="flex-1 h-1.5 rounded-full accent-violet-500 cursor-pointer"
+              />
+              <span className="text-xs font-mono font-bold text-foreground w-16 text-right">
+                {tableSize >= 1_000_000 ? "1M" : tableSize >= 1000 ? `${(tableSize / 1000).toFixed(0)}K` : tableSize}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Full Scan Time</p>
+                <p className="text-xl font-mono font-bold text-red-400">{fullScanTime.toLocaleString()} <span className="text-xs">ms</span></p>
+              </div>
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Index Lookup Time</p>
+                <p className="text-xl font-mono font-bold text-emerald-400">{indexTime} <span className="text-xs">ms</span></p>
+              </div>
+            </div>
+
+            <LiveChart
+              type="line"
+              data={chartData}
+              dataKeys={{ x: "rows", y: ["fullScan", "bTreeIndex"], label: ["Full Scan (O(n))", "B-Tree (O(log n))"] }}
+              height={180}
+              unit="ms"
+              referenceLines={[{ y: 1000, label: "1s threshold", color: "hsl(0,70%,50%)" }]}
+            />
+          </div>
+        </div>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  3. Index Types Interactive Cards                                   */
+/* ------------------------------------------------------------------ */
+
+const INDEX_TYPES = {
+  btree: {
+    name: "B+Tree",
+    icon: "🌲",
+    color: "emerald",
+    lookup: "O(log n)",
+    insert: "O(log n)",
+    range: "Excellent",
+    bestFor: "Range queries, sorting, general purpose",
+    visual: (
+      <div className="space-y-2 pt-2">
+        <p className="text-[10px] text-muted-foreground">Sorted tree with linked leaf nodes:</p>
+        <div className="flex flex-col items-center gap-1">
+          <div className="rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-mono">[30 | 60]</div>
+          <div className="flex gap-4">
+            {["[10,20]", "[35,42,50]", "[70,85]"].map(n => (
+              <div key={n} className="rounded border border-emerald-500/20 bg-emerald-500/5 px-2 py-1 text-[10px] font-mono">{n}</div>
             ))}
           </div>
+          <p className="text-[9px] text-emerald-400 font-mono">leaves linked: [10,20] → [35,42,50] → [70,85]</p>
         </div>
+        <p className="text-[10px] text-muted-foreground italic">Default in PostgreSQL, MySQL InnoDB, SQLite. Handles equality, ranges, ORDER BY.</p>
       </div>
-
-      {/* Arrows */}
-      <div className="flex justify-center">
-        <ArrowDown className={cn(
-          "size-4 transition-all duration-300",
-          step >= 2 ? "text-blue-400" : "text-muted-foreground/20"
-        )} />
-      </div>
-
-      {/* Branches */}
-      <div className="flex justify-center gap-3">
-        {tree.branches.map((branch) => (
-          <div
-            key={branch.parent}
-            className={cn(
-              "rounded-lg border px-3 py-2 transition-all duration-500",
-              getNodeStyle(1, branch.parent)
-            )}
-          >
-            <p className="text-[9px] text-muted-foreground/60 mb-1">Branch</p>
-            <div className="flex gap-1.5">
-              {branch.keys.map((k) => (
-                <span key={k} className={cn(
-                  "font-mono text-xs font-medium px-1.5 py-0.5 rounded",
-                  step >= 3 && branch.parent === "mid" && k === 42 ? "text-blue-400 bg-blue-500/10" : ""
-                )}>
-                  {k}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Arrows */}
-      <div className="flex justify-center">
-        <ArrowDown className={cn(
-          "size-4 transition-all duration-300",
-          step >= 4 ? "text-blue-400" : "text-muted-foreground/20"
-        )} />
-      </div>
-
-      {/* Leaves */}
-      <div className="flex justify-center gap-2">
-        {tree.leaves.map((leaf) => (
-          <div
-            key={leaf.parent}
-            className={cn(
-              "rounded-lg border px-3 py-2 transition-all duration-500",
-              getNodeStyle(2, leaf.parent)
-            )}
-          >
-            <p className="text-[9px] text-muted-foreground/60 mb-1">Leaf</p>
-            <div className="flex gap-1.5 mb-1">
-              {leaf.keys.map((k) => (
-                <span key={k} className={cn(
-                  "font-mono text-xs font-medium px-1.5 py-0.5 rounded transition-all",
-                  step >= 6 && k === 42 ? "text-emerald-400 bg-emerald-500/15 ring-1 ring-emerald-500/30" : ""
-                )}>
-                  {k}
-                </span>
-              ))}
-            </div>
-            {step >= 6 && leaf.parent === "mid-mid" && (
-              <div className="flex gap-1">
-                {leaf.rowPtrs.map((ptr, i) => (
-                  <span key={ptr} className={cn(
-                    "text-[8px] font-mono text-muted-foreground/50",
-                    i === 0 ? "text-emerald-400" : ""
-                  )}>
-                    {ptr}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Linked leaf indicator */}
-      <div className="flex justify-center">
-        <div className="text-[9px] text-muted-foreground/40 flex items-center gap-1">
-          <span>Leaves linked:</span>
-          <span className="font-mono">... ← [35,37] ↔ [42,45,48] ↔ [50,55] → ...</span>
+    ),
+  },
+  hash: {
+    name: "Hash Index", icon: "#", color: "amber",
+    lookup: "O(1) avg", insert: "O(1) avg", range: "Not supported",
+    bestFor: "Exact equality lookups only",
+    visual: (
+      <div className="space-y-2 pt-2">
+        <p className="text-[10px] text-muted-foreground">Hash function maps key directly to bucket:</p>
+        <div className="grid grid-cols-2 gap-1">
+          {["id=42 → Bucket 2 → row 127", "id=99 → Bucket 7 → row 541", "id=15 → Bucket 3 → row 892", "id=73 → Bucket 1 → row 203"].map((h) => (
+            <span key={h} className="text-[9px] font-mono text-amber-400">{h}</span>
+          ))}
         </div>
+        <p className="text-[10px] text-muted-foreground italic">Fastest for WHERE id = 42, but cannot do ranges or sorting.</p>
       </div>
-
-      {/* Status */}
-      <div className={cn(
-        "text-center text-[11px] font-medium transition-all duration-300",
-        step >= 7 ? "text-emerald-400" : "text-muted-foreground"
-      )}>
-        {stepMessages[step]}
+    ),
+  },
+  fulltext: {
+    name: "Full-Text (GIN)", icon: "T", color: "violet",
+    lookup: "O(log n) per term", insert: "O(log n) batch", range: "Containment queries",
+    bestFor: "Text search, JSONB, array ops",
+    visual: (
+      <div className="space-y-2 pt-2">
+        <p className="text-[10px] text-muted-foreground">Inverted index maps tokens to documents:</p>
+        <div className="space-y-0.5">
+          {['"database" → doc 1, 4, 12', '"index" → doc 1, 7, 12, 23', '"query" → doc 3, 7, 15'].map((t) => (
+            <p key={t} className="text-[10px] font-mono text-violet-400">{t}</p>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground italic">Essential for PostgreSQL full-text search and JSONB queries.</p>
       </div>
-    </div>
-  );
-}
-
-function IndexTypeComparisonViz() {
-  const [selectedType, setSelectedType] = useState<"btree" | "bplus" | "hash" | "gin">("bplus");
-
-  const types = {
-    btree: {
-      name: "B-Tree",
-      color: "text-blue-400",
-      border: "border-blue-500/30",
-      bg: "bg-blue-500/5",
-      lookup: "O(log n)",
-      insert: "O(log n)",
-      range: "Inefficient (tree traversal)",
-      space: "Moderate",
-      structure: "Data stored in both internal and leaf nodes",
-      bestFor: "Exact-match lookups where range queries are rare",
-      usedBy: "Older database systems, some in-memory structures",
-      note: "Searches may stop at internal nodes (potentially faster for exact matches), but range queries require repeated tree traversals.",
-    },
-    bplus: {
-      name: "B+Tree",
-      color: "text-emerald-400",
-      border: "border-emerald-500/30",
-      bg: "bg-emerald-500/5",
-      lookup: "O(log n)",
-      insert: "O(log n)",
-      range: "O(log n + k) — follow leaf pointers",
-      space: "Slightly more (duplicated keys)",
-      structure: "Data only in leaf nodes, internal nodes are routing keys. Leaves are linked.",
-      bestFor: "Range queries, sorting, equality — the general-purpose workhorse",
-      usedBy: "PostgreSQL, MySQL InnoDB, SQLite, SQL Server, Oracle",
-      note: "All searches go to leaves, making performance predictable. Linked leaves enable efficient sequential scans and ORDER BY.",
-    },
-    hash: {
-      name: "Hash Index",
-      color: "text-amber-400",
-      border: "border-amber-500/30",
-      bg: "bg-amber-500/5",
-      lookup: "O(1) average",
-      insert: "O(1) average",
-      range: "Not supported",
-      space: "Low",
-      structure: "Hash function maps key directly to a bucket containing the row pointer",
-      bestFor: "Exact equality lookups only (WHERE id = 42)",
-      usedBy: "PostgreSQL (CREATE INDEX ... USING hash), Redis, in-memory caches",
-      note: "Fastest for equality, but cannot do range scans, ORDER BY, or partial matches. Not crash-safe in some older PostgreSQL versions.",
-    },
-    gin: {
-      name: "GIN (Inverted)",
-      color: "text-violet-400",
-      border: "border-violet-500/30",
-      bg: "bg-violet-500/5",
-      lookup: "O(log n) per element",
-      insert: "O(log n) — batch-optimized",
-      range: "Supports containment queries",
-      space: "High (one entry per element)",
-      structure: "Maps each value inside an array/JSON/text to the rows containing it",
-      bestFor: "Full-text search, JSONB queries, array containment",
-      usedBy: "PostgreSQL (JSONB @>, full-text search, array ops)",
-      note: "Essential for JSONB indexing in PostgreSQL. Slow to build but fast to query. Use GiST for geometric/range types.",
-    },
-  };
-
-  const idx = types[selectedType];
-
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-2 justify-center flex-wrap">
-        {(Object.keys(types) as Array<keyof typeof types>).map((key) => (
-          <button
-            key={key}
-            onClick={() => setSelectedType(key)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-              selectedType === key
-                ? `${types[key].bg} ${types[key].border} ${types[key].color}`
-                : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {types[key].name}
-          </button>
-        ))}
-      </div>
-
-      <div className={cn("rounded-lg border p-4 space-y-3 transition-all", idx.border, idx.bg)}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    ),
+  },
+  composite: {
+    name: "Composite Index",
+    icon: "🔗",
+    color: "blue",
+    lookup: "O(log n)",
+    insert: "O(log n)",
+    range: "Leftmost prefix only",
+    bestFor: "Multi-column WHERE/ORDER BY",
+    visual: (
+      <div className="space-y-2 pt-2">
+        <p className="text-[10px] text-muted-foreground">Index on (category, price, created_at):</p>
+        <div className="space-y-1">
           {[
-            { label: "Lookup", value: idx.lookup },
-            { label: "Insert", value: idx.insert },
-            { label: "Range Query", value: idx.range },
-            { label: "Space", value: idx.space },
-          ].map((m) => (
-            <div key={m.label} className="rounded-md bg-muted/30 p-2 text-center">
-              <p className="text-[9px] text-muted-foreground">{m.label}</p>
-              <p className="text-[11px] font-mono font-semibold">{m.value}</p>
+            { query: "WHERE category = 'books'", works: true },
+            { query: "WHERE category = 'books' AND price > 20", works: true },
+            { query: "WHERE category = 'books' AND price > 20 AND created_at > ...", works: true },
+            { query: "WHERE price > 20", works: false },
+            { query: "WHERE created_at > '2024-01-01'", works: false },
+          ].map((q) => (
+            <div key={q.query} className="flex items-center gap-2 text-[10px]">
+              <span className={cn("font-bold", q.works ? "text-emerald-400" : "text-red-400")}>
+                {q.works ? "✓" : "✗"}
+              </span>
+              <code className="font-mono text-muted-foreground">{q.query}</code>
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-muted-foreground"><span className="font-medium text-foreground">Structure:</span> {idx.structure}</p>
-        <p className="text-[11px] text-muted-foreground"><span className="font-medium text-foreground">Best for:</span> {idx.bestFor}</p>
-        <p className="text-[11px] text-muted-foreground"><span className="font-medium text-foreground">Used by:</span> {idx.usedBy}</p>
-        <p className="text-[10px] text-muted-foreground/70 italic">{idx.note}</p>
+        <p className="text-[10px] text-muted-foreground italic">Leftmost prefix rule: index helps queries using leading columns.</p>
       </div>
-    </div>
-  );
-}
+    ),
+  },
+} as const;
 
-function ExplainOutputViz() {
-  const [indexed, setIndexed] = useState(false);
+type IndexTypeKey = keyof typeof INDEX_TYPES;
+
+const colorMap: Record<string, { border: string; bg: string; text: string; ring: string }> = {
+  emerald: { border: "border-emerald-500/30", bg: "bg-emerald-500/5", text: "text-emerald-400", ring: "ring-emerald-500/30" },
+  amber: { border: "border-amber-500/30", bg: "bg-amber-500/5", text: "text-amber-400", ring: "ring-amber-500/30" },
+  violet: { border: "border-violet-500/30", bg: "bg-violet-500/5", text: "text-violet-400", ring: "ring-violet-500/30" },
+  blue: { border: "border-blue-500/30", bg: "bg-blue-500/5", text: "text-blue-400", ring: "ring-blue-500/30" },
+};
+
+function IndexTypesExplorer() {
+  const [selected, setSelected] = useState<IndexTypeKey>("btree");
+  const idx = INDEX_TYPES[selected];
+  const c = colorMap[idx.color];
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2 justify-center">
-        <button
-          onClick={() => setIndexed(false)}
-          className={cn(
-            "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-            !indexed
-              ? "bg-red-500/10 border-red-500/30 text-red-400"
-              : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Without Index
-        </button>
-        <button
-          onClick={() => setIndexed(true)}
-          className={cn(
-            "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-            indexed
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-              : "bg-muted/20 border-border/50 text-muted-foreground hover:text-foreground"
-          )}
-        >
-          With Index
-        </button>
-      </div>
+    <Playground
+      title="Index Types Explorer"
+      controls={false}
+      canvasHeight="min-h-[380px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          {/* Type cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {(Object.entries(INDEX_TYPES) as [IndexTypeKey, typeof INDEX_TYPES[IndexTypeKey]][]).map(([key, t]) => {
+              const tc = colorMap[t.color];
+              const isActive = selected === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSelected(key)}
+                  className={cn(
+                    "rounded-lg border p-3 text-left transition-all hover:scale-[1.02]",
+                    isActive ? `${tc.border} ${tc.bg} ring-2 ${tc.ring}` : "border-border/40 bg-muted/10 hover:bg-muted/20"
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">{t.icon}</span>
+                    <span className={cn("text-xs font-semibold", isActive ? tc.text : "text-foreground")}>{t.name}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{t.bestFor}</p>
+                </button>
+              );
+            })}
+          </div>
 
-      <div className="rounded-lg border bg-muted/20 p-4">
-        <p className="text-[10px] font-mono text-muted-foreground/60 mb-2">
-          {`EXPLAIN ANALYZE SELECT * FROM products WHERE category = 'electronics';`}
-        </p>
-        {!indexed ? (
-          <div className="space-y-1 font-mono text-[11px]">
-            <p className="text-red-400">Seq Scan on products</p>
-            <p className="text-muted-foreground pl-4">Filter: (category = &apos;electronics&apos;)</p>
-            <p className="text-muted-foreground pl-4">Rows Removed by Filter: <span className="text-red-400">9,999,757</span></p>
-            <p className="text-muted-foreground pl-4">Rows Returned: 243</p>
-            <p className="text-muted-foreground pl-4">Buffers: shared hit=12 read=<span className="text-red-400">98,432</span></p>
-            <p className="text-red-400 pl-4">Planning Time: 0.08ms</p>
-            <p className="text-red-400 pl-4 font-bold">Execution Time: 30,420.15ms</p>
-            <div className="mt-2 rounded-md bg-red-500/10 border border-red-500/20 p-2">
-              <p className="text-[10px] text-red-400">
-                Read 10M rows from disk to return 243 matches. 98,432 page reads.
-              </p>
+          {/* Detail panel */}
+          <div className={cn("rounded-lg border p-4 space-y-3 transition-all", c.border, c.bg)}>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Lookup", value: idx.lookup },
+                { label: "Insert", value: idx.insert },
+                { label: "Range Query", value: idx.range },
+              ].map((m) => (
+                <div key={m.label} className="rounded-md bg-muted/30 p-2 text-center">
+                  <p className="text-[9px] text-muted-foreground">{m.label}</p>
+                  <p className={cn("text-xs font-mono font-bold", c.text)}>{m.value}</p>
+                </div>
+              ))}
             </div>
+            {idx.visual}
           </div>
-        ) : (
-          <div className="space-y-1 font-mono text-[11px]">
-            <p className="text-emerald-400">Index Scan using idx_products_category on products</p>
-            <p className="text-muted-foreground pl-4">Index Cond: (category = &apos;electronics&apos;)</p>
-            <p className="text-muted-foreground pl-4">Rows Returned: 243</p>
-            <p className="text-muted-foreground pl-4">Buffers: shared hit=<span className="text-emerald-400">247</span></p>
-            <p className="text-emerald-400 pl-4">Planning Time: 0.12ms</p>
-            <p className="text-emerald-400 pl-4 font-bold">Execution Time: 1.87ms</p>
-            <div className="mt-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2">
-              <p className="text-[10px] text-emerald-400">
-                Jumped directly to 243 matching rows. Only 247 page reads. 16,000x faster.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+        </div>
+      }
+    />
   );
 }
 
-function FullScanVsIndexViz() {
-  const [step, setStep] = useState(0);
+/* ------------------------------------------------------------------ */
+/*  4. Write Penalty Demo                                             */
+/* ------------------------------------------------------------------ */
 
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 12), 400);
-    return () => clearInterval(t);
+function WritePenaltyDemo() {
+  const [indexCount, setIndexCount] = useState(0);
+
+  const writeData = useMemo(() => {
+    return [0, 1, 3, 5, 8].map((n) => ({
+      indexes: `${n} idx`,
+      insertTime: Math.round(0.5 + n * 1.8 + n * n * 0.3),
+      updateTime: Math.round(0.8 + n * 2.2 + n * n * 0.35),
+    }));
   }, []);
 
-  const rows = Array.from({ length: 20 }, (_, i) => ({
-    id: i + 1,
-    category: i === 4 || i === 11 || i === 17 ? "electronics" : "other",
-  }));
+  const scalingData = useMemo(() => {
+    const points = [];
+    for (let n = 0; n <= 10; n++) {
+      points.push({
+        indexes: `${n}`,
+        writeSpeed: Math.round(100 / (1 + n * 0.4 + n * n * 0.05)),
+        readSpeed: Math.min(100, Math.round(20 + n * 15)),
+      });
+    }
+    return points;
+  }, []);
+
+  const insertPenalty = Math.round(0.5 + indexCount * 1.8 + indexCount * indexCount * 0.3);
+  const storageOverhead = Math.round(indexCount * 180);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-        <p className="text-[10px] font-medium text-red-400">Full Table Scan (Sequential)</p>
-        <div className="grid grid-cols-10 gap-1">
-          {rows.map((row, i) => (
-            <div
-              key={`scan-${row.id}`}
-              className={cn(
-                "size-6 rounded text-[8px] font-mono flex items-center justify-center border transition-all duration-200",
-                step > i && row.category === "electronics"
-                  ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-                  : step > i
-                  ? "bg-red-500/5 border-red-500/10 text-muted-foreground/30"
-                  : step === i
-                  ? "bg-amber-500/20 border-amber-500/30 text-amber-400 ring-1 ring-amber-500/20"
-                  : "bg-muted/10 border-border/30 text-muted-foreground/30"
-              )}
-            >
-              {row.id}
-            </div>
-          ))}
-        </div>
-        <p className="text-[9px] text-muted-foreground">
-          Checked: <span className="font-mono text-foreground">{Math.min(step, 20)}/20</span> rows
-          {step >= 20 && <span className="text-red-400"> &mdash; scanned every row</span>}
-        </p>
-      </div>
+    <Playground
+      title="Write Penalty: The Cost of Indexes"
+      controls={false}
+      canvasHeight="min-h-[440px]"
+      canvas={
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <PenLine className="size-4 text-amber-400" />
+            <span>Each index is a separate B-tree that must be updated on every write</span>
+          </div>
 
-      <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-        <p className="text-[10px] font-medium text-emerald-400">Index Lookup (B+Tree)</p>
-        <div className="grid grid-cols-10 gap-1">
-          {rows.map((row) => (
-            <div
-              key={`idx-${row.id}`}
-              className={cn(
-                "size-6 rounded text-[8px] font-mono flex items-center justify-center border transition-all duration-200",
-                step >= 2 && row.category === "electronics"
-                  ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/20"
-                  : "bg-muted/10 border-border/30 text-muted-foreground/30"
-              )}
-            >
-              {row.id}
+          {/* Interactive index count */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-4">
+              <label className="text-xs text-muted-foreground whitespace-nowrap">Number of indexes:</label>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={indexCount}
+                onChange={(e) => setIndexCount(Number(e.target.value))}
+                className="flex-1 h-1.5 rounded-full accent-amber-500 cursor-pointer"
+              />
+              <span className="text-sm font-mono font-bold text-amber-400 w-8 text-right">{indexCount}</span>
             </div>
-          ))}
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Insert Time</p>
+                <p className="text-xl font-mono font-bold text-amber-400">{insertPenalty} <span className="text-xs">ms</span></p>
+              </div>
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">B-trees to update</p>
+                <p className="text-xl font-mono font-bold text-amber-400">{indexCount + 1}</p>
+                <p className="text-[9px] text-muted-foreground">table + {indexCount} indexes</p>
+              </div>
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-center">
+                <p className="text-[10px] text-muted-foreground">Storage Overhead</p>
+                <p className="text-xl font-mono font-bold text-red-400">+{storageOverhead} <span className="text-xs">MB</span></p>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1 text-center">Write time by index count</p>
+              <LiveChart
+                type="bar"
+                data={writeData}
+                dataKeys={{ x: "indexes", y: ["insertTime", "updateTime"], label: ["INSERT", "UPDATE"] }}
+                height={160}
+                unit="ms"
+              />
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1 text-center">Read vs Write throughput</p>
+              <LiveChart
+                type="line"
+                data={scalingData}
+                dataKeys={{ x: "indexes", y: ["readSpeed", "writeSpeed"], label: ["Read Speed %", "Write Speed %"] }}
+                height={160}
+                unit="%"
+                referenceLines={[{ y: 50, label: "sweet spot", color: "hsl(45,70%,50%)" }]}
+              />
+            </div>
+          </div>
         </div>
-        <p className="text-[9px] text-muted-foreground">
-          Checked: <span className="font-mono text-foreground">{step >= 2 ? "3" : step >= 1 ? "..." : "0"}/20</span> rows
-          {step >= 2 && <span className="text-emerald-400"> &mdash; jumped directly to matches</span>}
-        </p>
-      </div>
-    </div>
+      }
+    />
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Main Page                                                          */
+/* ------------------------------------------------------------------ */
 
 export default function DatabaseIndexingPage() {
   return (
@@ -437,200 +652,26 @@ export default function DatabaseIndexingPage() {
         difficulty="intermediate"
       />
 
-      <FailureScenario title="30 seconds to search 10 million rows">
-        <p className="text-sm text-muted-foreground">
-          Your e-commerce app has 10 million products. A user searches for products by category.
-          The query takes <strong className="text-foreground">30 seconds</strong> to return results.
-          Users stare at a loading spinner, get frustrated, and leave. Your conversion rate drops
-          by 40%. The database CPU is pinned at 100% because every single search triggers a
-          full table scan across all 10 million rows.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          You throw more hardware at it. Response time drops to 15 seconds. Still unacceptable.
-          The real fix is not more compute &mdash; it is a single SQL statement:
-          <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded ml-1">CREATE INDEX idx_category ON products(category);</code>
-        </p>
-        <div className="grid grid-cols-3 gap-3 pt-2">
-          <MetricCounter label="Without Index" value={30420} unit="ms" trend="up" />
-          <MetricCounter label="With B+Tree Index" value={2} unit="ms" trend="down" />
-          <MetricCounter label="Speedup" value={15210} unit="x" trend="down" />
-        </div>
-      </FailureScenario>
+      <BTreePlayground />
 
-      <WhyItBreaks title="Sequential scan: the database reads every single row">
-        <p className="text-sm text-muted-foreground">
-          Without an index, the database performs a <strong className="text-foreground">full table scan</strong> (called
-          &quot;Seq Scan&quot; in PostgreSQL). It reads every single row from disk, checks if it matches
-          your WHERE clause, and discards the rows that do not match. For 10 million rows, that means
-          reading 10 million rows to find maybe 243 results. The time complexity
-          is <strong className="text-foreground">O(n)</strong>.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          With a B+tree index (the default in PostgreSQL, MySQL, and virtually every relational database),
-          the database narrows down the search using a balanced tree. Instead of checking all rows,
-          it traverses a tree that is typically only 3-4 levels deep. For 10 million rows,
-          that is roughly <strong className="text-foreground">23 comparisons instead of 10 million</strong>.
-          The time complexity drops to <strong className="text-foreground">O(log n)</strong>.
-        </p>
-      </WhyItBreaks>
-
-      <ConceptVisualizer title="Watch a B+Tree Lookup in Action">
-        <p className="text-sm text-muted-foreground mb-4">
-          This B+tree is searching for key 42. Watch how it starts at the root, compares values to
-          decide which child to follow, and arrives at the leaf node in just 3 steps. In a real
-          database with 10 million rows, the tree would be 3-4 levels deep &mdash; the same
-          number of disk reads regardless of table size.
-        </p>
-        <BTreeLookupViz />
-        <ConversationalCallout type="tip">
-          B+trees store data only in leaf nodes, and those leaves are linked together like a chain.
-          This is why range queries (<code className="text-xs bg-muted px-1 rounded font-mono">WHERE price BETWEEN 10 AND 50</code>)
-          are efficient &mdash; the database finds the start of the range, then walks the linked list
-          without touching the tree again.
-        </ConversationalCallout>
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Full Scan vs Index Lookup — Animated">
-        <p className="text-sm text-muted-foreground mb-4">
-          Watch the difference in real time. The full scan checks every row one by one. The index
-          lookup jumps directly to the matching rows almost instantly.
-        </p>
-        <FullScanVsIndexViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Index Types Compared">
-        <p className="text-sm text-muted-foreground mb-4">
-          Not all indexes are created equal. Click each type to see its complexity, structure,
-          and ideal use cases. B+Tree is the default for a reason, but specialized indexes exist
-          for specialized workloads.
-        </p>
-        <IndexTypeComparisonViz />
-      </ConceptVisualizer>
-
-      <ConceptVisualizer title="Reading EXPLAIN ANALYZE Output">
-        <p className="text-sm text-muted-foreground mb-4">
-          The <code className="text-xs bg-muted px-1 rounded font-mono">EXPLAIN ANALYZE</code> command
-          shows you exactly what the database does with your query. Toggle between indexed and
-          non-indexed to see the dramatic difference in execution plan, buffer reads, and runtime.
-        </p>
-        <ExplainOutputViz />
-      </ConceptVisualizer>
-
-      <BeforeAfter
-        before={{
-          title: "Without Index (Full Table Scan)",
-          content: (
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p className="font-mono text-xs">
-                {`SELECT * FROM products`}<br />
-                {`  WHERE category = 'electronics';`}<br /><br />
-                {`Seq Scan on products`}<br />
-                {`  Rows examined: 10,000,000`}<br />
-                {`  Rows returned: 243`}<br />
-                {`  Time: 30,420ms`}
-              </p>
-              <p>Database reads every row sequentially. CPU and I/O spike on every query.</p>
-            </div>
-          ),
-        }}
-        after={{
-          title: "With B+Tree Index",
-          content: (
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <p className="font-mono text-xs">
-                {`CREATE INDEX idx_category`}<br />
-                {`  ON products(category);`}<br /><br />
-                {`Index Scan using idx_category`}<br />
-                {`  Rows examined: 243`}<br />
-                {`  Rows returned: 243`}<br />
-                {`  Time: 1.87ms`}
-              </p>
-              <p>Database jumps directly to matching rows. 16,000x faster for the same query.</p>
-            </div>
-          ),
-        }}
+      <AhaMoment
+        question="Why do databases use B+trees instead of hash tables if hash tables are O(1)?"
+        answer={
+          <p>
+            Hash tables give O(1) for exact equality lookups, but databases rarely need <em>only</em> that.
+            Most real queries involve range scans (<code className="font-mono text-xs bg-muted px-1 rounded">WHERE price &gt; 50</code>),
+            sorting (<code className="font-mono text-xs bg-muted px-1 rounded">ORDER BY created_at</code>),
+            or prefix matching. B+trees handle all of these because data is stored in sorted order
+            with linked leaves for sequential access.
+          </p>
+        }
       />
 
-      <ScaleSimulator
-        title="Query Time vs Row Count"
-        min={10000}
-        max={10000000}
-        step={10000}
-        unit="rows"
-        metrics={(rows) => [
-          {
-            label: "Full Table Scan",
-            value: Math.round(rows * 0.003),
-            unit: "ms",
-          },
-          {
-            label: "B+Tree Index",
-            value: Math.round(Math.log2(rows) * 0.15),
-            unit: "ms",
-          },
-          {
-            label: "Speedup",
-            value: Math.round((rows * 0.003) / (Math.log2(rows) * 0.15)),
-            unit: "x",
-          },
-        ]}
-      >
-        {({ value }) => (
-          <div className="grid grid-cols-2 gap-4 pt-2">
-            <MetricCounter
-              label="Full Scan Comparisons"
-              value={value}
-              trend="up"
-            />
-            <MetricCounter
-              label="Index Comparisons"
-              value={Math.round(Math.log2(value))}
-              trend="down"
-            />
-          </div>
-        )}
-      </ScaleSimulator>
+      <QueryPerformancePlayground />
 
-      <ConversationalCallout type="warning">
-        Indexes are not free. Every index consumes disk space (a B+tree index on 10M rows is
-        typically 200-400MB) and slows down writes because the database must update the index
-        on every INSERT, UPDATE, and DELETE. A table with 10 indexes means 10 extra B+tree
-        modifications per row change. Only index columns you actually query on.
-      </ConversationalCallout>
+      <IndexTypesExplorer />
 
-      <CorrectApproach title="Indexing Strategy">
-        <div className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            <strong className="text-foreground">1. Index columns in WHERE clauses.</strong> If you frequently
-            filter by <code className="font-mono bg-muted px-1 rounded text-xs">status</code> or <code className="font-mono bg-muted px-1 rounded text-xs">created_at</code>, index them.
-          </p>
-          <p>
-            <strong className="text-foreground">2. Understand the leftmost prefix rule.</strong> A composite
-            index on <code className="font-mono bg-muted px-1 rounded text-xs">(category, price, created_at)</code> helps
-            queries filtering by <code className="font-mono bg-muted px-1 rounded text-xs">category</code>,
-            by <code className="font-mono bg-muted px-1 rounded text-xs">category + price</code>, and
-            by all three &mdash; but NOT queries filtering only
-            by <code className="font-mono bg-muted px-1 rounded text-xs">price</code> alone.
-          </p>
-          <p>
-            <strong className="text-foreground">3. Use covering indexes.</strong> If your index includes all
-            columns the query needs, the database reads everything from the index and never touches
-            the table heap at all. In PostgreSQL:
-            <code className="font-mono bg-muted px-1 rounded text-xs ml-1">CREATE INDEX ... INCLUDE (col1, col2)</code>.
-          </p>
-          <p>
-            <strong className="text-foreground">4. Always check with EXPLAIN ANALYZE.</strong> The query
-            optimizer may choose a full scan if it estimates most rows match (low selectivity). An index
-            on a boolean column with 50/50 distribution will not help.
-          </p>
-          <p>
-            <strong className="text-foreground">5. Consider partial indexes.</strong> Index only the rows
-            that matter:
-            <code className="font-mono bg-muted px-1 rounded text-xs ml-1">{`CREATE INDEX idx_active ON orders(created_at) WHERE status = 'active'`}</code>.
-            Smaller index, faster lookups, less write overhead.
-          </p>
-        </div>
-      </CorrectApproach>
+      <WritePenaltyDemo />
 
       <AhaMoment
         question="If indexes are so great, why not index every column?"
@@ -640,24 +681,8 @@ export default function DatabaseIndexingPage() {
             20 columns and an index on each would require 20 separate trees to be updated on
             every write. For write-heavy workloads (logging, analytics ingestion, IoT telemetry),
             this can make inserts 10-20x slower. The art of indexing is choosing the <em>right</em> columns:
-            the ones that appear in your most frequent and critical queries, and that have
-            high <strong>cardinality</strong> (many distinct values). An index on a boolean column
-            is rarely useful.
-          </p>
-        }
-      />
-
-      <AhaMoment
-        question="Why do databases use B+trees instead of hash tables if hash tables are O(1)?"
-        answer={
-          <p>
-            Hash tables give O(1) for exact equality lookups, but databases rarely need <em>only</em> that.
-            Most real queries involve range scans (<code className="font-mono text-xs bg-muted px-1 rounded">WHERE price &gt; 50</code>),
-            sorting (<code className="font-mono text-xs bg-muted px-1 rounded">ORDER BY created_at</code>),
-            or prefix matching (<code className="font-mono text-xs bg-muted px-1 rounded">WHERE name LIKE &apos;Alice%&apos;</code>).
-            Hash indexes cannot do any of these. B+trees handle all of them efficiently because
-            data is stored in sorted order with linked leaves for sequential access. That
-            versatility is why B+tree is the default.
+            the ones that appear in your most frequent queries and have
+            high <strong>cardinality</strong> (many distinct values).
           </p>
         }
       />
@@ -665,11 +690,10 @@ export default function DatabaseIndexingPage() {
       <KeyTakeaway
         points={[
           "Without indexes, databases perform O(n) full table scans. A B+tree index drops lookup time to O(log n) — 23 comparisons for 10 million rows.",
-          "B+trees are the default in PostgreSQL, MySQL, SQLite, and Oracle. They store data only in linked leaf nodes, making range queries and sorting efficient.",
-          "Hash indexes offer O(1) exact-match lookups but cannot handle range queries, sorting, or prefix matching — use them only for pure equality access patterns.",
-          "GIN (inverted) indexes are essential for full-text search, JSONB queries, and array operations in PostgreSQL.",
-          "Composite indexes follow the leftmost prefix rule: an index on (A, B, C) helps queries on A, A+B, and A+B+C, but not B alone.",
-          "Always verify with EXPLAIN ANALYZE — the optimizer may ignore your index if selectivity is too low.",
+          "B+trees store data in linked leaf nodes, making range queries and sorting efficient. They are the default in PostgreSQL, MySQL, and SQLite.",
+          "Hash indexes offer O(1) exact-match lookups but cannot handle ranges or sorting. GIN indexes enable full-text search and JSONB queries.",
+          "Composite indexes follow the leftmost prefix rule: (A, B, C) helps queries on A, A+B, A+B+C, but not B alone.",
+          "Every index slows down writes and uses disk space. Profile with EXPLAIN ANALYZE and only index columns you actually query.",
         ]}
       />
     </div>

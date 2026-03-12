@@ -1,1088 +1,614 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
-import { FailureScenario } from "@/components/failure-scenario";
-import { WhyItBreaks } from "@/components/why-it-breaks";
-import { ConceptVisualizer } from "@/components/concept-visualizer";
-import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
-import { InteractiveDemo } from "@/components/interactive-demo";
-import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
-import { BeforeAfter } from "@/components/before-after";
-import { AnimatedFlow } from "@/components/animated-flow";
-import { MetricCounter } from "@/components/metric-counter";
+import { ConversationalCallout } from "@/components/conversational-callout";
 import { cn } from "@/lib/utils";
-import {
-  Scale,
-  Zap,
-  Shield,
-  Users,
-  Database,
-  ArrowRightLeft,
-  ChevronDown,
-  ChevronUp,
-  Lightbulb,
-  AlertTriangle,
-} from "lucide-react";
+import { Scale, Zap, Database, ArrowRightLeft, DollarSign, Clock, ChevronRight } from "lucide-react";
 
-const tradeOffs = [
-  {
-    id: "sql-nosql",
-    left: "SQL (PostgreSQL, MySQL)",
-    right: "NoSQL (MongoDB, DynamoDB)",
-    leftPros: [
-      "ACID transactions guarantee data integrity across operations",
-      "Complex joins and aggregations in a single query",
-      "Mature tooling, well-understood optimization and indexing",
-      "Strong schema enforcement catches bugs before production",
-    ],
-    leftCons: [
-      "Vertical scaling hits hardware ceilings quickly",
-      "Schema migrations on billion-row tables can take hours",
-      "Sharding is complex, often bolted on as an afterthought",
-    ],
-    rightPros: [
-      "Horizontal scaling is a first-class citizen from day one",
-      "Flexible schema adapts to evolving requirements weekly",
-      "High write throughput for append-heavy workloads",
-      "Document model maps naturally to application objects",
-    ],
-    rightCons: [
-      "No joins — you denormalize eagerly or query multiple times",
-      "Eventual consistency can cause stale reads that surprise users",
-      "Less mature tooling for complex analytics and reporting",
-    ],
-    realWorld:
-      "Amazon uses DynamoDB for its shopping cart (high write throughput, simple key-value access) but PostgreSQL for financial ledgers (ACID transactions, complex reporting). Shopify runs PostgreSQL for orders that need transactional guarantees.",
-    choose:
-      "SQL when you need strong consistency, complex relationships, and ad-hoc queries. NoSQL when you need flexible schemas, massive horizontal scale, and your access patterns are simple key-based lookups.",
-  },
-  {
-    id: "rest-grpc",
-    left: "REST (HTTP/JSON)",
-    right: "gRPC (HTTP/2 + Protobuf)",
-    leftPros: [
-      "Universal browser support — works from any client out of the box",
-      "Human-readable JSON simplifies debugging with curl and Postman",
-      "HTTP caching works natively through CDNs and proxies",
-      "Massive ecosystem of tools, docs, and developer familiarity",
-    ],
-    leftCons: [
-      "Verbose JSON payloads increase bandwidth by 5-10x vs binary",
-      "No built-in streaming support (needs WebSockets as workaround)",
-      "Weak typing leads to runtime contract violations between services",
-    ],
-    rightPros: [
-      "Binary protobuf payloads are 5-10x smaller than JSON",
-      "Strongly typed contracts catch breaking changes at compile time",
-      "Native bidirectional streaming for real-time data flows",
-      "Code generation eliminates hand-written boilerplate",
-    ],
-    rightCons: [
-      "No native browser support — needs grpc-web proxy layer",
-      "Binary format makes debugging harder without special tools",
-      "Steeper learning curve for teams new to protobuf and HTTP/2",
-    ],
-    realWorld:
-      "Netflix uses gRPC for internal service-to-service calls (low latency, strong contracts across 1000+ microservices) but REST for its public API (browser support, developer familiarity for third-party integrations).",
-    choose:
-      "REST for public APIs and browser clients. gRPC for internal microservice communication where performance and type safety matter more than readability.",
-  },
+/* ── Static color maps (no dynamic Tailwind interpolation) ── */
+
+const dialColorLeft: Record<string, string> = {
+  "consistency-availability": "bg-blue-500",
+  "latency-throughput": "bg-violet-500",
+  "cost-performance": "bg-amber-500",
+  "read-write": "bg-emerald-500",
+};
+
+const dialColorRight: Record<string, string> = {
+  "consistency-availability": "bg-emerald-500",
+  "latency-throughput": "bg-emerald-500",
+  "cost-performance": "bg-emerald-500",
+  "read-write": "bg-blue-500",
+};
+
+const dialLabelLeft: Record<string, string> = {
+  "consistency-availability": "text-blue-400",
+  "latency-throughput": "text-violet-400",
+  "cost-performance": "text-amber-400",
+  "read-write": "text-emerald-400",
+};
+
+const dialLabelRight: Record<string, string> = {
+  "consistency-availability": "text-emerald-400",
+  "latency-throughput": "text-emerald-400",
+  "cost-performance": "text-emerald-400",
+  "read-write": "text-blue-400",
+};
+
+const chipStyles: Record<string, string> = {
+  strong: "bg-violet-500/15 border-violet-500/30 text-violet-400",
+  good: "bg-blue-500/15 border-blue-500/30 text-blue-400",
+  weak: "bg-amber-500/15 border-amber-500/30 text-amber-400",
+  poor: "bg-red-500/15 border-red-500/30 text-red-400",
+};
+
+/* ── Trade-off Data ── */
+
+type TradeoffId = "consistency-availability" | "latency-throughput" | "cost-performance" | "read-write";
+
+interface TradeoffPoint {
+  position: number; // 0–100
+  label: string;
+  systems: string[];
+  leftRating: "strong" | "good" | "weak" | "poor";
+  rightRating: "strong" | "good" | "weak" | "poor";
+  insight: string;
+}
+
+interface Tradeoff {
+  id: TradeoffId;
+  leftName: string;
+  rightName: string;
+  leftIcon: React.ReactNode;
+  rightIcon: React.ReactNode;
+  description: string;
+  points: TradeoffPoint[];
+}
+
+const TRADEOFFS: Tradeoff[] = [
   {
     id: "consistency-availability",
-    left: "Consistency (CP)",
-    right: "Availability (AP)",
-    leftPros: [
-      "Every read returns the most recent write — no stale data",
-      "No user-facing contradictions or race conditions",
-      "Simplifies application logic — no conflict resolution needed",
-      "Critical for financial systems, bookings, and inventory",
+    leftName: "Consistency",
+    rightName: "Availability",
+    leftIcon: <Database className="size-4" />,
+    rightIcon: <Zap className="size-4" />,
+    description: "The CAP theorem forces a choice: when a network partition occurs, you can either refuse requests (stay consistent) or serve stale data (stay available). Most systems allow you to tune this per-operation.",
+    points: [
+      {
+        position: 5,
+        label: "Strong Consistency",
+        systems: ["Google Spanner", "CockroachDB", "Zookeeper"],
+        leftRating: "strong",
+        rightRating: "poor",
+        insight: "Every read sees the latest write, globally. Spanner achieves this with TrueTime — GPS clocks in every datacenter. Expensive: cross-region consensus on every write adds ~100ms of latency.",
+      },
+      {
+        position: 30,
+        label: "Linearizable Reads",
+        systems: ["etcd", "Consul", "PostgreSQL (sync replication)"],
+        leftRating: "good",
+        rightRating: "weak",
+        insight: "Reads go to the leader or require quorum acknowledgment. Writes are strongly consistent. Suitable for configuration stores and coordination — not user-facing high-throughput workloads.",
+      },
+      {
+        position: 50,
+        label: "Read-Your-Writes",
+        systems: ["MongoDB (majority)", "DynamoDB (strong reads)", "MySQL (semi-sync)"],
+        leftRating: "good",
+        rightRating: "good",
+        insight: "After writing, you always read your own data. Other users may see stale data briefly. The practical sweet spot for most CRUD applications — users never see their own stale data.",
+      },
+      {
+        position: 75,
+        label: "Eventual Consistency",
+        systems: ["Cassandra", "DynamoDB (default)", "Redis Cluster"],
+        leftRating: "weak",
+        rightRating: "strong",
+        insight: "Writes replicate asynchronously. All replicas converge eventually (usually milliseconds). Best for high-write workloads where brief staleness is tolerable: social feeds, counters, caches.",
+      },
+      {
+        position: 95,
+        label: "Maximum Availability",
+        systems: ["DNS", "CDN edge caches", "Read replicas"],
+        leftRating: "poor",
+        rightRating: "strong",
+        insight: "Always available, possibly very stale. DNS TTLs mean you might serve a record that changed hours ago. Correct for cases where the cost of downtime far exceeds the cost of stale data.",
+      },
     ],
-    leftCons: [
-      "System rejects requests during network partitions",
-      "Higher write latency (quorum required before acknowledging)",
-      "Lower throughput under contention from coordination overhead",
-    ],
-    rightPros: [
-      "System always responds, even during network partitions",
-      "Lower latency — nearest replica can answer immediately",
-      "Higher throughput for read-heavy workloads across regions",
-      "Better user experience when staleness is tolerable",
-    ],
-    rightCons: [
-      "Reads may return stale data for seconds or minutes",
-      "Conflict resolution adds significant application complexity",
-      "Harder to reason about system state during partitions",
-    ],
-    realWorld:
-      "Banks choose CP — showing a wrong balance or allowing an overdraft causes real financial harm. Twitter chooses AP — your feed being 2 seconds stale is invisible to users, but a 500 error page loses engagement.",
-    choose:
-      "Consistency when stale data causes real harm (money, inventory, seat reservations). Availability when uptime matters more than freshness and you can tolerate eventual consistency.",
   },
   {
-    id: "monolith-micro",
-    left: "Monolith",
-    right: "Microservices",
-    leftPros: [
-      "Single deployment unit — simple CI/CD pipeline",
-      "In-process function calls — zero network overhead",
-      "Easy debugging with a single stack trace and one log stream",
-      "Fast to build and iterate for small teams",
+    id: "latency-throughput",
+    leftName: "Low Latency",
+    rightName: "High Throughput",
+    leftIcon: <Clock className="size-4" />,
+    rightIcon: <ArrowRightLeft className="size-4" />,
+    description: "Latency (time per request) and throughput (requests per second) are related but conflicting. Batching and buffering improve throughput but add latency. Serving requests immediately reduces latency but leaves capacity underutilized.",
+    points: [
+      {
+        position: 5,
+        label: "Ultra-Low Latency",
+        systems: ["Redis (in-memory)", "CPU L1 cache", "HFT systems"],
+        leftRating: "strong",
+        rightRating: "poor",
+        insight: "Sub-millisecond response by serving from memory and avoiding batching. Every request is processed immediately. Throughput is limited by single-thread capacity — great for real-time systems, terrible for bulk ingestion.",
+      },
+      {
+        position: 30,
+        label: "Interactive Latency",
+        systems: ["API gateways", "Load balancers", "CDN edge"],
+        leftRating: "good",
+        rightRating: "weak",
+        insight: "10–100ms range. Small connection pools and minimal buffering. Users perceive responses as instant. This is the target for user-facing web APIs — sub-100ms p99 is table stakes.",
+      },
+      {
+        position: 55,
+        label: "Micro-batching",
+        systems: ["Kafka (linger.ms)", "Spark Streaming", "Kinesis"],
+        leftRating: "weak",
+        rightRating: "good",
+        insight: "Buffer requests for 5–50ms, then flush in bulk. Kafka's linger.ms trades a tiny latency increase for massive throughput gains (10x+). The right choice for event streaming and log ingestion.",
+      },
+      {
+        position: 80,
+        label: "Bulk Batching",
+        systems: ["Hadoop MapReduce", "S3 batch operations", "Redshift COPY"],
+        leftRating: "weak",
+        rightRating: "strong",
+        insight: "Minutes of latency, enormous throughput. Accumulate work, process in large chunks. Best for ETL pipelines, analytics, and export jobs where freshness is measured in hours, not milliseconds.",
+      },
+      {
+        position: 97,
+        label: "Maximum Throughput",
+        systems: ["Video encoding farms", "Genome sequencing", "ML training"],
+        leftRating: "poor",
+        rightRating: "strong",
+        insight: "Throughput is everything. Jobs run for hours or days. Individual operation latency is irrelevant — what matters is total job completion time. Scale out with as many parallel workers as possible.",
+      },
     ],
-    leftCons: [
-      "One team's change can break another team's feature",
-      "Scaling means scaling everything, even cold code paths",
-      "Technology lock-in to a single language and framework",
-    ],
-    rightPros: [
-      "Independent deployments reduce blast radius of changes",
-      "Teams own their service end-to-end with clear boundaries",
-      "Scale hot services independently without scaling cold ones",
-      "Polyglot — use the best language and framework per service",
-    ],
-    rightCons: [
-      "Distributed systems are inherently complex to debug",
-      "Network calls add latency and introduce partial failure modes",
-      "Requires mature DevOps (CI/CD, observability, service mesh)",
-      "Data consistency across service boundaries is hard",
-    ],
-    realWorld:
-      "Shopify ran a Rails monolith to $1B+ in revenue before gradually extracting services. Uber went microservices early and spent years managing the operational complexity tax with 4000+ services.",
-    choose:
-      "Monolith for small teams (under 10 engineers) and early products. Microservices when team size and scale demand independent deployments and you can afford the operational overhead.",
   },
   {
-    id: "kafka-rabbitmq",
-    left: "Kafka",
-    right: "RabbitMQ",
-    leftPros: [
-      "Ordered, replayable event log — events are retained for days or weeks",
-      "Massive throughput (millions of messages per second at LinkedIn)",
-      "Consumer groups enable parallel processing with partition assignment",
-      "Acts as both a message broker and a durable event store",
+    id: "cost-performance",
+    leftName: "Cost Efficiency",
+    rightName: "Peak Performance",
+    leftIcon: <DollarSign className="size-4" />,
+    rightIcon: <Zap className="size-4" />,
+    description: "Performance improvements almost always cost more — faster hardware, more replicas, larger caches. The question is whether the performance gain justifies the cost. Most systems are vastly over-provisioned. Measure before optimizing.",
+    points: [
+      {
+        position: 5,
+        label: "Minimal / Serverless",
+        systems: ["Vercel Functions", "AWS Lambda", "Cloudflare Workers"],
+        leftRating: "strong",
+        rightRating: "poor",
+        insight: "Pay only for what you use. Zero idle cost. But cold starts add 100–500ms latency, and per-request pricing gets expensive at scale. Best for low-traffic or highly variable workloads.",
+      },
+      {
+        position: 30,
+        label: "Shared Resources",
+        systems: ["RDS db.t3", "Shared Kubernetes nodes", "Spot instances"],
+        leftRating: "good",
+        rightRating: "weak",
+        insight: "Noisy neighbor risk. Spot instances can be reclaimed with 2 minutes notice. Good for batch workloads, dev environments, and stateless services that can tolerate interruption.",
+      },
+      {
+        position: 55,
+        label: "Dedicated Instances",
+        systems: ["EC2 reserved instances", "RDS Multi-AZ", "Managed Redis"],
+        leftRating: "good",
+        rightRating: "good",
+        insight: "Predictable performance, predictable cost. Reserved instances save ~40% vs on-demand. The sweet spot for most production workloads with stable traffic patterns and SLA requirements.",
+      },
+      {
+        position: 78,
+        label: "Provisioned Capacity",
+        systems: ["DynamoDB provisioned", "Aurora Serverless v2", "Elastic SAN"],
+        leftRating: "weak",
+        rightRating: "strong",
+        insight: "Pre-warm capacity to guarantee headroom. DynamoDB provisioned throughput eliminates throttling. You pay for capacity whether you use it or not — worth it when latency spikes cost more than idle capacity.",
+      },
+      {
+        position: 95,
+        label: "Bare Metal / Custom",
+        systems: ["Google TPUs", "Custom ASICs", "Dedicated bare metal"],
+        leftRating: "poor",
+        rightRating: "strong",
+        insight: "Maximum performance at maximum cost. Google built custom TPUs because GPUs were the bottleneck for ML training. Custom silicon for a specific workload can be 10–100x more efficient — at enormous upfront cost.",
+      },
     ],
-    leftCons: [
-      "Operational complexity — ZooKeeper/KRaft, partition rebalancing",
-      "Not designed for per-message routing or priority queues",
-      "Higher latency for individual messages (optimized for batching)",
+  },
+  {
+    id: "read-write",
+    leftName: "Read Speed",
+    rightName: "Write Speed",
+    leftIcon: <Database className="size-4" />,
+    rightIcon: <ArrowRightLeft className="size-4" />,
+    description: "Optimizing for reads typically means adding indexes, replicas, and caches — which all slow down writes. Optimizing for writes means fewer indexes, append-only logs, and write-ahead buffers — which slow down reads. Pick your dominant pattern.",
+    points: [
+      {
+        position: 5,
+        label: "Read-Optimized",
+        systems: ["Elasticsearch", "ClickHouse", "Redis (read cache)"],
+        leftRating: "strong",
+        rightRating: "poor",
+        insight: "Heavy indexing, materialized views, read replicas. Elasticsearch builds an inverted index on every indexed field — reads are instant, but indexing a document takes hundreds of milliseconds. Never use as a primary write store.",
+      },
+      {
+        position: 28,
+        label: "OLAP Workloads",
+        systems: ["Redshift", "BigQuery", "Snowflake"],
+        leftRating: "good",
+        rightRating: "weak",
+        insight: "Columnar storage optimizes analytical reads (aggregate millions of rows in milliseconds) but writes are batched — individual row inserts are slow or unsupported. Load data in bulk, query with SQL.",
+      },
+      {
+        position: 52,
+        label: "Balanced (OLTP)",
+        systems: ["PostgreSQL", "MySQL", "CockroachDB"],
+        leftRating: "good",
+        rightRating: "good",
+        insight: "B-tree indexes balance read and write performance. Most web applications live here. Writes update indexes synchronously — adding more indexes hurts write throughput but helps read speed. Tune based on your actual query patterns.",
+      },
+      {
+        position: 75,
+        label: "Write-Optimized",
+        systems: ["Cassandra", "RocksDB", "InfluxDB"],
+        leftRating: "weak",
+        rightRating: "strong",
+        insight: "LSM tree: writes go to an in-memory buffer (memtable), flushed to sorted files (SSTables). Writes are extremely fast. Reads require checking multiple SSTables — mitigated by Bloom filters. Best for time-series and event logging.",
+      },
+      {
+        position: 95,
+        label: "Write-Only / Append",
+        systems: ["Kafka", "Kinesis", "Write-ahead logs"],
+        leftRating: "poor",
+        rightRating: "strong",
+        insight: "Sequential disk writes at hundreds of MB/s. Kafka achieves this by treating the log as append-only and leveraging OS page cache. You cannot update records — only append. Reads require scanning or offset tracking.",
+      },
     ],
-    rightPros: [
-      "Rich routing patterns (direct, topic, fanout, headers exchanges)",
-      "Per-message acknowledgment and built-in dead-letter queues",
-      "Lower latency for individual messages — ideal for task queues",
-      "Simpler to operate for small-to-medium message volumes",
-    ],
-    rightCons: [
-      "Messages are deleted after consumption — no replay capability",
-      "Throughput ceiling is significantly lower than Kafka",
-      "Not an event store — just a message bus with no history",
-    ],
-    realWorld:
-      "LinkedIn uses Kafka for activity streams (ordered, replayable, millions of events per second). Stripe uses RabbitMQ-style queues for webhook delivery (per-message routing, retries with backoff, dead-letter for failed webhooks).",
-    choose:
-      "Kafka when you need event sourcing, replay, or extreme throughput. RabbitMQ when you need flexible routing, task queues, and per-message delivery guarantees.",
   },
 ];
 
-const dimensions = [
-  {
-    icon: <Scale className="size-4" />,
-    label: "Scale",
-    question: "How much data? How many users? What is the growth rate?",
-    example:
-      "10K users today but expecting 10M in 2 years changes everything about your storage layer. DynamoDB handles this natively; PostgreSQL would need painful sharding.",
-    color: "blue",
-  },
-  {
-    icon: <Shield className="size-4" />,
-    label: "Consistency",
-    question: "Can we tolerate stale reads? What happens if data is lost?",
-    example:
-      "A social media like count can be eventually consistent — off by one is invisible. A bank balance cannot — showing $500 when the real value is $0 causes real harm.",
-    color: "emerald",
-  },
-  {
-    icon: <Zap className="size-4" />,
-    label: "Latency",
-    question: "What response time is acceptable? P50 vs P99?",
-    example:
-      "A search autocomplete needs P99 under 50ms or it feels laggy. A nightly batch report can take 10 minutes and nobody cares.",
-    color: "amber",
-  },
-  {
-    icon: <Users className="size-4" />,
-    label: "Team & Ops",
-    question: "Does the team know this technology? Can they debug it at 3 AM?",
-    example:
-      "Kafka is powerful, but if nobody on the team has operated it in production, SQS might be the wiser choice. The best technology you cannot operate is worse than the adequate one you can.",
-    color: "purple",
-  },
-  {
-    icon: <Database className="size-4" />,
-    label: "Access Patterns",
-    question: "Read-heavy or write-heavy? Random or sequential? Point or range queries?",
-    example:
-      "A user profile service is read-heavy (cache-friendly, SQL works fine). An analytics ingestion pipeline is write-heavy (append-optimized, Kafka or Cassandra shine).",
-    color: "rose",
-  },
-  {
-    icon: <AlertTriangle className="size-4" />,
-    label: "Failure Modes",
-    question: "What breaks? What is the blast radius? How do we recover?",
-    example:
-      "A Redis cache failure degrades latency but data survives in the DB. A primary database failure loses writes. The blast radius determines your redundancy investment.",
-    color: "orange",
-  },
-];
+/* ── Trade-off Dial ── */
 
-function TradeOffExplorer() {
-  const [selected, setSelected] = useState(0);
-  const [expandedSide, setExpandedSide] = useState<"left" | "right" | null>(
-    null
-  );
-  const current = tradeOffs[selected];
-
+function TradeoffDial({ position, leftColor, rightColor }: { position: number; leftColor: string; rightColor: string }) {
+  const leftFill = 100 - position;
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {tradeOffs.map((t, i) => (
-          <button
-            key={t.id}
-            onClick={() => {
-              setSelected(i);
-              setExpandedSide(null);
-            }}
-            className={cn(
-              "text-xs px-3 py-1.5 rounded-full border transition-all",
-              i === selected
-                ? "border-primary bg-primary/10 font-medium text-primary"
-                : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            {t.left.split(" (")[0]} vs {t.right.split(" (")[0]}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Left option card */}
-        <button
-          onClick={() =>
-            setExpandedSide(expandedSide === "left" ? null : "left")
-          }
-          className={cn(
-            "text-left border rounded-lg p-4 transition-all",
-            "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40",
-            expandedSide === "left" && "ring-1 ring-blue-500/30"
-          )}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-semibold text-blue-400">
-              {current.left}
-            </p>
-            {expandedSide === "left" ? (
-              <ChevronUp className="size-3.5 text-blue-400" />
-            ) : (
-              <ChevronDown className="size-3.5 text-muted-foreground" />
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Click to expand pros and cons
-          </p>
-          {expandedSide === "left" && (
-            <div className="space-y-3 mt-3 border-t border-blue-500/10 pt-3">
-              <div>
-                <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5">
-                  Strengths
-                </p>
-                <ul className="space-y-1">
-                  {current.leftPros.map((p) => (
-                    <li
-                      key={p}
-                      className="text-xs text-muted-foreground flex items-start gap-1.5"
-                    >
-                      <span className="text-emerald-400 mt-0.5 shrink-0">
-                        +
-                      </span>{" "}
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wider mb-1.5">
-                  Weaknesses
-                </p>
-                <ul className="space-y-1">
-                  {current.leftCons.map((c) => (
-                    <li
-                      key={c}
-                      className="text-xs text-muted-foreground flex items-start gap-1.5"
-                    >
-                      <span className="text-red-400 mt-0.5 shrink-0">-</span>{" "}
-                      {c}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-        </button>
-
-        {/* Right option card */}
-        <button
-          onClick={() =>
-            setExpandedSide(expandedSide === "right" ? null : "right")
-          }
-          className={cn(
-            "text-left border rounded-lg p-4 transition-all",
-            "bg-purple-500/5 border-purple-500/20 hover:border-purple-500/40",
-            expandedSide === "right" && "ring-1 ring-purple-500/30"
-          )}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-sm font-semibold text-purple-400">
-              {current.right}
-            </p>
-            {expandedSide === "right" ? (
-              <ChevronUp className="size-3.5 text-purple-400" />
-            ) : (
-              <ChevronDown className="size-3.5 text-muted-foreground" />
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Click to expand pros and cons
-          </p>
-          {expandedSide === "right" && (
-            <div className="space-y-3 mt-3 border-t border-purple-500/10 pt-3">
-              <div>
-                <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider mb-1.5">
-                  Strengths
-                </p>
-                <ul className="space-y-1">
-                  {current.rightPros.map((p) => (
-                    <li
-                      key={p}
-                      className="text-xs text-muted-foreground flex items-start gap-1.5"
-                    >
-                      <span className="text-emerald-400 mt-0.5 shrink-0">
-                        +
-                      </span>{" "}
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wider mb-1.5">
-                  Weaknesses
-                </p>
-                <ul className="space-y-1">
-                  {current.rightCons.map((c) => (
-                    <li
-                      key={c}
-                      className="text-xs text-muted-foreground flex items-start gap-1.5"
-                    >
-                      <span className="text-red-400 mt-0.5 shrink-0">-</span>{" "}
-                      {c}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
-        </button>
-      </div>
-
-      {/* Verdict row */}
-      <div className="bg-emerald-500/5 border border-emerald-500/20 p-3 rounded-lg">
-        <p className="text-xs font-semibold text-emerald-400 mb-1">
-          When to choose which
-        </p>
-        <p className="text-xs text-muted-foreground">{current.choose}</p>
-      </div>
-
-      {/* Real-world example */}
-      <div className="bg-amber-500/5 border border-amber-500/20 p-3 rounded-lg">
-        <div className="flex items-start gap-2">
-          <Lightbulb className="size-3.5 text-amber-400 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-amber-400 mb-1">
-              Real-world example
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {current.realWorld}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ItDependsExplorer() {
-  const [activeDimension, setActiveDimension] = useState<number | null>(null);
-  const [revealed, setRevealed] = useState<Set<number>>(new Set());
-
-  const colorMap: Record<string, string> = {
-    blue: "bg-blue-500/10 border-blue-500/20 text-blue-400",
-    emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-    amber: "bg-amber-500/10 border-amber-500/20 text-amber-400",
-    purple: "bg-purple-500/10 border-purple-500/20 text-purple-400",
-    rose: "bg-rose-500/10 border-rose-500/20 text-rose-400",
-    orange: "bg-orange-500/10 border-orange-500/20 text-orange-400",
-  };
-
-  const activeColorMap: Record<string, string> = {
-    blue: "ring-blue-500/30",
-    emerald: "ring-emerald-500/30",
-    amber: "ring-amber-500/30",
-    purple: "ring-purple-500/30",
-    rose: "ring-rose-500/30",
-    orange: "ring-orange-500/30",
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {dimensions.map((d, i) => (
-          <button
-            key={d.label}
-            onClick={() => {
-              setActiveDimension(activeDimension === i ? null : i);
-              setRevealed((prev) => new Set(prev).add(i));
-            }}
-            className={cn(
-              "text-left p-3 rounded-lg border transition-all",
-              colorMap[d.color],
-              activeDimension === i && `ring-1 ${activeColorMap[d.color]}`
-            )}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              {d.icon}
-              <span className="text-xs font-semibold">{d.label}</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              {d.question}
-            </p>
-          </button>
-        ))}
-      </div>
-      {activeDimension !== null && (
-        <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-          <p className="text-xs font-semibold mb-1">
-            {dimensions[activeDimension].label} in practice
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {dimensions[activeDimension].example}
-          </p>
-        </div>
-      )}
-      <div className="flex items-center gap-2">
-        <div className="h-1.5 flex-1 rounded-full bg-muted/30 overflow-hidden">
-          <div
-            className="h-full bg-primary/50 transition-all duration-500 rounded-full"
-            style={{
-              width: `${(revealed.size / dimensions.length) * 100}%`,
-            }}
-          />
-        </div>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {revealed.size}/{dimensions.length} explored
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function DecisionMatrixViz() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 1500);
-    return () => clearInterval(t);
-  }, []);
-
-  const criteria = [
-    { label: "Horizontal Scale", sqlScore: 2, nosqlScore: 5 },
-    { label: "Consistency", sqlScore: 5, nosqlScore: 2 },
-    { label: "Query Power", sqlScore: 5, nosqlScore: 2 },
-    { label: "Write Throughput", sqlScore: 3, nosqlScore: 5 },
-    { label: "Schema Flexibility", sqlScore: 2, nosqlScore: 5 },
-    { label: "Ops Simplicity", sqlScore: 4, nosqlScore: 3 },
-  ];
-
-  const activeRow = step < criteria.length ? step : -1;
-  const showTotals = step >= criteria.length;
-  const sqlTotal = criteria.reduce((a, c) => a + c.sqlScore, 0);
-  const nosqlTotal = criteria.reduce((a, c) => a + c.nosqlScore, 0);
-
-  return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-[1fr_80px_80px] gap-1 text-[10px] font-mono">
-        <div className="text-muted-foreground/50 px-2 py-1">Criteria</div>
-        <div className="text-blue-400/70 text-center py-1">SQL</div>
-        <div className="text-purple-400/70 text-center py-1">NoSQL</div>
-        {criteria.map((c, i) => (
-          <div key={c.label} className="contents">
-            <div
-              className={cn(
-                "px-2 py-1.5 rounded-l-md transition-all",
-                activeRow === i
-                  ? "bg-primary/10 text-primary font-medium"
-                  : step > i
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/30"
-              )}
-            >
-              {c.label}
-            </div>
-            <div
-              className={cn(
-                "text-center py-1.5 transition-all",
-                step > i
-                  ? "text-blue-400"
-                  : activeRow === i
-                    ? "text-blue-400/50"
-                    : "text-muted-foreground/20"
-              )}
-            >
-              {step >= i ? renderDots(c.sqlScore) : ""}
-            </div>
-            <div
-              className={cn(
-                "text-center py-1.5 rounded-r-md transition-all",
-                step > i
-                  ? "text-purple-400"
-                  : activeRow === i
-                    ? "text-purple-400/50"
-                    : "text-muted-foreground/20"
-              )}
-            >
-              {step >= i ? renderDots(c.nosqlScore) : ""}
-            </div>
-          </div>
-        ))}
-        {showTotals && (
-          <div className="contents">
-            <div className="px-2 py-1.5 border-t border-border/30 font-semibold text-muted-foreground">
-              Total
-            </div>
-            <div className="text-center py-1.5 border-t border-border/30 font-bold text-blue-400">
-              {sqlTotal}
-            </div>
-            <div className="text-center py-1.5 border-t border-border/30 font-bold text-purple-400">
-              {nosqlTotal}
-            </div>
-          </div>
-        )}
-      </div>
-      <p className="text-[11px] text-muted-foreground/60">
-        {showTotals
-          ? "Scores are nearly tied — the winner depends on which criteria carry the most weight for YOUR specific system."
-          : `Evaluating ${activeRow >= 0 && activeRow < criteria.length ? criteria[activeRow].label.toLowerCase() : "criteria"}...`}
-      </p>
-    </div>
-  );
-}
-
-function renderDots(score: number) {
-  return (
-    <span className="inline-flex gap-px">
-      {Array.from({ length: 5 }, (_, i) => (
-        <span
-          key={i}
-          className={cn(
-            "inline-block size-1.5 rounded-full",
-            i < score ? "bg-current" : "bg-current/20"
-          )}
+    <div className="relative flex items-center gap-2">
+      <div className="h-3 flex-1 rounded-full overflow-hidden bg-muted/30 border border-border/30 flex">
+        <div
+          className={cn("h-full transition-all duration-500 rounded-full", leftColor)}
+          style={{ width: `${leftFill}%`, opacity: 0.8 }}
         />
-      ))}
-    </span>
-  );
-}
-
-function InterviewTemplateWalkthrough() {
-  const [activeStep, setActiveStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setActiveStep((s) => (s + 1) % 5), 3000);
-    return () => clearInterval(t);
-  }, []);
-
-  const steps = [
-    {
-      label: "State the requirement",
-      color: "blue",
-      example:
-        "We need to handle 50K writes per second with flexible schemas and the data model is evolving weekly...",
-      why: "Anchors the conversation in constraints, not opinions. The interviewer knows you are reasoning from requirements.",
-    },
-    {
-      label: "Name 2-3 realistic options",
-      color: "purple",
-      example:
-        "We could use PostgreSQL with JSONB columns, DynamoDB for native horizontal scaling, or Cassandra for write-optimized workloads...",
-      why: "Shows breadth of knowledge. Naming only one option signals you have not thought about alternatives.",
-    },
-    {
-      label: "Explain what you gain and lose",
-      color: "emerald",
-      example:
-        "DynamoDB gives us predictable single-digit latency at any scale, but we lose ad-hoc queries, JOINs, and cross-item transactions...",
-      why: "This is the core of the trade-off discussion. The interviewer is evaluating your depth right here.",
-    },
-    {
-      label: "Make a justified decision",
-      color: "orange",
-      example:
-        "Given our write-heavy workload and frequently changing schema, I would choose DynamoDB with single-table design...",
-      why: "Tying the decision back to the specific requirements shows you are reasoning, not pattern-matching from a blog post.",
-    },
-    {
-      label: "State what would change your mind",
-      color: "rose",
-      example:
-        "If we later needed complex analytical queries across this data, we would pipe DynamoDB streams to Redshift or BigQuery...",
-      why: "Shows you think about system evolution. This is senior-level thinking and most candidates miss it entirely.",
-    },
-  ];
-
-  const colorBorder: Record<string, string> = {
-    blue: "border-l-blue-500",
-    purple: "border-l-purple-500",
-    emerald: "border-l-emerald-500",
-    orange: "border-l-orange-500",
-    rose: "border-l-rose-500",
-  };
-
-  const colorText: Record<string, string> = {
-    blue: "text-blue-400",
-    purple: "text-purple-400",
-    emerald: "text-emerald-400",
-    orange: "text-orange-400",
-    rose: "text-rose-400",
-  };
-
-  return (
-    <div className="space-y-2">
-      {steps.map((s, i) => (
-        <button
-          key={s.label}
-          onClick={() => setActiveStep(i)}
-          className={cn(
-            "w-full text-left bg-muted/30 p-3 rounded-lg border-l-2 transition-all",
-            colorBorder[s.color],
-            activeStep === i
-              ? "ring-1 ring-border/50"
-              : "opacity-70 hover:opacity-100"
-          )}
-        >
-          <p className={cn("text-xs font-semibold mb-1", colorText[s.color])}>
-            {i + 1}. {s.label}
-          </p>
-          {activeStep === i && (
-            <div className="space-y-2 mt-2">
-              <p className="text-xs text-muted-foreground italic">
-                &quot;{s.example}&quot;
-              </p>
-              <p className="text-[11px] text-muted-foreground/70">
-                <span className="font-semibold text-muted-foreground">
-                  Why this works:{" "}
-                </span>
-                {s.why}
-              </p>
-            </div>
-          )}
-        </button>
-      ))}
+        <div
+          className={cn("h-full transition-all duration-500 rounded-full", rightColor)}
+          style={{ width: `${position}%`, opacity: 0.8 }}
+        />
+      </div>
+      <div
+        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-background border-2 border-violet-400 shadow-lg shadow-violet-500/20 transition-all duration-500"
+        style={{ left: `calc(${position}% - 8px)` }}
+      />
     </div>
   );
 }
+
+/* ── Decision Matrix ── */
+
+interface MatrixEntry {
+  scenario: string;
+  consistency: number;
+  latency: number;
+  cost: number;
+  readSpeed: number;
+  note: string;
+}
+
+const MATRIX_ENTRIES: MatrixEntry[] = [
+  { scenario: "Social media feed", consistency: 20, latency: 30, cost: 30, readSpeed: 80, note: "Eventual consistency fine; stale posts acceptable. Read-heavy, optimize for throughput." },
+  { scenario: "Banking transactions", consistency: 95, latency: 40, cost: 60, readSpeed: 50, note: "Strong consistency required. Losing money is worse than 100ms extra latency." },
+  { scenario: "Real-time bidding", consistency: 30, latency: 95, cost: 70, readSpeed: 70, note: "Sub-10ms latency critical. Slight inconsistency (overbidding) handled post-auction." },
+  { scenario: "Analytics dashboard", consistency: 20, latency: 20, cost: 40, readSpeed: 90, note: "Hours-old data is fine. Columnar stores for fast aggregations on terabytes." },
+  { scenario: "E-commerce inventory", consistency: 80, latency: 50, cost: 50, readSpeed: 60, note: "Overselling is costly. Read-your-writes minimum. Strong for the final purchase step." },
+  { scenario: "Search index", consistency: 30, latency: 60, cost: 50, readSpeed: 95, note: "Eventual is fine — users don't notice if a new post appears after 1 second. Reads must be instant." },
+];
+
+function ScoreBar({ value, color }: { value: number; color: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex-1 h-1.5 rounded-full bg-muted/30 overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${value}%` }} />
+      </div>
+      <span className="text-[9px] font-mono text-muted-foreground w-6">{value}</span>
+    </div>
+  );
+}
+
+/* ── Main Page ── */
 
 export default function TradeOffsPage() {
+  const [activeTradeoff, setActiveTradeoff] = useState<TradeoffId>("consistency-availability");
+  const [selectedPoint, setSelectedPoint] = useState<number>(2);
+  const [hoveredScenario, setHoveredScenario] = useState<number | null>(null);
+
+  const tradeoff = useMemo(
+    () => TRADEOFFS.find((t) => t.id === activeTradeoff)!,
+    [activeTradeoff]
+  );
+
+  const point = tradeoff.points[selectedPoint] ?? tradeoff.points[0];
+
+  const handleTradeoffSelect = (id: TradeoffId) => {
+    setActiveTradeoff(id);
+    setSelectedPoint(2);
+  };
+
   return (
     <div className="space-y-8">
       <TopicHero
-        title="Trade-offs & Decision Making"
-        subtitle="In system design, there are no right answers — only trade-offs you can or cannot justify. The difference between a junior and senior answer is not the technology chosen, but the reasoning behind the choice."
+        title="Trade-offs"
+        subtitle="Every system design decision is a trade-off. There is no perfect system — only the right system for your specific constraints."
         difficulty="intermediate"
       />
 
-      <FailureScenario title="You say 'let's use Kafka' without explaining why">
-        <p className="text-sm text-muted-foreground">
-          The interviewer asks how you would handle asynchronous processing. You
-          confidently say &quot;We will use Kafka.&quot; They ask &quot;Why not
-          a simple message queue like SQS or RabbitMQ?&quot; You stammer. You
-          chose Kafka because you have heard it is good, not because you reasoned
-          about the trade-offs. The interviewer writes down: &quot;resume-driven
-          development.&quot;
-        </p>
-        <BeforeAfter
-          before={{
-            title: "What the interviewer hears",
-            content: (
-              <div className="text-sm space-y-2">
-                <div className="bg-muted/50 p-2 rounded text-xs font-mono">
-                  <p>&quot;Let us use Kafka&quot;</p>
-                  <p>&quot;We should use MongoDB&quot;</p>
-                  <p>&quot;Redis for caching&quot;</p>
-                  <p className="text-red-400 mt-1">
-                    Buzzword bingo. No reasoning.
-                  </p>
-                </div>
-              </div>
-            ),
-          }}
-          after={{
-            title: "What they want to hear",
-            content: (
-              <div className="text-sm space-y-2">
-                <div className="bg-muted/50 p-2 rounded text-xs font-mono">
-                  <p>&quot;We need ordered, replayable events&quot;</p>
-                  <p>&quot;So Kafka fits because...&quot;</p>
-                  <p>&quot;The trade-off is operational cost&quot;</p>
-                  <p className="text-green-400 mt-1">
-                    Reasoning drives the choice.
-                  </p>
-                </div>
-              </div>
-            ),
-          }}
-        />
-      </FailureScenario>
+      <ConversationalCallout type="tip">
+        In interviews, trade-offs are the answer. When asked &quot;which database should I use?&quot;, the right answer is not a database name — it is a list of trade-offs and which constraints matter most for this problem.
+      </ConversationalCallout>
 
-      <WhyItBreaks title="Every technology choice is a bet — and bets need justification">
-        <p className="text-sm text-muted-foreground">
-          There is no universally &quot;best&quot; database, message queue, or
-          protocol. Each technology makes a trade-off: it optimizes for some
-          properties at the expense of others. SQL optimizes for consistency and
-          query power over write throughput. REST optimizes for simplicity and
-          universality over raw performance. Kafka optimizes for throughput and
-          durability over routing flexibility. If you cannot articulate what you
-          are giving up, you do not understand what you are gaining.
-        </p>
-        <div className="grid grid-cols-3 gap-3 mt-4">
-          <MetricCounter label="Core trade-offs" value={5} trend="neutral" />
-          <MetricCounter label="Decision dimensions" value={6} trend="neutral" />
-          <MetricCounter label="Template steps" value={5} trend="neutral" />
+      {/* Trade-off Selector */}
+      <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.02] overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-violet-500/20 bg-violet-500/[0.04] px-4 py-2">
+          <div className="size-2 rounded-full bg-violet-500/50" />
+          <span className="text-sm font-medium text-violet-400">Trade-off Explorer</span>
         </div>
-        <ConversationalCallout type="question">
-          Next time you reach for a technology, ask yourself: what am I giving
-          up by choosing this? If you cannot answer that question, you do not
-          understand the technology well enough to use it in a design interview.
-        </ConversationalCallout>
-      </WhyItBreaks>
 
-      <ConceptVisualizer title="The Decision-Making Flow">
-        <p className="text-sm text-muted-foreground mb-4">
-          Every technology decision in system design follows the same pattern.
-          You do not pick a tool first and justify it later — you start with
-          constraints and let them narrow the field.
-        </p>
-        <AnimatedFlow
-          steps={[
-            {
-              id: "req",
-              label: "Clarify Requirements",
-              description: "What exactly must this component do?",
-              icon: <Scale className="size-4" />,
-            },
-            {
-              id: "constraints",
-              label: "Identify Constraints",
-              description: "Scale, latency, consistency, team",
-              icon: <Shield className="size-4" />,
-            },
-            {
-              id: "options",
-              label: "Name 2-3 Options",
-              description: "Never just one — that is not a decision",
-              icon: <Database className="size-4" />,
-            },
-            {
-              id: "tradeoffs",
-              label: "Compare Trade-offs",
-              description: "What do you gain? What do you lose?",
-              icon: <ArrowRightLeft className="size-4" />,
-            },
-            {
-              id: "decide",
-              label: "Decide & Justify",
-              description: "Pick one and explain why",
-              icon: <Zap className="size-4" />,
-            },
-          ]}
-          interval={2500}
-        />
-      </ConceptVisualizer>
+        <div className="p-4 space-y-5">
+          {/* Property Selector */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {TRADEOFFS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => handleTradeoffSelect(t.id)}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-xs font-medium transition-all text-left",
+                  activeTradeoff === t.id
+                    ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
+                    : "bg-muted/20 border-border/30 text-muted-foreground/70 hover:bg-muted/40"
+                )}
+              >
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <Scale className="size-3" />
+                  <span className="font-semibold">{t.leftName}</span>
+                </div>
+                <div className="text-[10px] opacity-70">vs {t.rightName}</div>
+              </button>
+            ))}
+          </div>
 
-      <ConceptVisualizer title="Trade-off Explorer — 5 Decisions You Must Know">
-        <p className="text-sm text-muted-foreground mb-4">
-          These five trade-offs come up in nearly every system design interview.
-          Click each one to switch between topics, then click either side to
-          expand and see the full list of pros and cons. For each trade-off, you
-          should be able to argue <em>for either side</em> depending on the
-          constraints you are given.
-        </p>
-        <TradeOffExplorer />
-      </ConceptVisualizer>
+          {/* Description */}
+          <p className="text-sm text-muted-foreground">{tradeoff.description}</p>
 
-      <ConceptVisualizer title="Decision Matrix — How Scores Shift With Context">
-        <p className="text-sm text-muted-foreground mb-4">
-          A weighted decision matrix makes trade-offs explicit. Watch how SQL and
-          NoSQL score across different dimensions — the totals are close because
-          both are good tools. The winner depends entirely on which dimensions
-          carry the most weight for your specific system.
-        </p>
-        <DecisionMatrixViz />
-        <ConversationalCallout type="tip">
-          You would never literally fill out a scorecard in an interview. But the
-          mental model is invaluable: &quot;Option A scores higher on scalability
-          and write throughput, but Option B wins on operational simplicity. Given
-          our small team, I would pick B.&quot;
-        </ConversationalCallout>
-      </ConceptVisualizer>
+          {/* Dial */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-semibold">
+              <span className={cn("flex items-center gap-1", dialLabelLeft[activeTradeoff])}>
+                {tradeoff.leftIcon}
+                {tradeoff.leftName}
+              </span>
+              <span className={cn("flex items-center gap-1", dialLabelRight[activeTradeoff])}>
+                {tradeoff.rightName}
+                {tradeoff.rightIcon}
+              </span>
+            </div>
+            <TradeoffDial
+              position={point.position}
+              leftColor={dialColorLeft[activeTradeoff]}
+              rightColor={dialColorRight[activeTradeoff]}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground/60">
+              <span>Maximized left</span>
+              <span>Maximized right</span>
+            </div>
+          </div>
 
-      <ConceptVisualizer title="The 'It Depends' Framework — 6 Decision Dimensions">
-        <p className="text-sm text-muted-foreground mb-4">
-          &quot;It depends&quot; is the right answer to every system design
-          question — but only if you follow it with <strong>what</strong> it
-          depends on. Click each dimension below to see a concrete example of how
-          it changes the decision. Try to explore all six before moving on.
-        </p>
-        <ItDependsExplorer />
-      </ConceptVisualizer>
+          {/* Point Selector */}
+          <div className="flex gap-1.5 flex-wrap">
+            {tradeoff.points.map((p, i) => (
+              <button
+                key={p.label}
+                onClick={() => setSelectedPoint(i)}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-[11px] font-medium transition-all",
+                  selectedPoint === i
+                    ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
+                    : "bg-muted/20 border-border/30 text-muted-foreground/60 hover:bg-muted/40"
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Detail Panel */}
+          <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.03] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-sm font-semibold">{point.label}</h3>
+              <div className="flex gap-2 shrink-0">
+                <div className="text-[10px] space-y-0.5">
+                  <div className="text-muted-foreground/60">
+                    {tradeoff.leftName}
+                    <span className={cn("ml-1.5 rounded border px-1.5 py-0.5 font-medium", chipStyles[point.leftRating])}>
+                      {point.leftRating}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-[10px] space-y-0.5">
+                  <div className="text-muted-foreground/60">
+                    {tradeoff.rightName}
+                    <span className={cn("ml-1.5 rounded border px-1.5 py-0.5 font-medium", chipStyles[point.rightRating])}>
+                      {point.rightRating}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm text-muted-foreground">{point.insight}</p>
+
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium text-muted-foreground/60">Real systems at this point</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {point.systems.map((sys) => (
+                  <span
+                    key={sys}
+                    className="rounded-md bg-muted/30 border border-border/40 px-2 py-0.5 text-[11px] font-mono"
+                  >
+                    {sys}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <AhaMoment
-        question="Why is 'it depends' the most important phrase in system design?"
+        question="Why can't we just have consistency AND availability AND partition tolerance?"
         answer={
           <p>
-            Because it is honest. Every architecture is a set of trade-offs
-            shaped by specific constraints. Twitter needs availability over
-            consistency for its feed. A banking system needs consistency over
-            availability for transactions. The technology is identical; the
-            requirements are different. Saying &quot;it depends&quot; and then
-            articulating the dependencies is what separates a senior engineer
-            from a junior one. A junior says &quot;use Kafka.&quot; A senior says
-            &quot;use Kafka because we need ordered event replay, and the
-            trade-off of operational complexity is acceptable given our team size
-            and SRE support.&quot;
+            The CAP theorem proves it is mathematically impossible. During a network partition (two sides of your datacenter cannot talk), you must choose: refuse all requests until the partition heals (CP — consistent but unavailable), or keep serving requests that may be based on stale data (AP — available but inconsistent). Most real systems (Google Spanner, CockroachDB) choose CP and tune the trade-off. Most distributed caches and social feeds choose AP because stale data is cheaper than downtime.
           </p>
         }
       />
 
-      <InteractiveDemo title="Trade-off Reasoning Simulator">
-        {({ isPlaying, tick }) => {
-          const scenarios = [
-            {
-              requirement: "Chat app with 1M concurrent users",
-              good: "Kafka — ordered message log, replay for offline users who reconnect, massive throughput handles burst traffic",
-              bad: "RabbitMQ — no replay means offline users miss messages permanently, throughput ceiling under high concurrency",
-            },
-            {
-              requirement: "E-commerce checkout with inventory management",
-              good: "SQL (PostgreSQL) — ACID transactions prevent overselling, strong consistency ensures accurate inventory counts",
-              bad: "NoSQL (DynamoDB) — eventual consistency risks selling the last item to two buyers simultaneously",
-            },
-            {
-              requirement: "Social media news feed for 100M users",
-              good: "NoSQL (Cassandra) — denormalized feed per user, fast reads at scale, eventual consistency is invisible to users",
-              bad: "SQL (PostgreSQL) — joining users, posts, follows, and likes on every feed load does not scale past millions",
-            },
-            {
-              requirement: "Internal microservice mesh with 200 services",
-              good: "gRPC — binary protocol is 5-10x faster than REST, strong contracts catch breaking changes at compile time",
-              bad: "REST — JSON serialization overhead on millions of internal calls per second adds measurable latency",
-            },
-          ];
-          const active = isPlaying ? tick % scenarios.length : 0;
-          const scenario = scenarios[active];
-
-          return (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Press play to cycle through real scenarios. For each one, notice
-                how the requirement dictates which side of the trade-off wins.
-                The same technology can be the right choice in one context and
-                the wrong choice in another.
-              </p>
-              <div className="bg-muted/30 border border-border/50 p-3 rounded-lg">
-                <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider mb-1">
-                  Requirement
-                </p>
-                <p className="text-sm font-semibold">{scenario.requirement}</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-emerald-500/5 border border-emerald-500/20 p-3 rounded-lg">
-                  <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-                    Good fit
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {scenario.good}
-                  </p>
+      {/* Decision Matrix */}
+      <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.02] overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-violet-500/20 bg-violet-500/[0.04] px-4 py-2">
+          <div className="size-2 rounded-full bg-violet-500/50" />
+          <span className="text-sm font-medium text-violet-400">Decision Matrix — Common System Scenarios</span>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-muted-foreground mb-4">
+            Hover any row to see the reasoning. Bars show how much each property is prioritized (0 = not a concern, 100 = critical requirement).
+          </p>
+          <div className="space-y-2">
+            {/* Header */}
+            <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 text-[10px] text-muted-foreground/60 font-medium px-3">
+              <span>Scenario</span>
+              <span className="text-blue-400/70">Consistency</span>
+              <span className="text-violet-400/70">Low Latency</span>
+              <span className="text-amber-400/70">Cost Eff.</span>
+              <span className="text-emerald-400/70">Read Speed</span>
+            </div>
+            {MATRIX_ENTRIES.map((entry, i) => (
+              <div
+                key={entry.scenario}
+                onMouseEnter={() => setHoveredScenario(i)}
+                onMouseLeave={() => setHoveredScenario(null)}
+                className={cn(
+                  "rounded-lg border p-3 transition-all cursor-pointer",
+                  hoveredScenario === i
+                    ? "border-violet-500/30 bg-violet-500/5"
+                    : "border-border/30 bg-muted/10 hover:bg-muted/20"
+                )}
+              >
+                <div className="grid grid-cols-[1fr_80px_80px_80px_80px] gap-2 items-center">
+                  <div className="flex items-center gap-1.5">
+                    <ChevronRight className={cn("size-3 transition-all text-violet-400", hoveredScenario === i ? "opacity-100" : "opacity-0")} />
+                    <span className="text-xs font-medium">{entry.scenario}</span>
+                  </div>
+                  <ScoreBar value={entry.consistency} color="bg-blue-500" />
+                  <ScoreBar value={100 - entry.latency} color="bg-violet-500" />
+                  <ScoreBar value={100 - entry.cost} color="bg-amber-500" />
+                  <ScoreBar value={entry.readSpeed} color="bg-emerald-500" />
                 </div>
-                <div className="bg-red-500/5 border border-red-500/20 p-3 rounded-lg">
-                  <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wider mb-1">
-                    Poor fit
+                {hoveredScenario === i && (
+                  <p className="text-[11px] text-muted-foreground mt-2 ml-5 border-l-2 border-violet-500/30 pl-2">
+                    {entry.note}
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    {scenario.bad}
-                  </p>
-                </div>
+                )}
               </div>
-            </div>
-          );
-        }}
-      </InteractiveDemo>
+            ))}
+          </div>
+        </div>
+      </div>
 
-      <CorrectApproach title="The 5-Step Interview Template for Trade-off Discussions">
-        <p className="text-sm text-muted-foreground mb-4">
-          Follow this template every time you make a technology choice in an
-          interview. It takes 30 seconds and completely transforms how the
-          interviewer perceives your answer. Click each step to see it in action
-          with a real example, or let it auto-advance.
-        </p>
-        <InterviewTemplateWalkthrough />
-      </CorrectApproach>
-
-      <BeforeAfter
-        before={{
-          title: "Junior-level answer",
-          content: (
-            <div className="text-sm space-y-2">
-              <div className="bg-muted/50 p-2 rounded text-xs font-mono space-y-1">
-                <p>&quot;For the database, I will use MongoDB.&quot;</p>
-                <p>&quot;For messaging, Kafka.&quot;</p>
-                <p>&quot;For caching, Redis.&quot;</p>
-                <p className="text-red-400 mt-2">
-                  Names technologies. No reasoning. No trade-offs discussed.
-                </p>
-              </div>
-            </div>
-          ),
-        }}
-        after={{
-          title: "Senior-level answer",
-          content: (
-            <div className="text-sm space-y-2">
-              <div className="bg-muted/50 p-2 rounded text-xs font-mono space-y-1">
-                <p>
-                  &quot;Our access pattern is key-based lookups at 50K RPS.
-                  DynamoDB fits because...&quot;
-                </p>
-                <p>
-                  &quot;We lose JOINs, but our data model doesn&apos;t need
-                  them.&quot;
-                </p>
-                <p>
-                  &quot;If we later need analytics, we would stream to
-                  Redshift.&quot;
-                </p>
-                <p className="text-green-400 mt-2">
-                  Requirements drive choice. Trade-offs acknowledged. Evolution
-                  planned.
-                </p>
-              </div>
-            </div>
-          ),
-        }}
-      />
-
-      <ConversationalCallout type="tip">
-        Bonus points in interviews: after making a choice, mention what would
-        change your mind. &quot;If we later discovered that our access patterns
-        require complex analytical queries across this data, we might add a
-        PostgreSQL read replica or pipe data to a data warehouse. But for the
-        current requirements, the simpler solution is better.&quot; This shows
-        you think about evolving systems, not frozen snapshots.
+      <ConversationalCallout type="warning">
+        The biggest trade-off mistake: optimizing prematurely. Most startups do not need Cassandra's eventual consistency model — they need to ship. Start with PostgreSQL, measure your actual bottlenecks, then make a conscious trade-off. Premature optimization is the root of most over-engineered systems.
       </ConversationalCallout>
 
-      <ConceptVisualizer title="Common Anti-Patterns in Trade-off Discussions">
-        <p className="text-sm text-muted-foreground mb-4">
-          These are the mistakes interviewers see most often. Recognizing them in
-          your own reasoning is the first step to eliminating them from your
-          answers.
-        </p>
-        <div className="space-y-2">
+      {/* Trade-off Framework */}
+      <div className="rounded-xl border border-border/50 bg-muted/5 p-5 space-y-4">
+        <h2 className="text-base font-semibold">Framework: How to Reason About Trade-offs in Interviews</h2>
+        <div className="space-y-3">
           {[
             {
-              pattern: "Resume-Driven Development",
-              desc: "Picking a technology because it looks good on your resume, not because it fits the problem. The interviewer sees through this immediately.",
-              fix: "Always start with the requirement, not the tool. Let constraints narrow the options organically.",
+              step: "1",
+              title: "Identify the dominant access pattern",
+              desc: "Is this read-heavy or write-heavy? What is the read:write ratio? (Twitter: 100:1 reads to writes. Stock trading: near 1:1.)",
+              color: "bg-blue-500/10 border-blue-500/20 text-blue-400",
             },
             {
-              pattern: "Silver Bullet Thinking",
-              desc: "Believing one technology is always the right choice. 'Always use PostgreSQL' or 'always use microservices' regardless of context.",
-              fix: "Name one scenario where your preferred tool is the WRONG choice. If you cannot, you do not understand it deeply enough.",
+              step: "2",
+              title: "Define your consistency requirements",
+              desc: "What happens if two users see different data? Is temporary inconsistency acceptable? (Social feed: yes. Bank balance: no.)",
+              color: "bg-violet-500/10 border-violet-500/20 text-violet-400",
             },
             {
-              pattern: "Analysis Paralysis",
-              desc: "Spending 10 minutes comparing options without making a decision. The interviewer wants you to commit and move forward.",
-              fix: "Use the 2-minute rule: state options, compare briefly, pick one, justify it, and move on. You can always revisit later if needed.",
+              step: "3",
+              title: "Establish your latency budget",
+              desc: "What is the p99 latency requirement? Real-time bidding needs <10ms. Analytics dashboards can take seconds. This drives your storage and caching decisions.",
+              color: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
             },
             {
-              pattern: "Ignoring Operational Cost",
-              desc: "Choosing Kubernetes for a two-person startup or Kafka for 100 events per second. Over-engineering is as bad as under-engineering.",
-              fix: "Always ask: can the team operate this in production at 3 AM? Simpler tools that the team understands beat powerful tools that nobody can debug.",
+              step: "4",
+              title: "Estimate scale and cost",
+              desc: "At what scale does the current approach break? When does the trade-off flip? A Redis cache is cheap at 10k RPM, expensive at 10M RPM.",
+              color: "bg-amber-500/10 border-amber-500/20 text-amber-400",
             },
-          ].map((a) => (
-            <div
-              key={a.pattern}
-              className="bg-muted/30 border border-border/50 p-3 rounded-lg"
-            >
-              <p className="text-xs font-semibold text-red-400 mb-0.5">
-                {a.pattern}
-              </p>
-              <p className="text-[11px] text-muted-foreground mb-2">
-                {a.desc}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                <span className="font-semibold text-emerald-400">Fix: </span>
-                {a.fix}
-              </p>
+            {
+              step: "5",
+              title: "State the trade-off explicitly",
+              desc: 'Never just say "use Cassandra." Say: "I am trading consistency for write throughput, which is acceptable because..."',
+              color: "bg-pink-500/10 border-pink-500/20 text-pink-400",
+            },
+          ].map(({ step, title, desc, color }) => (
+            <div key={step} className={cn("flex gap-3 rounded-lg border p-3", color)}>
+              <span className={cn("size-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0", color)}>
+                {step}
+              </span>
+              <div>
+                <p className="text-xs font-semibold">{title}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+              </div>
             </div>
           ))}
         </div>
-      </ConceptVisualizer>
+      </div>
 
       <AhaMoment
-        question="When is it okay to not discuss trade-offs?"
+        question="Is eventual consistency always worse than strong consistency?"
         answer={
           <p>
-            Almost never in an interview context. Even &quot;obvious&quot;
-            choices have trade-offs. Using HTTPS? Trade-off is latency overhead
-            from TLS handshakes (~1-2 round trips). Using a load balancer?
-            Trade-off is added complexity, cost, and a potential single point of
-            failure unless you have redundant LBs. The habit of articulating
-            trade-offs for every decision is what makes your design credible.
+            No — for many workloads, eventual consistency is the correct choice, not a compromise. Your social media feed does not need to show a post the instant it is published. DNS does not need to propagate changes in milliseconds. The global CDN does not need your latest code within seconds. For these systems, strong consistency would add latency, cost, and complexity with zero user benefit. The question is never &quot;which is better&quot; — it is &quot;which is right for this specific data, with these specific users, in this specific context.&quot;
           </p>
         }
       />
 
-      <AhaMoment
-        question="What if the interviewer disagrees with my choice?"
-        answer={
-          <p>
-            That is actually a good sign — it means they are engaging with your
-            design. Do not get defensive. Say: &quot;That is a valid concern. If
-            [their objection], then [alternative] would indeed be better because
-            [reasoning]. For the current requirements though, I believe [your
-            choice] is a better fit because [your reasoning].&quot; The
-            interviewer often disagrees to test whether you can reason under
-            pressure, not because your choice is wrong.
-          </p>
-        }
-      />
+      <ConversationalCallout type="question">
+        How do you handle trade-offs when requirements conflict? For example, a feature needs both strong consistency (payment integrity) and low latency (user experience)? The answer is usually to decompose: use strong consistency for the critical path (charge the card), then use eventual consistency for the non-critical path (update the dashboard). You are not choosing one — you are choosing different consistency levels for different operations in the same system.
+      </ConversationalCallout>
 
       <KeyTakeaway
         points={[
-          "Never name a technology without explaining why you chose it. 'Let's use X because Y' is the minimum bar.",
-          "Master the 5 core trade-offs: SQL vs NoSQL, REST vs gRPC, consistency vs availability, monolith vs microservices, Kafka vs RabbitMQ.",
-          "Every technology choice trades something for something else. If you cannot name what you are giving up, you do not understand the tool.",
-          "'It depends' is the right start — but always follow with what it depends on: scale, consistency, latency, team, access patterns, failure modes.",
-          "Use the 5-step template: state the requirement, name options, explain gains and losses, make a justified decision, state what would change your mind.",
-          "Avoid the four anti-patterns: resume-driven development, silver bullet thinking, analysis paralysis, and ignoring operational cost.",
+          "Every system design decision is a trade-off. There are no universally correct answers — only answers that fit your specific constraints: scale, latency budget, consistency requirements, and cost.",
+          "The CAP theorem forces a choice during network partitions: Consistency (refuse requests) or Availability (serve potentially stale data). Most systems tune per-operation, not system-wide.",
+          "Latency and throughput trade off against each other. Batching (Kafka linger.ms) sacrifices latency for throughput. Serving immediately (Redis) sacrifices throughput for latency.",
+          "Read-optimized storage (Elasticsearch, columnar DBs) adds indexes that slow writes. Write-optimized storage (Cassandra, Kafka) uses LSM trees that make reads slower. Pick based on your dominant pattern.",
+          "In interviews, state trade-offs explicitly: 'I am choosing eventual consistency here because X, and I am accepting the risk of Y.' This is what senior engineers do.",
+          "Do not optimize prematurely. Most teams need to ship and measure before they need Cassandra or Kafka. Start with PostgreSQL. Trade-offs should be driven by measured bottlenecks, not speculation.",
         ]}
       />
     </div>
