@@ -18,7 +18,7 @@ export function TableOfContents() {
 
   const scanHeadings = useCallback(() => {
     const container = document.querySelector(
-      "[data-slot='sidebar-inset'] .overflow-y-auto"
+      '[data-scroll-container]'
     );
     scrollContainerRef.current = container;
 
@@ -28,7 +28,10 @@ export function TableOfContents() {
 
     elements.forEach((el, i) => {
       if (!el.id) {
-        el.id = `section-${i}`;
+        el.id = el.textContent
+          ?.toLowerCase()
+          .replace(/\s+/g, '-')
+          .replace(/[^\w-]/g, '') || `section-${i}`;
       }
       items.push({
         id: el.id,

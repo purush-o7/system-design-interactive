@@ -31,7 +31,7 @@ const oauthNodeIconStyles: Record<string, string> = {
 function OAuthFlowViz() {
   const [step, setStep] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 8), 1400);
+    const t = setInterval(() => setStep((s) => (s + 1) % 10), 1400);
     return () => clearInterval(t);
   }, []);
 
@@ -199,7 +199,7 @@ function RbacAbacViz() {
   const [model, setModel] = useState<"rbac" | "abac">("rbac");
   const [step, setStep] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 4), 1200);
+    const t = setInterval(() => setStep((s) => (s + 1) % 6), 1200);
     return () => clearInterval(t);
   }, []);
 

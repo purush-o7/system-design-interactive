@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useId } from "react";
 import { Lightbulb, ChevronDown } from "lucide-react";
 import { Fade } from "@/components/animate-ui/primitives/effects/fade";
 
@@ -11,11 +11,15 @@ interface AhaMomentProps {
 
 export function AhaMoment({ question, answer }: AhaMomentProps) {
   const [revealed, setRevealed] = useState(false);
+  const id = useId();
+  const answerId = `aha-${id}`;
 
   return (
     <Fade inView inViewMargin="-50px">
       <div className="w-full text-left rounded-xl border border-amber-500/20 bg-amber-500/[0.03] transition-all hover:border-amber-500/30 hover:bg-amber-500/[0.05]">
         <button
+          aria-expanded={revealed}
+          aria-controls={answerId}
           className="w-full text-left flex items-start gap-3 px-5 py-4"
           onClick={() => setRevealed(!revealed)}
         >
@@ -33,7 +37,7 @@ export function AhaMoment({ question, answer }: AhaMomentProps) {
           />
         </button>
         {revealed && (
-          <div role="region" className="px-5 pb-4 pl-12">
+          <div id={answerId} role="region" aria-label={question} className="px-5 pb-4 pl-12">
             <div className="text-sm text-muted-foreground leading-relaxed">{answer}</div>
           </div>
         )}

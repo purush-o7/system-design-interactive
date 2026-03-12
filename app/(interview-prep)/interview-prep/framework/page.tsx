@@ -148,7 +148,7 @@ function InterviewTimeline() {
 
   useEffect(() => {
     if (isPaused) return;
-    const t = setInterval(() => setElapsed((e) => (e + 1) % 50), 600);
+    const t = setInterval(() => setElapsed((e) => Math.min(e + 1, 49)), 600);
     return () => clearInterval(t);
   }, [isPaused]);
 

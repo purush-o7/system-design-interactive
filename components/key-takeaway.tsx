@@ -9,6 +9,8 @@ interface KeyTakeawayProps {
 }
 
 export function KeyTakeaway({ points }: KeyTakeawayProps) {
+  if (!points || points.length === 0) return null;
+
   return (
     <Fade inView inViewMargin="-50px">
       <section className="rounded-xl border bg-muted/20 overflow-hidden">
@@ -17,7 +19,7 @@ export function KeyTakeaway({ points }: KeyTakeawayProps) {
         </div>
         <ul className="px-5 py-4 space-y-3">
           {points.map((point, i) => (
-            <Slide key={i} direction="left" delay={i * 0.08} inView inViewMargin="-20px">
+            <Slide key={i} direction="left" delay={i * 80} inView inViewMargin="-20px">
               <li className="flex items-start gap-3">
                 <CheckCircle className="size-4 text-emerald-500 mt-0.5 shrink-0" />
                 <span className="text-sm text-muted-foreground leading-relaxed">{point}</span>

@@ -33,7 +33,11 @@ function ChunkedUploadViz() {
     <div className="space-y-4">
       <div className="flex items-center justify-between text-[10px] text-muted-foreground/60 font-mono">
         <span>budget-report.xlsx (64MB = 16 chunks x 4MB)</span>
-        <span>{Math.min(100, Math.round((Math.min(tick, totalChunks + 3) / (totalChunks + 3)) * 100))}%</span>
+        <span>{tick > retryStart ? 100 : Math.min(99, Math.round((Array.from({ length: totalChunks }, (_, i) => {
+          const isUploaded = tick > i + 1 && i !== failedChunk;
+          const isRetryDone = i === failedChunk && tick > retryStart;
+          return isUploaded || isRetryDone ? 1 : 0;
+        }).reduce((a: number, b: number) => a + b, 0) / totalChunks) * 100))}%</span>
       </div>
 
       <div className="grid grid-cols-8 gap-1.5">

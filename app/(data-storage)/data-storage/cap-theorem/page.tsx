@@ -131,7 +131,7 @@ function PartitionSimulation() {
           <ServerNode
             type="database"
             label="Node A (US-East)"
-            sublabel={`inventory: ${isPartitioned ? 3 - Math.min(writeCount, 2) : phase === "healed" ? 1 : 5}`}
+            sublabel={`inventory: ${isPartitioned ? 5 - Math.min(writeCount, 3) : phase === "healed" ? 2 : 5}`}
             status={isPartitioned ? "warning" : "healthy"}
           />
           {isPartitioned && (
@@ -163,7 +163,7 @@ function PartitionSimulation() {
           <ServerNode
             type="database"
             label="Node B (EU-West)"
-            sublabel={`inventory: ${isPartitioned ? 5 : phase === "healed" ? 1 : 5} ${isPartitioned ? "(stale!)" : ""}`}
+            sublabel={`inventory: ${isPartitioned ? 5 : phase === "healed" ? 2 : 5} ${isPartitioned ? "(stale!)" : ""}`}
             status={isPartitioned ? "unhealthy" : "healthy"}
           />
           {isPartitioned && (
@@ -188,7 +188,7 @@ function PartitionSimulation() {
             {isPartitioned
               ? "Node B rejects all reads and writes: \"503 Service Unavailable\". Users in EU cannot shop. But no one sees stale inventory. Zero overselling risk."
               : phase === "healed"
-              ? "Both nodes sync up. Inventory is correct: 1 unit left. No conflicts to resolve."
+              ? "Both nodes sync up. Inventory is correct: 2 units left. No conflicts to resolve."
               : "Both nodes serve consistent data normally. Every read returns the latest write."}
           </p>
         </div>
@@ -330,7 +330,10 @@ function PACELCDiagram() {
 function ConsistencySpectrum() {
   const [pos, setPos] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setPos((p) => (p + 1) % 100), 80);
+    const t = setInterval(() => setPos((p) => {
+      const next = p + 1;
+      return Math.abs(((next * 2) % 200) - 100);
+    }), 80);
     return () => clearInterval(t);
   }, []);
 
@@ -385,10 +388,10 @@ export default function CapTheoremPage() {
       <FailureScenario>
         <p className="text-sm text-muted-foreground">
           Your e-commerce platform runs across two data centers. A fiber cut severs the network link
-          between them. Data center A has the latest inventory: 3 units of a popular item left.
-          Data center B still shows 5 units from before the partition. Orders pour in on both sides.
-          Data center B sells 4 units it does not actually have. When the partition heals, you
-          discover you have <strong className="text-foreground">oversold inventory by 4 units</strong>,
+          between them. Both data centers had 5 units of a popular item. Data center A sells 3 units
+          (inventory drops to 2). Data center B still shows 5 units from before the partition. Orders pour in on both sides.
+          Data center B sells 3 units it does not actually have. When the partition heals, you
+          discover you have <strong className="text-foreground">oversold inventory by 3 units</strong>,
           and customers are furious about cancelled orders.
         </p>
         <p className="text-sm text-muted-foreground">

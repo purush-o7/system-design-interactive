@@ -67,7 +67,7 @@ function TranscodingPipelineViz() {
             </span>
             <div className="flex-1 flex gap-0.5">
               {Array.from({ length: res.segments }).map((_, si) => {
-                const segActive = step > ri + 2 || (step === ri + 2 && si < (step * 2) % res.segments);
+                const segActive = step > ri + 2 || (step === ri + 2 && si < Math.ceil(res.segments / 2));
                 return (
                   <div
                     key={si}

@@ -100,7 +100,7 @@ function GatewayRoutingViz() {
       </div>
 
       <p className="text-[11px] text-muted-foreground/60 text-center">
-        {step === 0
+        {step < 2
           ? "Gateway inspects incoming request path..."
           : step < 4
           ? "Matched /api/auth/* -- routing to Auth Service on port 3001"

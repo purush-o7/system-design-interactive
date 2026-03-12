@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { FailureScenario } from "@/components/failure-scenario";
 import { WhyItBreaks } from "@/components/why-it-breaks";
@@ -69,22 +69,24 @@ const osiBorderColorVars: Record<string, string> = {
 function OSIStackDiagram() {
   const [activeLayer, setActiveLayer] = useState(0);
   const [direction, setDirection] = useState<"down" | "up">("down");
+  const directionRef = useRef(direction);
+  directionRef.current = direction;
   useEffect(() => {
     const t = setInterval(() => {
       setActiveLayer((prev) => {
-        if (direction === "down" && prev >= 6) {
+        if (directionRef.current === "down" && prev >= 6) {
           setDirection("up");
           return 6;
         }
-        if (direction === "up" && prev <= 0) {
+        if (directionRef.current === "up" && prev <= 0) {
           setDirection("down");
           return 0;
         }
-        return direction === "down" ? prev + 1 : prev - 1;
+        return directionRef.current === "down" ? prev + 1 : prev - 1;
       });
     }, 800);
     return () => clearInterval(t);
-  }, [direction]);
+  }, []);
 
   const layers = [
     { num: 7, name: "Application", protocol: "HTTP, DNS, SMTP, FTP", color: "bg-purple-500", desc: "Where your app code lives. HTTP requests, API calls." },

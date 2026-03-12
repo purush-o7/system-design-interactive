@@ -43,7 +43,7 @@ export function CategoryLanding({
         {category.topics.map((topic, i) => {
           const TopicIcon = topic.icon;
           return (
-            <Fade key={topic.slug} inView delay={i * 0.05}>
+            <Fade key={topic.slug} inView delay={i * 50}>
               <Link href={topic.href}>
                 <Card className="transition-all duration-200 hover:shadow-md hover:translate-x-1 cursor-pointer">
                   <CardHeader className="flex flex-row items-center gap-4">

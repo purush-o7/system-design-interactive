@@ -79,7 +79,7 @@ export default function RootLayout({
                   </div>
                 </header>
                 <div className="flex flex-1 min-h-0 overflow-hidden">
-                  <div id="main-content" className="flex-1 overflow-y-auto p-6 lg:p-10 min-w-0">
+                  <div id="main-content" data-scroll-container className="flex-1 overflow-y-auto p-6 lg:p-10 min-w-0">
                     <div className="max-w-4xl mx-auto">
                       <VisitTracker />
                       {children}

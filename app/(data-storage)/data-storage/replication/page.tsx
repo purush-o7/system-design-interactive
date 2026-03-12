@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { FailureScenario } from "@/components/failure-scenario";
 import { WhyItBreaks } from "@/components/why-it-breaks";
@@ -335,11 +335,13 @@ function ReplicationLagMeter() {
   const isWarning = lagMs >= 100 && lagMs < 500;
   const isDanger = lagMs >= 500;
 
+  const barOffsets = useRef(Array.from({ length: 40 }, () => Math.random() * 20));
+
   return (
     <div className="space-y-3">
       <div className="flex items-end gap-1 h-16">
         {Array.from({ length: 40 }).map((_, i) => {
-          const barLag = Math.max(0, lagMs - i * 5 + Math.random() * 20);
+          const barLag = Math.max(0, lagMs - i * 5 + barOffsets.current[i]);
           const height = Math.min(barLag / 20, 100);
           return (
             <div

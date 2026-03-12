@@ -80,15 +80,15 @@ function LatencyNumbersViz() {
   }, []);
 
   const latencies = [
-    { label: "L1 cache ref", time: "0.5 ns", bar: 1, color: "emerald" },
-    { label: "L2 cache ref", time: "7 ns", bar: 3, color: "emerald" },
-    { label: "Main memory ref", time: "100 ns", bar: 8, color: "blue" },
-    { label: "SSD random read", time: "150 us", bar: 20, color: "blue" },
-    { label: "HDD seek", time: "10 ms", bar: 40, color: "purple" },
-    { label: "Same datacenter roundtrip", time: "0.5 ms", bar: 30, color: "purple" },
-    { label: "CA to Netherlands", time: "150 ms", bar: 70, color: "orange" },
-    { label: "HDD sequential read 1MB", time: "20 ms", bar: 50, color: "red" },
-  ];
+    { label: "L1 cache ref", time: "0.5 ns", ns: 0.5, color: "emerald" },
+    { label: "L2 cache ref", time: "7 ns", ns: 7, color: "emerald" },
+    { label: "Main memory ref", time: "100 ns", ns: 100, color: "blue" },
+    { label: "SSD random read", time: "150 \u00b5s", ns: 150000, color: "blue" },
+    { label: "Same datacenter roundtrip", time: "0.5 ms", ns: 500000, color: "purple" },
+    { label: "HDD seek", time: "10 ms", ns: 10000000, color: "purple" },
+    { label: "HDD sequential read 1MB", time: "20 ms", ns: 20000000, color: "red" },
+    { label: "CA to Netherlands", time: "150 ms", ns: 150000000, color: "orange" },
+  ].map((l) => ({ ...l, bar: Math.round((Math.log10(l.ns) / Math.log10(150000000)) * 80) + 2 }));
 
   return (
     <div className="space-y-1.5">

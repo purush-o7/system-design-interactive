@@ -42,6 +42,7 @@ export function InteractiveDemo({
           </div>
           <div className="flex items-center gap-1">
             <Button
+              aria-label={isPlaying ? "Pause" : "Play"}
               variant="ghost"
               size="icon"
               className="size-7 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"
@@ -56,6 +57,7 @@ export function InteractiveDemo({
               )}
             </Button>
             <Button
+              aria-label="Reset"
               variant="ghost"
               size="icon"
               className="size-7 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"

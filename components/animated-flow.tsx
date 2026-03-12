@@ -36,6 +36,7 @@ export function AnimatedFlow({
   useEffect(() => {
     if (!autoPlay || paused || externalStep !== undefined) return;
     const timer = setInterval(() => {
+      if (steps.length === 0) return;
       setInternalStep((prev) => (prev + 1) % steps.length);
     }, interval);
     return () => clearInterval(timer);
@@ -61,9 +62,10 @@ export function AnimatedFlow({
           )}
         >
           <button
-            onClick={() => setInternalStep(i)}
+            onClick={externalStep === undefined ? () => setInternalStep(i) : undefined}
             className={cn(
               "relative flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm transition-all duration-300 text-left",
+              externalStep !== undefined && "cursor-default",
               isHorizontal ? "min-w-[110px]" : "w-full",
               i === activeStep
                 ? "border-primary/50 bg-primary/8 shadow-sm shadow-primary/5 ring-1 ring-primary/20"

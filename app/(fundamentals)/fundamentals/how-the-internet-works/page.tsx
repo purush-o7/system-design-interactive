@@ -19,7 +19,7 @@ import { Globe, Search, Handshake, ArrowRightLeft, FileText, CheckCircle2 } from
 function DnsWaterfall() {
   const [step, setStep] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 7), 1200);
+    const t = setInterval(() => setStep((s) => (s + 1) % 9), 1200);
     return () => clearInterval(t);
   }, []);
 
@@ -70,7 +70,7 @@ function DnsWaterfall() {
 function TcpHandshakeViz() {
   const [step, setStep] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setStep((s) => (s + 1) % 5), 1000);
+    const t = setInterval(() => setStep((s) => (s + 1) % 7), 1000);
     return () => clearInterval(t);
   }, []);
 

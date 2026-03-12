@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { FailureScenario } from "@/components/failure-scenario";
 import { WhyItBreaks } from "@/components/why-it-breaks";
@@ -45,6 +45,7 @@ function EvictionSimulator() {
   const [policy, setPolicy] = useState<"LRU" | "LFU" | "FIFO">("LRU");
   const [cache, setCache] = useState<CacheEntry[]>([]);
   const [step, setStep] = useState(0);
+  const stepRef = useRef(0);
   const [lastEvicted, setLastEvicted] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<string>("");
   const [history, setHistory] = useState<string[]>([]);
@@ -53,6 +54,7 @@ function EvictionSimulator() {
 
   const resetAll = useCallback(() => {
     setCache([]);
+    stepRef.current = 0;
     setStep(0);
     setLastEvicted(null);
     setLastAction("");
@@ -62,7 +64,9 @@ function EvictionSimulator() {
   }, []);
 
   const accessKey = useCallback((key: string) => {
-    setStep((s) => s + 1);
+    stepRef.current += 1;
+    const currentStep = stepRef.current;
+    setStep(currentStep);
     setHistory((h) => [...h, key]);
     setCache((prev) => {
       const existing = prev.find((e) => e.key === key);
@@ -71,7 +75,7 @@ function EvictionSimulator() {
         setLastAction(`HIT "${key}" -- found in cache`);
         setHitCount((h) => h + 1);
         return prev.map((e) =>
-          e.key === key ? { ...e, freq: e.freq + 1, order: step + 1, isNew: false, isEvicting: false } : { ...e, isNew: false, isEvicting: false }
+          e.key === key ? { ...e, freq: e.freq + 1, order: currentStep, isNew: false, isEvicting: false } : { ...e, isNew: false, isEvicting: false }
         );
       }
 
@@ -98,9 +102,9 @@ function EvictionSimulator() {
 
       setLastEvicted(evicted);
       setLastAction(evicted ? `MISS "${key}" -- evicted "${evicted}"` : `MISS "${key}" -- added to cache`);
-      return [...next, { key, freq: 1, order: step + 1, color: getColor(key), isNew: true, isEvicting: false }];
+      return [...next, { key, freq: 1, order: currentStep, color: getColor(key), isNew: true, isEvicting: false }];
     });
-  }, [policy, step]);
+  }, [policy]);
 
   const items = ["A", "B", "C", "D", "E", "F", "G", "H"];
   const hitRate = hitCount + missCount > 0 ? Math.round((hitCount / (hitCount + missCount)) * 100) : 0;

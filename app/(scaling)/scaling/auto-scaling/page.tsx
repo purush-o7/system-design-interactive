@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { FailureScenario } from "@/components/failure-scenario";
 import { WhyItBreaks } from "@/components/why-it-breaks";
@@ -17,6 +17,31 @@ import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
 import { cn } from "@/lib/utils";
 import { Activity, Clock, TrendingUp, TrendingDown, Flame, Snowflake, Timer } from "lucide-react";
+
+/* ── Server fleet with stable random offsets ── */
+function CpuTimelineServerFleet({ cpu, servers }: { cpu: number; servers: number }) {
+  const offsetsRef = useRef<number[]>([]);
+  if (offsetsRef.current.length < servers) {
+    offsetsRef.current = Array.from({ length: 20 }, () => Math.random() * 10 - 5);
+  }
+  return (
+    <div className="flex flex-wrap justify-center gap-2">
+      {Array.from({ length: servers }).map((_, i) => {
+        const perServerCpu = Math.round(cpu * (2 / servers) + offsetsRef.current[i]);
+        const clampedCpu = Math.max(10, Math.min(100, perServerCpu));
+        return (
+          <ServerNode
+            key={i}
+            type="server"
+            label={`S${i + 1}`}
+            sublabel={`~${clampedCpu}%`}
+            status={clampedCpu > 95 ? "unhealthy" : clampedCpu > 85 ? "warning" : "healthy"}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 /* ── CPU Timeline Visualization ── */
 function CpuTimelineViz() {
@@ -133,21 +158,7 @@ function CpuTimelineViz() {
       </div>
 
       {/* Server fleet */}
-      <div className="flex flex-wrap justify-center gap-2">
-        {Array.from({ length: servers }).map((_, i) => {
-          const perServerCpu = Math.round(cpu * (2 / servers) + (Math.random() * 10 - 5));
-          const clampedCpu = Math.max(10, Math.min(100, perServerCpu));
-          return (
-            <ServerNode
-              key={i}
-              type="server"
-              label={`S${i + 1}`}
-              sublabel={`~${clampedCpu}%`}
-              status={clampedCpu > 85 ? "warning" : clampedCpu > 95 ? "unhealthy" : "healthy"}
-            />
-          );
-        })}
-      </div>
+      <CpuTimelineServerFleet cpu={cpu} servers={servers} />
 
       <p className="text-[10px] text-muted-foreground/60 text-center">
         {tick < 5

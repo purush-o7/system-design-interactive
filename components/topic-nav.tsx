@@ -19,7 +19,7 @@ export function TopicNav() {
           className="group flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
-          <div className="text-right">
+          <div className="text-left">
             <div className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">
               {prev.category}
             </div>

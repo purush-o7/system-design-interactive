@@ -22,7 +22,7 @@ export function BeforeAfter({ before, after }: BeforeAfterProps) {
         <div className="flex items-center justify-center md:hidden">
           <span className="inline-flex items-center justify-center rounded-full bg-muted px-3 py-0.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">VS</span>
         </div>
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] overflow-hidden">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.03] overflow-hidden md:border-l md:border-border/30 md:pl-4">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-emerald-500/10 bg-emerald-500/[0.04]">
             <Check className="size-3.5 text-emerald-400" />
             <span className="text-xs font-semibold text-emerald-400">{after.title || "After"}</span>

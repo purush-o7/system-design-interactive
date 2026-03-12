@@ -176,18 +176,28 @@ function ModularVsConsistentViz() {
   const prevModularMap = keys.map((_, i) => i % prevCount);
   const modularRemapped = modularMap.filter((n, i) => n !== prevModularMap[i]).length;
 
-  // Consistent hash (simplified simulation)
+  // Consistent hash (ring-based simulation)
+  const ringSize = 1000;
+  const getNodePositions = (count: number) =>
+    Array.from({ length: count }, (_, i) => ((i * (ringSize / count)) | 0));
+  const findNode = (keyPos: number, positions: number[]) => {
+    const sorted = positions.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p);
+    for (const { p, i } of sorted) {
+      if (p >= keyPos) return i;
+    }
+    return sorted[0].i; // wrap around
+  };
+  const nodePositions = getNodePositions(nodeCount);
+  const prevNodePositions = getNodePositions(prevCount);
   const consistentMap = keys.map((_, i) => {
-    const hash = (i * 2654435761) >>> 0;
-    return hash % nodeCount;
+    const keyPos = (((i * 2654435761) >>> 0) % ringSize);
+    return findNode(keyPos, nodePositions);
   });
   const prevConsistentMap = keys.map((_, i) => {
-    const hash = (i * 2654435761) >>> 0;
-    return hash % prevCount;
+    const keyPos = (((i * 2654435761) >>> 0) % ringSize);
+    return findNode(keyPos, prevNodePositions);
   });
-  const consistentRemapped = nodeCount !== prevCount
-    ? Math.round(totalKeys / Math.max(nodeCount, prevCount))
-    : 0;
+  const consistentRemapped = consistentMap.filter((n, i) => n !== prevConsistentMap[i]).length;
 
   const nodeColors = ["text-blue-400", "text-emerald-400", "text-purple-400", "text-amber-400", "text-rose-400"];
 

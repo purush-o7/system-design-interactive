@@ -174,11 +174,11 @@ function PercentileDistribution() {
     return base + r * 15;
   };
 
-  const samples = Array.from({ length: 50 }, (_, i) => generateLatency(i));
+  const samples = Array.from({ length: 200 }, (_, i) => generateLatency(i));
   const sorted = [...samples].sort((a, b) => a - b);
-  const p50 = sorted[Math.floor(sorted.length * 0.5)];
-  const p95 = sorted[Math.floor(sorted.length * 0.95)];
-  const p99 = sorted[Math.floor(sorted.length * 0.99)];
+  const p50 = sorted[Math.ceil(sorted.length * 0.5) - 1];
+  const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1];
+  const p99 = sorted[Math.ceil(sorted.length * 0.99) - 1];
   const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
   const maxVal = Math.max(...samples);
 

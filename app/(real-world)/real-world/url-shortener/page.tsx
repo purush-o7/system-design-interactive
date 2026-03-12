@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { FailureScenario } from "@/components/failure-scenario";
 import { WhyItBreaks } from "@/components/why-it-breaks";
@@ -214,6 +214,7 @@ function CollisionStrategyViz() {
 
 function ReadWriteRatioViz() {
   const [step, setStep] = useState(0);
+  const readBarHeights = useRef(Array.from({ length: 100 }, () => 30 + Math.random() * 70));
   useEffect(() => {
     const t = setInterval(() => setStep((s) => (s + 1) % 100), 80);
     return () => clearInterval(t);
@@ -238,7 +239,7 @@ function ReadWriteRatioViz() {
                   ? isActive ? "bg-amber-400" : "bg-amber-400/20"
                   : isActive ? "bg-blue-400/80" : "bg-blue-400/10"
               )}
-              style={{ height: isWrite ? "100%" : `${30 + Math.random() * 70}%` }}
+              style={{ height: isWrite ? "100%" : `${readBarHeights.current[i]}%` }}
             />
           );
         })}

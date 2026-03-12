@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { FailureScenario } from "@/components/failure-scenario";
 import { WhyItBreaks } from "@/components/why-it-breaks";
@@ -22,6 +22,7 @@ function TokenBucketViz() {
   const [history, setHistory] = useState<Array<{ time: number; accepted: boolean }>>([]);
   const CAPACITY = 10;
   const REFILL_RATE = 2;
+  const barHeights = useRef(Array.from({ length: CAPACITY }, () => 60 + Math.random() * 30));
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -39,10 +40,10 @@ function TokenBucketViz() {
       for (let i = 0; i < accepted; i++) newEntries.push({ time: now, accepted: true });
       for (let i = 0; i < rejected; i++) newEntries.push({ time: now, accepted: false });
       setHistory((h) => [...h.slice(-19), ...newEntries]);
-      if (count > prev) setDraining(true);
-      setTimeout(() => setDraining(false), 600);
       return Math.max(0, prev - count);
     });
+    setDraining(true);
+    setTimeout(() => setDraining(false), 600);
   }, []);
 
   const accepted = history.filter((h) => h.accepted).length;
@@ -62,7 +63,7 @@ function TokenBucketViz() {
                   : "bg-amber-500/30 border-amber-500/30"
                 : "bg-muted/10 border-border/20"
             )}
-            style={{ height: i < tokens ? `${60 + Math.random() * 30}%` : "15%" }}
+            style={{ height: i < tokens ? `${barHeights.current[i]}%` : "15%" }}
           />
         ))}
       </div>

@@ -21,16 +21,16 @@ function CqrsSplitViz() {
   const [step, setStep] = useState(0);
   useEffect(() => {
     const t = setInterval(() => {
-      setStep((s) => {
-        if (s >= 5) {
-          setMode((m) => m === "command" ? "query" : "command");
-          return 0;
-        }
-        return s + 1;
-      });
+      setStep((s) => s + 1);
     }, 1200);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    if (step >= 5) {
+      setMode((m) => m === "command" ? "query" : "command");
+      setStep(0);
+    }
+  }, [step]);
 
   const commandSteps = [
     { label: "Client sends PlaceOrder command", active: step >= 1 },
