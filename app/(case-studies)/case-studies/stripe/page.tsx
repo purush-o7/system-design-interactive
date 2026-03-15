@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -106,6 +109,7 @@ function IdempotencyPlayground() {
       title="Idempotency Key Simulator"
       simulation={sim}
       canvasHeight="min-h-[360px]"
+      hints={["Toggle between 'Without' and 'With' idempotency key, then press play to see how network failures cause double-charging without the key."]}
       canvas={
         <div className="p-4 space-y-3">
           <div className="flex gap-2">
@@ -194,6 +198,7 @@ function WebhookRetryPlayground() {
       title="Webhook Exponential Backoff"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Watch Stripe retry a failed webhook with increasing delays. It takes 7 attempts over 3 days before success."]}
       canvas={
         <div className="p-4 space-y-3">
           <div className="space-y-1.5">
@@ -356,6 +361,7 @@ function PaymentStateMachine() {
       title="PaymentIntent State Machine"
       simulation={sim}
       canvasHeight="min-h-[220px]"
+      hints={["Press play to step through the payment lifecycle: Created, Processing, Authorized, Capturing, Succeeded."]}
       canvas={
         <div className="p-4 flex flex-col justify-center h-full">
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -506,6 +512,10 @@ export default function StripeCaseStudyPage() {
         estimatedMinutes={25}
       />
 
+      <WhyCare>
+        Stripe processes hundreds of billions of dollars annually. A single bug in their payment pipeline could lose millions. This is how they keep it reliable.
+      </WhyCare>
+
       {/* Design it yourself */}
       <AhaMoment
         question="Before reading: what is the hardest part of building a payment API? Think about network failures."
@@ -530,7 +540,7 @@ export default function StripeCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Payment Flow Architecture</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          A single Stripe API call passes through 20+ internal services. The simplified critical path below shows the key components from merchant SDK to bank authorization. Every hop is stateless and independently scalable — the Payment Intent Service acts as the central orchestrator maintaining the payment state machine.
+          A single Stripe API call passes through 20+ internal services. The simplified critical path below shows the key components from merchant SDK to bank authorization. Every hop is stateless and independently scalable via <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> and <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm> — the Payment Intent Service acts as the central orchestrator maintaining the payment state machine.
         </p>
         <div className="rounded-xl border border-border/30 bg-muted/5 overflow-hidden" style={{ minHeight: 620 }}>
           <FlowDiagram nodes={paymentFlowNodes} edges={paymentFlowEdges} minHeight={600} allowDrag={true} />
@@ -554,7 +564,7 @@ export default function StripeCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Idempotency Keys — Safe Retries for Payments</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          The core problem: networks are unreliable. A charge request can succeed server-side but the HTTP response can be lost in transit. If the client retries, the customer could be charged twice. Stripe&apos;s idempotency keys let the server detect retries and return the cached original result instead of processing again.
+          The core problem: networks are unreliable. A charge request can succeed server-side but the HTTP response can be lost in transit. If the client retries, the customer could be charged twice. Stripe&apos;s idempotency keys let the server detect retries and return the <GlossaryTerm term="cache">cached</GlossaryTerm> original result instead of processing again.
         </p>
         <IdempotencyPlayground />
         <BeforeAfter
@@ -588,7 +598,7 @@ export default function StripeCaseStudyPage() {
       </section>
 
       <ConversationalCallout type="tip">
-        Stripe stores idempotency keys in Redis for 24 hours. The key is associated with the full API response, request parameters, and a hash of the request body. If a retry comes in with the same key but different parameters, Stripe returns a 422 error — not the cached response — because different parameters indicate a programming bug, not a retry.
+        Stripe stores idempotency keys in <GlossaryTerm term="redis">Redis</GlossaryTerm> for 24 hours. The key is associated with the full API response, request parameters, and a hash of the request body. If a retry comes in with the same key but different parameters, Stripe returns a 422 error — not the cached response — because different parameters indicate a programming bug, not a retry.
       </ConversationalCallout>
 
       {/* PaymentIntent State Machine */}
@@ -626,7 +636,7 @@ export default function StripeCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Webhook Reliability — Exponential Backoff</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Payment events (succeeded, failed, disputed) are delivered to merchants via webhooks. Since merchant servers can be down for hours, Stripe implements exponential backoff retries over 3 days. Delivery is <strong>at-least-once</strong> — merchants may receive the same event multiple times and must implement idempotent handlers.
+          Payment events (succeeded, failed, disputed) are delivered to merchants via webhooks. Since merchant servers can be down for hours, Stripe implements exponential backoff retries over 3 days (<GlossaryTerm term="fault tolerance">fault tolerance</GlossaryTerm>). Delivery is <strong>at-least-once</strong> — merchants may receive the same event multiple times and must implement idempotent handlers.
         </p>
         <WebhookRetryPlayground />
       </section>
@@ -684,6 +694,44 @@ export default function StripeCaseStudyPage() {
       <ConversationalCallout type="tip">
         The append-only ledger is philosophically different from the PostgreSQL payment database. Payment records need to be updatable (marking a payment as refunded). The ledger must be truly immutable for regulatory auditing — each entry is a debit+credit pair, and no entry is ever deleted or modified. This double-entry bookkeeping enables perfect reconciliation across currencies and jurisdictions.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What problem do idempotency keys solve in payment APIs?",
+            options: [
+              "They make payments faster",
+              "They encrypt card numbers for PCI compliance",
+              "They prevent duplicate charges when a client retries after a network failure",
+              "They route payments to the correct bank"
+            ],
+            correctIndex: 2,
+            explanation: "When a charge succeeds server-side but the HTTP response is lost, the client retries. Without idempotency keys, this creates a double charge. With the key, Stripe detects the retry and returns the cached original response -- one charge, always."
+          },
+          {
+            question: "Why does Stripe separate authorization and capture into two phases?",
+            options: [
+              "It is required by law in all countries",
+              "Authorization holds funds without moving them, letting merchants verify orders before money transfers; if capture fails, the hold expires automatically",
+              "It makes the API simpler to use",
+              "Capture is only needed for refunds"
+            ],
+            correctIndex: 1,
+            explanation: "Authorization holds funds on the card. The merchant can verify inventory, run fraud checks, and confirm the order before capturing. If anything fails, the authorization expires automatically (typically 7 days) -- no refund needed, no money moved."
+          },
+          {
+            question: "Where does over 80% of payment latency come from in a Stripe API call?",
+            options: [
+              "Stripe's internal fraud detection (Radar)",
+              "Database writes to the ledger",
+              "The card network round-trip to the issuing bank (~200ms)",
+              "Webhook dispatch to the merchant"
+            ],
+            correctIndex: 2,
+            explanation: "Over 80% of payment latency is the card network round-trip (~200ms). All of Stripe's internal services (fraud detection, idempotency check, ledger write) add only ~50ms of overhead. Webhook dispatch is async and does not block the API response."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

@@ -12,6 +12,10 @@ import { LiveChart } from "@/components/live-chart";
 import { useSimulation } from "@/hooks/use-simulation";
 import { SimulationControls } from "@/components/simulation-controls";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+
 import { Pencil, BookOpen, ArrowRight, Zap, AlertTriangle, Database } from "lucide-react";
 
 /* ───────────────────────── types ───────────────────────── */
@@ -250,6 +254,7 @@ function WriteStrategyPlayground() {
         title="Write Strategy Simulator"
         simulation={sim}
         canvasHeight="min-h-[320px]"
+        hints={["Switch strategies and click Write/Read to see how data flows differently"]}
         canvas={
           <div className="h-full flex flex-col">
             {/* Strategy toggle */}
@@ -465,6 +470,7 @@ function CacheAsidePlayground() {
       title="Cache-Aside (Lazy Loading) -- Step by Step"
       simulation={sim}
       canvasHeight="min-h-[340px]"
+      hints={["Press play to step through a cache-aside read request"]}
       canvas={
         <div className="h-full flex flex-col">
           {/* Step indicator */}
@@ -614,6 +620,10 @@ export default function CachingStrategiesPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Facebook caches 500 billion objects across its infrastructure. The difference between a <GlossaryTerm term="cache hit">cache hit</GlossaryTerm> (1ms) and a database query (50ms) is the difference between a snappy app and a frustrating one.
+      </WhyCare>
+
       <div className="rounded-xl border border-red-500/20 bg-red-500/[0.02] p-5 space-y-3">
         <div className="flex items-center gap-2">
           <AlertTriangle className="size-5 text-red-400" />
@@ -621,7 +631,7 @@ export default function CachingStrategiesPage() {
         </div>
         <p className="text-sm text-muted-foreground">
           Every visitor triggers <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">SELECT * FROM products WHERE id = 42</code>.
-          Traffic spikes to 10k req/s. Connection pool exhausted, queries time out, site goes down. Redis answers in 0.1ms instead of 5ms -- a <strong className="text-foreground">50x difference</strong>.
+          Traffic spikes to 10k req/s. Connection pool exhausted, queries time out, site goes down. <GlossaryTerm term="redis">Redis</GlossaryTerm> answers in 0.1ms instead of 5ms -- a <strong className="text-foreground">50x difference</strong>.
         </p>
       </div>
 
@@ -643,7 +653,7 @@ export default function CachingStrategiesPage() {
       <CacheAsidePlayground />
 
       <ConversationalCallout type="tip">
-        Cache-aside is the default choice for most teams. It is simple, the app has full control,
+        <GlossaryTerm term="cache">Cache</GlossaryTerm>-aside is the default choice for most teams. It is simple, the app has full control,
         and it naturally only caches data that is actually read. Facebook uses this with Memcached
         in front of MySQL for user profiles.
       </ConversationalCallout>
@@ -688,16 +698,54 @@ export default function CachingStrategiesPage() {
       />
 
       <ConversationalCallout type="warning">
-        In interviews, never just say &quot;add a cache.&quot; Say which strategy and why.
-        &quot;Cache-aside with 5-min TTL for the product catalog because reads outnumber
+        In interviews, never just say &quot;add a <GlossaryTerm term="cache">cache</GlossaryTerm>.&quot; Say which strategy and why.
+        &quot;Cache-aside with 5-min <GlossaryTerm term="ttl">TTL</GlossaryTerm> for the product catalog because reads outnumber
         writes 100:1 and eventual consistency is acceptable&quot; shows real depth.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "In a write-through caching strategy, when does the database get updated?",
+            options: [
+              "Only when the cache is full",
+              "Synchronously with every write, at the same time as the cache",
+              "Asynchronously in batches after a delay",
+              "Only when a read request triggers a cache miss",
+            ],
+            correctIndex: 1,
+            explanation: "Write-through updates both the cache and the database synchronously on every write. This ensures strong consistency but adds write latency.",
+          },
+          {
+            question: "Which caching strategy is best for a write-heavy analytics pipeline where eventual consistency is acceptable?",
+            options: [
+              "Cache-aside",
+              "Write-through",
+              "Write-back (write-behind)",
+              "Write-around",
+            ],
+            correctIndex: 2,
+            explanation: "Write-back writes to the cache only and flushes to the database asynchronously. This gives the lowest write latency (<1ms), perfect for high-volume analytics where eventual consistency is acceptable.",
+          },
+          {
+            question: "What is the main risk of using write-around caching?",
+            options: [
+              "Data loss if the cache crashes",
+              "High write latency due to double writes",
+              "High cache miss rate for recently written data",
+              "Cache and database become permanently out of sync",
+            ],
+            correctIndex: 2,
+            explanation: "Write-around bypasses the cache on writes, so recently written data is not in the cache. The first read after a write will always be a cache miss, which can lead to a high miss rate for recently written data.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[
           "Cache-aside gives the application full control and only caches data that is actually read. It is the most common pattern (used by Facebook, Netflix).",
           "Write-through keeps cache and DB perfectly in sync but doubles write latency (~6ms instead of ~3ms). Use for sessions and shopping carts.",
-          "Write-back is fastest for writes (<1ms) but risks data loss if cache crashes before flushing. Use for analytics, counters, and non-critical data.",
+          "Write-back is fastest for writes (<1ms) but risks data loss if the cache crashes before flushing. Use for analytics, counters, and non-critical data.",
           "Write-around prevents cache pollution by only caching data on reads. Ideal for write-once-read-rarely patterns like audit logs.",
           "Real systems combine strategies: cache-aside for reads, write-through for sessions, write-back for analytics. Always match strategy to access pattern.",
         ]}

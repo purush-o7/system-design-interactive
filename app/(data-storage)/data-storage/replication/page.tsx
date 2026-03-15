@@ -11,6 +11,9 @@ import { LiveChart } from "@/components/live-chart";
 import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 // ─── Leader-Follower Playground ─────────────────────────────────────────────
 
@@ -77,6 +80,7 @@ function LeaderFollowerPlayground() {
   return (
     <Playground
       title="Leader-Follower Replication"
+      hints={["Click Start, then Write Data to watch replication. Try Kill Leader to see automatic failover in action."]}
       canvas={<div className="p-4"><FlowDiagram nodes={nodes} edges={edges} minHeight={300} interactive={false} fitView /></div>}
       explanation={
         <div className="space-y-4">
@@ -238,6 +242,7 @@ function MultiLeaderPlayground() {
   return (
     <Playground
       title="Multi-Leader Replication & Conflict Resolution"
+      hints={["Choose a conflict resolution strategy, then click Trigger Conflict to see what happens when two leaders update the same key."]}
       canvas={<div className="p-4"><FlowDiagram nodes={nodes} edges={edges} minHeight={280} interactive={false} fitView /></div>}
       explanation={
         <div className="space-y-4">
@@ -446,6 +451,10 @@ export default function ReplicationPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        GitHub went down for 24 hours in 2018 due to a <GlossaryTerm term="replication">replication</GlossaryTerm> failure. Understanding replication isn&apos;t just academic — it&apos;s what keeps data safe.
+      </WhyCare>
+
       <ConversationalCallout type="warning">
         A single database is a <strong>single point of failure</strong>. Hardware fails, disks corrupt,
         data centers lose power. Backups give you point-in-time recovery, but everything between the
@@ -473,7 +482,7 @@ export default function ReplicationPage() {
         answer={
           <p>
             Synchronous replication creates a <strong>chain of availability</strong>. If any sync
-            replica is down, the leader blocks all writes. Cross-region sync adds 50-150ms per write.
+            replica is down, the leader blocks all writes. Cross-region sync adds 50-150ms of <GlossaryTerm term="latency">latency</GlossaryTerm> per write.
             Most production systems use <strong>semi-synchronous</strong>: one follower is synchronous
             (safe for failover), the rest are asynchronous (for read scaling).
           </p>
@@ -484,7 +493,7 @@ export default function ReplicationPage() {
         <h2 className="text-xl font-bold">Multi-Leader Replication</h2>
         <p className="text-sm text-muted-foreground">
           Multiple servers each accept writes and replicate to each other. Great for multi-region write
-          availability, but introduces conflicts when two leaders update the same key simultaneously.
+          availability, but introduces conflicts when two leaders update the same key simultaneously. This ties into the <GlossaryTerm term="cap theorem">CAP theorem</GlossaryTerm> trade-offs.
         </p>
         <MultiLeaderPlayground />
       </section>
@@ -524,6 +533,44 @@ export default function ReplicationPage() {
             <li>Reads distributed across N replicas</li>
           </ul>
         ) }}
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "A user updates their profile photo, then immediately refreshes the page and sees the old photo. What is the most likely cause?",
+            options: [
+              "The database lost the write permanently",
+              "The read was routed to a lagging follower that hasn't received the write yet",
+              "The browser cached the old image",
+              "The leader rejected the write due to a schema violation",
+            ],
+            correctIndex: 1,
+            explanation: "This is the classic 'read-your-own-writes' problem. With async replication, a read routed to a follower may return stale data if the follower hasn't caught up. The fix is read-after-write routing: pin recent-writer reads to the leader.",
+          },
+          {
+            question: "Why do most production databases use semi-synchronous replication instead of fully synchronous?",
+            options: [
+              "Fully synchronous replication corrupts data more often",
+              "Semi-synchronous is cheaper in cloud pricing",
+              "Fully synchronous blocks all writes if any replica is down, hurting availability",
+              "Semi-synchronous provides stronger consistency guarantees",
+            ],
+            correctIndex: 2,
+            explanation: "With fully synchronous replication, the leader cannot acknowledge a write until ALL followers confirm. If any follower goes down, all writes block. Semi-synchronous keeps one sync follower (for safe failover) and the rest async (for availability).",
+          },
+          {
+            question: "What is the most dangerous failure mode in a leader-follower replication setup?",
+            options: [
+              "A follower falling behind by a few seconds",
+              "Split-brain: two nodes both believe they are the leader and accept conflicting writes",
+              "A follower running out of disk space",
+              "The leader receiving too many read requests",
+            ],
+            correctIndex: 1,
+            explanation: "Split-brain means two nodes accept writes independently, creating divergent data that is extremely difficult to reconcile. It is prevented with fencing (STONITH) and consensus protocols like Raft.",
+          },
+        ]}
       />
 
       <KeyTakeaway

@@ -15,6 +15,10 @@ import { MetricCounter } from "@/components/metric-counter";
 import { ServerNode } from "@/components/server-node";
 import { InteractiveDemo } from "@/components/interactive-demo";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+
 
 function StaleDataTimeline() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -383,6 +387,10 @@ export default function CacheInvalidationPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        Phil Karlton famously said there are only two hard problems in CS: <GlossaryTerm term="cache">cache</GlossaryTerm> invalidation and naming things. After this lesson, you&apos;ll see why &mdash; and learn practical strategies to tame the problem.
+      </WhyCare>
+
       <FailureScenario>
         <p className="text-sm text-muted-foreground">
           Your e-commerce site runs a flash sale. Prices drop at 9:00 AM. But the old prices are
@@ -401,7 +409,7 @@ export default function CacheInvalidationPage() {
       <WhyItBreaks>
         <p className="text-sm text-muted-foreground">
           The fundamental tension: caching makes things fast by serving old data, but the business
-          needs fresh data. <strong className="text-foreground">Every cache entry is a bet</strong> that the underlying data
+          needs fresh data. <strong className="text-foreground">Every <GlossaryTerm term="cache">cache</GlossaryTerm> entry is a bet</strong> that the underlying data
           will not change before the cache expires. When that bet is wrong, users see stale state.
         </p>
         <p className="text-sm text-muted-foreground">
@@ -429,7 +437,7 @@ export default function CacheInvalidationPage() {
 
       <ConceptVisualizer title="TTL-Based Invalidation">
         <p className="text-sm text-muted-foreground mb-4">
-          Every cache entry gets a time-to-live. After it expires, the next read triggers a fresh
+          Every cache entry gets a <GlossaryTerm term="ttl">time-to-live</GlossaryTerm>. After it expires, the next read triggers a fresh
           fetch from the database. Simple, predictable, zero infrastructure beyond the cache itself.
           But the staleness window equals the TTL: short TTLs mean more DB load, long TTLs mean
           more stale data.
@@ -534,7 +542,7 @@ export default function CacheInvalidationPage() {
               <div className="text-sm space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Every write updates the database <em>and</em> the cache atomically in the same
-                  operation. The cache is never stale because it is always updated on write.
+                  operation. The cache is never stale because it is always updated on write. This is the <GlossaryTerm term="write-through">write-through</GlossaryTerm> pattern.
                 </p>
                 <AnimatedFlow
                   steps={[
@@ -556,7 +564,7 @@ export default function CacheInvalidationPage() {
               <div className="text-sm space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Writes go to the cache first, then asynchronously flush to the database in batches.
-                  Ultra-low write latency but risks data loss if the cache crashes before flushing.
+                  Ultra-low write <GlossaryTerm term="latency">latency</GlossaryTerm> but risks data loss if the cache crashes before flushing. This is the <GlossaryTerm term="write-back">write-back</GlossaryTerm> pattern.
                 </p>
                 <AnimatedFlow
                   steps={[
@@ -692,6 +700,44 @@ export default function CacheInvalidationPage() {
             instead of invalidation &mdash; you never invalidate, you just deploy a new version.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Your e-commerce site caches product prices with a 5-minute TTL. A flash sale drops prices at 9:00 AM. What happens?",
+            options: [
+              "Prices update immediately in the cache",
+              "Customers may see stale (old) prices for up to 5 minutes",
+              "The cache automatically detects the price change",
+              "The database rejects the price update until the cache expires",
+            ],
+            correctIndex: 1,
+            explanation: "With TTL-based invalidation, the cache does not know that the underlying data changed. It continues serving the old price until the TTL expires, creating a staleness window of up to 5 minutes.",
+          },
+          {
+            question: "What is the best way to prevent a cache stampede (thundering herd) when a popular key expires?",
+            options: [
+              "Set a very long TTL so keys never expire",
+              "Use a distributed lock so only one request refills the cache while others wait",
+              "Remove the cache entirely and query the database directly",
+              "Increase the database connection pool size",
+            ],
+            correctIndex: 1,
+            explanation: "A distributed lock ensures only one request fetches from the database on a cache miss. All other requests wait for the lock to release, then read the freshly cached value. This prevents hundreds of simultaneous database queries.",
+          },
+          {
+            question: "Why do production systems often combine event-based invalidation with a short TTL?",
+            options: [
+              "Events are faster than TTL so TTL is unnecessary",
+              "TTL acts as a safety net in case an invalidation event is lost or delayed",
+              "TTL makes event-based invalidation faster",
+              "You can only use one or the other, not both",
+            ],
+            correctIndex: 1,
+            explanation: "Events can be lost due to network issues, queue failures, or bugs. A short TTL ensures that even if an event is dropped, the stale data will expire within seconds. This defense-in-depth approach catches the 0.1% of changes that events miss.",
+          },
+        ]}
       />
 
       <KeyTakeaway

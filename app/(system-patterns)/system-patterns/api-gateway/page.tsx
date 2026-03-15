@@ -13,6 +13,10 @@ import {
   Shield, Gauge, Zap, ToggleLeft, ToggleRight,
   Smartphone, Monitor, AlertTriangle, CheckCircle2, XCircle,
 } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // helper to reduce node boilerplate
 function n(id: string, type: string, x: number, y: number, data: Record<string, unknown>): FlowNode {
@@ -83,6 +87,7 @@ function RequestRoutingPlayground() {
       title="Request Routing Playground"
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={300} />}
       controls={false}
+      hints={["Type an API path like /api/orders/5 and click Send Request to trace the route"]}
       explanation={
         <div className="space-y-4">
           <div>
@@ -183,6 +188,7 @@ function GatewayFeaturesDemo() {
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={160} />}
       canvasHeight="min-h-[180px]"
       controls={false}
+      hints={["Toggle features on/off to see how each affects the pipeline and latency"]}
       explanation={
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground/70">
@@ -249,6 +255,7 @@ function BffPatternPlayground() {
       title="Backend for Frontend (BFF) Pattern"
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={300} />}
       controls={false}
+      hints={["Switch between Mobile and Web to compare how each BFF tailors the response"]}
       explanation={
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground/70">
@@ -334,6 +341,7 @@ function GatewayFailurePlayground() {
   return (
     <Playground
       title="Gateway as Single Point of Failure"
+      hints={["Click 'Gateway Down!' to simulate a failure, then discover the fix"]}
       canvas={
         showFix
           ? <FlowDiagram nodes={fixNodes} edges={fixEdges} minHeight={240} />
@@ -410,12 +418,16 @@ export default function ApiGatewayPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        When you open the Uber app, one screen might need data from 10 different services. The <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> makes that feel like one simple request.
+      </WhyCare>
+
       <section className="space-y-3">
         <h2 className="text-xl font-bold">Request Routing</h2>
         <p className="text-sm text-muted-foreground">
           The gateway maintains a routing table mapping external URL paths to internal services.
           Type a path below and watch the request flow through the gateway pipeline -- auth,
-          rate limiting, transformation -- before landing on the correct backend.
+          rate limiting, transformation -- before landing on the correct backend. The <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> acts as a <GlossaryTerm term="reverse proxy">reverse proxy</GlossaryTerm> with added intelligence.
         </p>
         <RequestRoutingPlayground />
       </section>
@@ -429,8 +441,8 @@ export default function ApiGatewayPage() {
       <section className="space-y-3">
         <h2 className="text-xl font-bold">Cross-Cutting Concerns</h2>
         <p className="text-sm text-muted-foreground">
-          Without a gateway, every service must implement auth, rate limiting, caching, and
-          circuit breaking independently -- 15 copies of the same logic. Toggle each feature
+          Without a gateway, every service must implement auth, rate limiting, <GlossaryTerm term="cache">caching</GlossaryTerm>, and
+          <GlossaryTerm term="circuit breaker">circuit breaking</GlossaryTerm> independently -- 15 copies of the same logic. Toggle each feature
           below to see how it changes the pipeline and response times.
         </p>
         <GatewayFeaturesDemo />
@@ -484,6 +496,44 @@ export default function ApiGatewayPage() {
         and observability -- nothing more. Order validation and pricing logic in the gateway
         creates a &quot;smart pipe&quot; bottleneck. Keep the gateway thin.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What is the primary role of an API gateway?",
+            options: [
+              "To store data for backend services",
+              "To provide a single entry point that routes requests and handles cross-cutting concerns",
+              "To replace all backend services with one service",
+              "To serve static files to clients",
+            ],
+            correctIndex: 1,
+            explanation: "The API gateway acts as a single front door for clients, routing requests to the correct backend service while centralizing auth, rate limiting, caching, and observability.",
+          },
+          {
+            question: "What is the Backend for Frontend (BFF) pattern?",
+            options: [
+              "A frontend framework that replaces the backend",
+              "Running the same gateway for all client types",
+              "Giving each client type (mobile, web) its own dedicated gateway that tailors responses",
+              "A pattern where the frontend directly calls all microservices",
+            ],
+            correctIndex: 2,
+            explanation: "BFF gives each client type its own gateway. A mobile BFF returns compact payloads while a web BFF returns richer data. Netflix pioneered this with dedicated gateways for TV, mobile, and web.",
+          },
+          {
+            question: "How do you prevent the API gateway from becoming a single point of failure?",
+            options: [
+              "By putting business logic in the gateway",
+              "By running multiple stateless gateway instances behind a load balancer",
+              "By using only one gateway instance with a very powerful server",
+              "By removing authentication from the gateway",
+            ],
+            correctIndex: 1,
+            explanation: "Gateways must be stateless so any instance can handle any request. Multiple instances behind a load balancer ensure that if one fails, others absorb the traffic.",
+          },
+        ] satisfies QuizQuestion[]}
+      />
 
       <KeyTakeaway
         points={[

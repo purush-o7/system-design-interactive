@@ -11,6 +11,9 @@ import { LiveChart } from "@/components/live-chart";
 import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { MarkerType } from "@xyflow/react";
 import {
   AlertTriangle,
@@ -139,6 +142,7 @@ function RtoRpoPlayground() {
       title="RTO / RPO Playground — select a DR strategy and simulate a disaster"
       simulation={sim}
       canvasHeight="min-h-[360px]"
+      hints={["Select different DR strategies and press play to compare recovery times"]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Strategy selector */}
@@ -452,6 +456,7 @@ function FailoverFlowPlayground() {
       title="Multi-Region Failover — watch the transition from primary to DR"
       simulation={sim}
       canvasHeight="min-h-[460px]"
+      hints={["Press play to watch the full disaster-to-recovery sequence step by step"]}
       canvas={
         <div className="w-full h-full flex flex-col">
           <FlowDiagram
@@ -596,6 +601,10 @@ export default function DisasterRecoveryPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        GitLab accidentally deleted their production database in 2017. Their backups didn&apos;t work. Understanding disaster recovery is understanding how to avoid career-ending incidents.
+      </WhyCare>
+
       <ConversationalCallout type="question">
         AWS us-east-1 goes down at 3 AM. Your app, your database, and your backups are all in
         us-east-1. How long are you down, and how much data do you lose? These aren&apos;t hypotheticals
@@ -609,7 +618,7 @@ export default function DisasterRecoveryPage() {
           Every disaster recovery decision is ultimately a tradeoff between cost and two metrics.
           <strong> RPO</strong> (Recovery Point Objective) is how much data you can afford to lose.
           <strong> RTO</strong> (Recovery Time Objective) is how long you can be offline.
-          Select a strategy and simulate a disaster to see how each performs.
+          Select a strategy -- from simple backups to full <GlossaryTerm term="replication">replication</GlossaryTerm> -- and simulate a disaster to see how each performs.
         </p>
         <RtoRpoPlayground />
       </section>
@@ -689,7 +698,7 @@ export default function DisasterRecoveryPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Multi-Region Failover in Action</h2>
         <p className="text-sm text-muted-foreground">
-          Watch a warm standby failover unfold step by step — from disaster detection to DNS cutover
+          Watch a warm standby <GlossaryTerm term="failover">failover</GlossaryTerm> unfold step by step — from disaster detection via <GlossaryTerm term="health check">health checks</GlossaryTerm> to DNS cutover
           to full traffic restoration in the DR region. Press play or step through manually.
         </p>
         <FailoverFlowPlayground />
@@ -794,6 +803,44 @@ export default function DisasterRecoveryPage() {
         skip planning for failback and end up running permanently from what was supposed to be their
         DR region, which defeats the economics of the plan.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What does RPO (Recovery Point Objective) measure?",
+            options: [
+              "How long the system can be offline after a disaster",
+              "How much data you can afford to lose, measured as time since the last backup",
+              "How many servers you need in your DR region",
+              "The cost of your disaster recovery infrastructure",
+            ],
+            correctIndex: 1,
+            explanation: "RPO measures the maximum acceptable amount of data loss, expressed as the time gap between the last backup/replication point and the disaster. An RPO of 1 hour means you can lose up to 1 hour of data.",
+          },
+          {
+            question: "Which DR strategy offers the best cost-to-recovery improvement over basic Backup & Restore?",
+            options: [
+              "Multi-Site Active-Active",
+              "Warm Standby",
+              "Pilot Light",
+              "They all offer equal improvement",
+            ],
+            correctIndex: 2,
+            explanation: "Pilot Light gives the biggest bang-for-buck: hours of downtime become about 30 minutes at roughly 2x the cost of backup-and-restore. The database replica runs continuously while compute stays stopped until needed.",
+          },
+          {
+            question: "Why is the database the hardest part of multi-region disaster recovery?",
+            options: [
+              "Databases are more expensive than application servers",
+              "Databases hold state that requires continuous replication, consistency guarantees, and conflict resolution",
+              "Databases cannot run in multiple regions",
+              "Database software does not support automated backups",
+            ],
+            correctIndex: 1,
+            explanation: "Stateless services like web servers can be launched in any region trivially. But databases hold state that must be consistent -- synchronous replication adds latency, asynchronous replication risks data loss, and active-active writes need conflict resolution.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

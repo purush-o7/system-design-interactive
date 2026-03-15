@@ -9,6 +9,9 @@ import { LiveChart } from "@/components/live-chart";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { Search, Zap, Database, PenLine } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 /* ------------------------------------------------------------------ */
 /*  1. B-Tree Search Visualizer                                       */
@@ -96,6 +99,7 @@ function BTreePlayground() {
       title="B-Tree Search Visualizer"
       controls={false}
       canvasHeight="min-h-[420px]"
+      hints={["Enter a number and click Search Tree to watch the B-tree narrow down to the leaf node in just 3 comparisons."]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Search bar */}
@@ -486,6 +490,7 @@ function IndexTypesExplorer() {
       title="Index Types Explorer"
       controls={false}
       canvasHeight="min-h-[380px]"
+      hints={["Click each index type card to compare lookup speed, insert cost, and range query support."]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Type cards */}
@@ -569,6 +574,7 @@ function WritePenaltyDemo() {
       title="Write Penalty: The Cost of Indexes"
       controls={false}
       canvasHeight="min-h-[440px]"
+      hints={["Drag the slider to add indexes and watch how insert time and storage overhead increase."]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -652,6 +658,10 @@ export default function DatabaseIndexingPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Without <GlossaryTerm term="index">indexes</GlossaryTerm>, finding a user in a million-row table means scanning every single row. With the right index, it takes microseconds.
+      </WhyCare>
+
       <BTreePlayground />
 
       <AhaMoment
@@ -677,7 +687,7 @@ export default function DatabaseIndexingPage() {
         question="If indexes are so great, why not index every column?"
         answer={
           <p>
-            Because each index is a separate B+tree that must be maintained. A table with
+            Because each <GlossaryTerm term="index">index</GlossaryTerm> is a separate B+tree that must be maintained. A table with
             20 columns and an index on each would require 20 separate trees to be updated on
             every write. For write-heavy workloads (logging, analytics ingestion, IoT telemetry),
             this can make inserts 10-20x slower. The art of indexing is choosing the <em>right</em> columns:
@@ -685,6 +695,44 @@ export default function DatabaseIndexingPage() {
             high <strong>cardinality</strong> (many distinct values).
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "You have a composite index on (country, city, zip_code). Which query can use this index?",
+            options: [
+              "WHERE city = 'Paris'",
+              "WHERE zip_code = '75001'",
+              "WHERE country = 'France' AND city = 'Paris'",
+              "WHERE city = 'Paris' AND zip_code = '75001'",
+            ],
+            correctIndex: 2,
+            explanation: "Composite indexes follow the leftmost prefix rule. The index can help queries on (country), (country, city), or (country, city, zip_code) — but not queries that skip the leading column.",
+          },
+          {
+            question: "A table has 10 million rows. How many comparisons does a B+tree index need for a lookup?",
+            options: [
+              "10,000,000 (must check every row)",
+              "About 1,000 (square root of the table)",
+              "About 23 (log base 2 of 10 million)",
+              "Exactly 1 (direct hash lookup)",
+            ],
+            correctIndex: 2,
+            explanation: "B+tree lookups are O(log n). log2(10,000,000) is approximately 23, meaning the index narrows down to the target row in about 23 comparisons regardless of table size.",
+          },
+          {
+            question: "Why might adding an index to a write-heavy logging table hurt performance?",
+            options: [
+              "Indexes make read queries slower",
+              "Each index is a separate B+tree that must be updated on every INSERT, slowing writes",
+              "Indexes use too much CPU during reads",
+              "The database cannot create indexes on tables with more than 1 million rows",
+            ],
+            correctIndex: 1,
+            explanation: "Every index is a separate data structure that must be maintained. On a write-heavy table, each INSERT must update the main table plus every index, significantly increasing write latency and I/O.",
+          },
+        ]}
       />
 
       <KeyTakeaway

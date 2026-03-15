@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { Playground } from "@/components/playground";
@@ -314,6 +317,7 @@ function CollisionDemo() {
       title="Collision-Free: Sequence Numbers Per Millisecond"
       simulation={sim}
       canvasHeight="min-h-[280px]"
+      hints={["Press play to watch 3 machines generate IDs in the same millisecond — notice each machine increments its own sequence independently"]}
       canvas={
         <div className="p-4 space-y-4 h-full">
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -589,6 +593,14 @@ export default function UniqueIdGeneratorPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Twitter generates 400 million tweets per day. Each needs a unique ID that&apos;s sortable by time and generated across hundreds of servers simultaneously.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        Distributed systems need globally unique IDs without a central coordinator. <GlossaryTerm term="snowflake">Snowflake IDs</GlossaryTerm> pack a timestamp, datacenter, machine, and sequence counter into 64 bits. Unlike random UUIDs, they are time-sortable — a huge win for database index performance. <GlossaryTerm term="sharding">Sharding</GlossaryTerm> across machines is what makes auto-increment IDs fail, and <GlossaryTerm term="replication">replication</GlossaryTerm> compounds the problem.
+      </p>
+
       {/* ---- The Problem ---- */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Why auto-increment breaks in distributed systems</h2>
@@ -688,6 +700,44 @@ export default function UniqueIdGeneratorPage() {
         machine ID assignment system. If you're starting fresh with integer primary keys, Snowflake
         wins on storage and join performance.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why does Snowflake put the timestamp in the most-significant bits of the 64-bit ID?",
+            options: [
+              "It makes the ID easier to read for humans",
+              "It ensures newer IDs are always numerically larger, making them ideal B-tree index keys",
+              "It reduces the chance of collisions",
+              "It is required by the 64-bit integer specification"
+            ],
+            correctIndex: 1,
+            explanation: "64-bit integers sort by their most-significant bits first. Putting the timestamp in bits 63-22 means newer IDs are always larger — new inserts always land at the rightmost B-tree leaf, keeping pages hot and avoiding index fragmentation."
+          },
+          {
+            question: "How many unique IDs can a single Snowflake machine generate per millisecond?",
+            options: [
+              "1,000",
+              "4,096",
+              "65,536",
+              "1,000,000"
+            ],
+            correctIndex: 1,
+            explanation: "The 12-bit sequence counter gives 2^12 = 4,096 unique values per millisecond per machine. If the counter is exhausted in a single millisecond, the generator waits until the next ms — no clock drift, no collisions."
+          },
+          {
+            question: "When would you choose UUID v4 over Snowflake IDs?",
+            options: [
+              "When you need sortable IDs for database indexes",
+              "When you need the most compact representation (64 bits)",
+              "When you need zero coordination and don't care about sort order or index performance",
+              "When you need to generate more than 4,096 IDs per millisecond"
+            ],
+            correctIndex: 2,
+            explanation: "UUID v4 needs no coordination at all — no machine ID assignment, no clock sync. The tradeoffs are that it is 128 bits (vs 64), unsortable, and fragments B-tree indexes. It is ideal when simplicity trumps performance."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

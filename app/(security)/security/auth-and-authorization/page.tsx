@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
 import { CheckCircle2, XCircle, Shield, Lock } from "lucide-react";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 /* ── static class maps (no dynamic interpolation) ── */
 
@@ -86,6 +89,7 @@ function OAuthPlayground() {
   return (
     <Playground
       title="OAuth 2.0 Authorization Code Flow with PKCE"
+      hints={["Press play to step through the OAuth 2.0 flow"]}
       simulation={sim}
       canvasHeight="min-h-[300px]"
       canvas={<FlowDiagram nodes={nodes} edges={edges} interactive={false} minHeight={300} />}
@@ -316,6 +320,7 @@ function RbacPlayground() {
     <div className="space-y-4">
       <Playground
         title="RBAC Permission Playground"
+        hints={["Toggle permissions in the matrix, then run a check"]}
         simulation={sim}
         canvasHeight="min-h-[200px]"
         canvas={<FlowDiagram nodes={rbacNodes} edges={rbacEdges} interactive={false} minHeight={200} />}
@@ -472,6 +477,10 @@ export default function AuthAndAuthorizationPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        When you click &quot;Sign in with Google&quot;, <GlossaryTerm term="oauth">OAuth</GlossaryTerm> and <GlossaryTerm term="jwt">JWT</GlossaryTerm> work behind the scenes. Understanding auth is essential — get it wrong and user data gets leaked.
+      </WhyCare>
+
       <ConversationalCallout type="question">
         What is the difference between a 401 and a 403? A 401 means &quot;we do not know who you are&quot;
         (authentication failed). A 403 means &quot;we know who you are, but you are not allowed&quot;
@@ -545,7 +554,7 @@ export default function AuthAndAuthorizationPage() {
       />
 
       <ConversationalCallout type="warning">
-        Use RS256 (asymmetric) over HS256 (symmetric) for JWTs in distributed systems. With HS256,
+        Use RS256 (asymmetric) over HS256 (symmetric) for <GlossaryTerm term="jwt">JWTs</GlossaryTerm> in distributed systems. With HS256,
         every service that verifies tokens needs the secret key — and any of them could forge tokens.
         With RS256, only the auth service holds the private signing key; other services verify with
         the public key and cannot create new tokens.
@@ -554,9 +563,47 @@ export default function AuthAndAuthorizationPage() {
       <ConversationalCallout type="tip">
         In system design interviews, always mention both authn and authz. Saying &quot;we check if the user
         is logged in&quot; only covers half the problem. Mention RBAC for simple permission models,
-        ABAC when you need context-aware rules, and note that most production systems use short-lived
+        ABAC when you need context-aware rules, and consider placing auth checks at the <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> level. Note that most production systems use short-lived
         access tokens (15 min) with rotated refresh tokens stored in httpOnly/Secure/SameSite cookies.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What is the difference between a 401 and a 403 HTTP status code?",
+            options: [
+              "401 means forbidden, 403 means unauthorized",
+              "401 means the server is down, 403 means rate limited",
+              "401 means authentication failed (unknown identity), 403 means authorization failed (insufficient permissions)",
+              "They are interchangeable and mean the same thing",
+            ],
+            correctIndex: 2,
+            explanation: "A 401 means the server doesn't know who you are (authentication failed). A 403 means the server knows who you are but you don't have permission (authorization failed).",
+          },
+          {
+            question: "Why does OAuth 2.0 with PKCE use a code_verifier and code_challenge?",
+            options: [
+              "To encrypt the access token during transit",
+              "To prove the client that started the flow is the same one exchanging the code, preventing interception attacks",
+              "To store the user's password securely on the auth server",
+              "To speed up the token exchange process",
+            ],
+            correctIndex: 1,
+            explanation: "PKCE prevents authorization code interception. The client proves it initiated the flow by sending the original code_verifier that matches the code_challenge sent at the start.",
+          },
+          {
+            question: "What happens if someone modifies the payload of a JWT token?",
+            options: [
+              "The token automatically refreshes with the new payload",
+              "The server accepts the modified token as valid",
+              "The signature becomes invalid and the server rejects the token",
+              "The token is re-signed automatically with the new data",
+            ],
+            correctIndex: 2,
+            explanation: "The JWT signature is computed over the original header and payload. Any modification invalidates the signature, and the server rejects the token with a 401.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

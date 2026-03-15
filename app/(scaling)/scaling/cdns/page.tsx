@@ -2,6 +2,9 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { KeyTakeaway } from "@/components/key-takeaway";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
@@ -71,7 +74,7 @@ function CDNGeographyPlayground() {
     `Cache HIT! Served from ${edge} edge in ${hitMs}. Origin never contacted.`;
 
   return (
-    <Playground title="CDN Geography: Request Routing" simulation={sim} canvasHeight="min-h-[340px]"
+    <Playground title="CDN Geography: Request Routing" simulation={sim} canvasHeight="min-h-[340px]" hints={["Switch regions and replay to see cache hit vs miss"]}
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={340} interactive={false} allowDrag={false} />}
       explanation={(state) => (
         <div className="space-y-4">
@@ -170,7 +173,7 @@ function PushVsPullPlayground() {
   };
 
   return (
-    <Playground title="Push vs Pull CDN" simulation={sim} canvasHeight="min-h-[280px]"
+    <Playground title="Push vs Pull CDN" simulation={sim} canvasHeight="min-h-[280px]" hints={["Toggle between Push and Pull to compare strategies"]}
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={280} interactive={false} allowDrag={false} />}
       explanation={() => (
         <div className="space-y-3">
@@ -249,7 +252,7 @@ function CacheInvalidationPlayground() {
   };
 
   return (
-    <Playground title="Cache Invalidation Strategies" simulation={sim} canvasHeight="min-h-[280px]"
+    <Playground title="Cache Invalidation Strategies" simulation={sim} canvasHeight="min-h-[280px]" hints={["Try all three strategies to see how cache updates propagate"]}
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={280} interactive={false} allowDrag={false} />}
       explanation={() => (
         <div className="space-y-3">
@@ -283,12 +286,16 @@ export default function CDNsPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        When you watch a YouTube video, it doesn&apos;t stream from California — it loads from a server near you. That&apos;s a CDN saving you seconds of buffering.
+      </WhyCare>
+
       <section className="space-y-4">
         <h2 className="text-xl font-bold">The Speed of Light is Your Enemy</h2>
         <p className="text-sm text-muted-foreground">
-          Light travels through fiber at ~200,000 km/s. A page load needs 4+ round-trips (DNS, TCP,
+          Light travels through fiber at ~200,000 km/s. A page load needs 4+ round-trips (<GlossaryTerm term="dns">DNS</GlossaryTerm>, TCP,
           TLS, HTTP). A user in Tokyo hitting a server in Virginia racks up{" "}
-          <strong className="text-red-400">~560ms of pure physics</strong> before a single byte of
+          <strong className="text-red-400">~560ms of pure <GlossaryTerm term="latency">latency</GlossaryTerm></strong> before a single byte of
           your app loads. You cannot optimize the speed of light — you can only shorten the distance.
         </p>
         <LiveChart
@@ -342,8 +349,8 @@ export default function CDNsPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-bold">How Request Routing Works</h2>
         <p className="text-sm text-muted-foreground">
-          CDNs operate hundreds of <strong>Points of Presence (PoPs)</strong> — edge servers placed
-          globally near major population centers. DNS routes each user to the nearest PoP. A cache
+          <GlossaryTerm term="cdn">CDNs</GlossaryTerm> operate hundreds of <strong>Points of Presence (PoPs)</strong> — edge servers placed
+          globally near major population centers. DNS routes each user to the nearest PoP. A <GlossaryTerm term="cache">cache</GlossaryTerm>{" "}
           hit returns the asset immediately (~15ms). A cache miss fetches from origin, stores a copy,
           then responds (~200ms). Run each region below and watch the routing animation unfold.
         </p>
@@ -438,6 +445,44 @@ export default function CDNsPage() {
         fly, and apply WAF rules. Think of a CDN as a programmable compute layer that happens to live
         20ms from every user on Earth.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why is the first request to a pull CDN edge server always slower?",
+            options: [
+              "The edge server needs to boot up first",
+              "DNS resolution takes extra time on the first request",
+              "The edge cache is empty and must fetch from the origin server",
+              "Pull CDNs always have higher latency than push CDNs",
+            ],
+            correctIndex: 2,
+            explanation: "Pull CDNs cache on demand. The first request for any asset at a PoP is a cache miss — the edge fetches from origin. After that, subsequent requests are served from the edge cache instantly.",
+          },
+          {
+            question: "Which cache invalidation strategy is best for static assets like CSS and JavaScript?",
+            options: [
+              "Short TTL with stale-while-revalidate",
+              "Purge API calls on every deploy",
+              "Content-hashed filenames with long max-age",
+              "No caching — always serve fresh from origin",
+            ],
+            correctIndex: 2,
+            explanation: "Content-hashed filenames (e.g., style.a3f8b2.css) create unique cache keys per version. Old and new versions coexist without conflict — no purge needed, no stale content.",
+          },
+          {
+            question: "What type of content should NEVER be cached on a CDN?",
+            options: [
+              "Images and videos",
+              "CSS and JavaScript bundles",
+              "Write operations and authenticated user data",
+              "Blog posts and marketing pages",
+            ],
+            correctIndex: 2,
+            explanation: "Write operations (POST, PUT, DELETE) and personalized/authenticated responses must not be cached. Caching them can expose one user's data to another — a serious security risk.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

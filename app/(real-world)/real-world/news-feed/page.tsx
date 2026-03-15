@@ -3,6 +3,9 @@
 import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -116,6 +119,7 @@ function FanoutPlayground() {
     <Playground
       title="Fanout-on-Write vs Fanout-on-Read"
       simulation={sim}
+      hints={["Toggle between Push and Pull modes, then press play to compare write vs read costs"]}
       canvas={
         <div className="h-full flex flex-col">
           <div className="flex gap-2 p-3 border-b border-violet-500/10">
@@ -319,6 +323,7 @@ function FeedRankingPlayground() {
     <Playground
       title="Feed Ranking Playground"
       controls={false}
+      hints={["Drag the sliders to adjust recency, engagement, and relationship weights — watch posts re-rank in real time"]}
       canvas={
         <div className="p-4 space-y-2">
           {rankedPosts.map((post, i) => (
@@ -463,6 +468,7 @@ function ArchitecturePlayground() {
       title="Full Hybrid Feed Architecture"
       simulation={sim}
       canvasHeight="min-h-[380px]"
+      hints={["Press play to follow a tweet through the full hybrid push/pull architecture"]}
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={380} />}
       explanation={(state) => {
         const explanations = [
@@ -502,6 +508,14 @@ export default function NewsFeedPage() {
         subtitle="A celebrity tweets and 50 million timelines need updating. Twitter solved this with a hybrid push/pull architecture that took years to perfect."
         difficulty="advanced"
       />
+
+      <WhyCare>
+        When Taylor Swift tweets, 92 million followers need to see it instantly. Designing a news feed at scale is one of the hardest problems in tech.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        News feed design revolves around the <GlossaryTerm term="fan-out">fan-out</GlossaryTerm> problem: when a user posts, how do you update millions of timelines? A <GlossaryTerm term="cache">cache</GlossaryTerm> stores precomputed feeds, while a <GlossaryTerm term="message queue">message queue</GlossaryTerm> handles async delivery. The hybrid approach uses fan-out-on-write for normal users and fan-out-on-read for celebrities to manage <GlossaryTerm term="throughput">throughput</GlossaryTerm>.
+      </p>
 
       {/* ── Fanout Comparison ─────────────────────────────────────── */}
       <section className="space-y-4">
@@ -636,6 +650,44 @@ export default function NewsFeedPage() {
             routes each user&apos;s posts to push or pull based on it.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why does Twitter use a hybrid push/pull approach instead of pure fan-out-on-write?",
+            options: [
+              "Fan-out-on-write is more expensive per request than fan-out-on-read",
+              "A single celebrity post with 50M followers would trigger 50M cache writes, stalling the entire system",
+              "Fan-out-on-read is always faster than fan-out-on-write",
+              "Twitter's database does not support write operations at scale"
+            ],
+            correctIndex: 1,
+            explanation: "At 50K writes/sec per worker, a single tweet from a 50M-follower celebrity takes 16+ minutes to fan out, blocking all other posts in the queue. The hybrid approach routes celebrities to pull-on-read, avoiding this bottleneck."
+          },
+          {
+            question: "In a feed ranking system, what does the ML model primarily predict?",
+            options: [
+              "The age of the post",
+              "The number of followers the author has",
+              "P(engagement) — the probability you will like, retweet, or reply",
+              "The geographic distance between author and reader"
+            ],
+            correctIndex: 2,
+            explanation: "Feed ranking models predict P(engagement) — how likely you are to interact with a post. They use hundreds of features including recency, author relationship, content type, and real-time engagement velocity."
+          },
+          {
+            question: "What percentage of fan-out writes are typically wasted on users who never check their feed?",
+            options: [
+              "5%",
+              "15%",
+              "30%",
+              "50%"
+            ],
+            correctIndex: 2,
+            explanation: "About 30% of fan-out writes go to users who will not check their feed that day. The hybrid approach avoids this waste for the most expensive accounts (celebrities with millions of followers)."
+          }
+        ]}
       />
 
       <KeyTakeaway

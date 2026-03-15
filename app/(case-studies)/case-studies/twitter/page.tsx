@@ -3,6 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -215,6 +218,7 @@ function TweetFlowSim() {
       title="Tweet Fan-out Simulator"
       simulation={sim}
       canvasHeight="min-h-[320px]"
+      hints={["Switch between 'Normal user' and 'Celebrity' to see how Twitter uses different fan-out strategies based on follower count."]}
       canvas={
         <div className="p-4 space-y-3 h-full">
           <div className="flex gap-2 items-center">
@@ -378,6 +382,10 @@ export default function TwitterCaseStudyPage() {
         estimatedMinutes={25}
       />
 
+      <WhyCare>
+        Twitter&apos;s home timeline must merge tweets from thousands of accounts you follow, rank them, and serve them in under 200ms. Here&apos;s the architecture behind the feed.
+      </WhyCare>
+
       {/* Design it yourself */}
       <AhaMoment
         question="Before reading: how would you deliver a tweet from someone with 100M followers to every timeline in under 200ms?"
@@ -402,7 +410,7 @@ export default function TwitterCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">The Fan-out Problem</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Every tweet must reach millions of timelines. The core architectural question: push tweets into every follower&apos;s cache at write time (<strong>fan-out-on-write</strong>), or let each follower pull their feed at read time (<strong>fan-out-on-read</strong>)?
+          Every tweet must reach millions of timelines. The core architectural question: push tweets into every follower&apos;s <GlossaryTerm term="cache">cache</GlossaryTerm> at write time (<strong><GlossaryTerm term="fan-out">fan-out</GlossaryTerm>-on-write</strong>), or let each follower pull their feed at read time (<strong>fan-out-on-read</strong>)?
           Twitter uses a <strong>hybrid approach</strong> — fan-out-on-write for normal users, fan-out-on-read for celebrities.
         </p>
         <FanoutPlayground />
@@ -447,7 +455,7 @@ export default function TwitterCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Timeline Cache Architecture</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Each user&apos;s home timeline is a Redis list of up to 800 tweet IDs — not full tweet objects. When you open the app,
+          Each user&apos;s home timeline is a <GlossaryTerm term="redis">Redis</GlossaryTerm> list of up to 800 tweet IDs — not full tweet objects. When you open the app,
           Twitter reads the list (a single LRANGE), then hydrates the IDs into full tweet objects via a batch fetch from Manhattan.
           This two-step approach keeps the cache compact at ~2.5 TB total for 400M users.
         </p>
@@ -498,7 +506,7 @@ export default function TwitterCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Real-Time Trending Topics</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Twitter uses a streaming pipeline (Kafka + Earlybird) to detect trending topics. A count-min sketch data structure
+          Twitter uses a streaming pipeline (<GlossaryTerm term="message queue">Kafka</GlossaryTerm> + Earlybird) to detect trending topics. A count-min sketch data structure
           tracks approximate tweet frequency per hashtag in constant memory. Exponential time decay weights recent activity higher
           than old bursts — a hashtag that peaked three hours ago does not stay trending. A top-K algorithm extracts the trending list every 30 seconds.
         </p>
@@ -579,6 +587,44 @@ export default function TwitterCaseStudyPage() {
           ))}
         </div>
       </section>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why does Twitter use a hybrid fan-out strategy instead of pure fan-out-on-write?",
+            options: [
+              "Fan-out-on-write is too expensive for all users",
+              "A celebrity with 100M followers would require 100M cache writes per tweet, blocking the fan-out queue for 33+ minutes",
+              "Fan-out-on-write does not work with Redis",
+              "Twitter could not afford enough servers for pure fan-out-on-write"
+            ],
+            correctIndex: 1,
+            explanation: "At 50K writes/sec, fanning out one celebrity tweet to 100M followers takes 33 minutes per worker -- and blocks all other users' fan-out. The hybrid approach routes celebrities to fan-out-on-read (1 write), while normal users get fan-out-on-write for O(1) reads."
+          },
+          {
+            question: "Why does Twitter store only tweet IDs (not full objects) in Redis timeline caches?",
+            options: [
+              "Redis cannot store complex objects",
+              "Full tweets (2-5 KB each) for 400M users would require 640 TB to 1.6 PB; 8-byte IDs keep total cache at ~2.5 TB",
+              "Tweet IDs load faster than full objects",
+              "It is a Twitter policy requirement"
+            ],
+            correctIndex: 1,
+            explanation: "Storing 800 full tweets per user for 400M users would require petabytes of Redis memory. By storing only 8-byte Snowflake IDs, the total footprint is ~2.5 TB. Tweet objects are hydrated via batch fetches from Manhattan at read time."
+          },
+          {
+            question: "How does Twitter generate unique IDs at 5,800 tweets per second without a central bottleneck?",
+            options: [
+              "Auto-incrementing database IDs",
+              "UUIDs (128-bit random strings)",
+              "Snowflake IDs: 64-bit integers encoding timestamp (41 bits), machine ID (10 bits), and sequence number (12 bits)",
+              "Hash of the tweet content"
+            ],
+            correctIndex: 2,
+            explanation: "Snowflake IDs are time-ordered 64-bit integers generated without coordination. Each worker can generate 4,096 IDs per millisecond. Because IDs embed timestamps, they are naturally sorted by time -- no ORDER BY needed in timeline queries."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

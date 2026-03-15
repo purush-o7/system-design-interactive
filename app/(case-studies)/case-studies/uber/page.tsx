@@ -5,6 +5,9 @@ import { TopicHero } from "@/components/topic-hero";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { BeforeAfter } from "@/components/before-after";
 import { FlowDiagram } from "@/components/flow-diagram";
 import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
@@ -417,6 +420,7 @@ function MatchingPlayground() {
       canvas={canvas}
       explanation={explanation}
       canvasHeight="min-h-[320px]"
+      hints={["Press play to watch DISCO rank drivers by composite score (ETA 50%, rating 30%, acceptance 20%) -- not just distance."]}
     />
   );
 }
@@ -605,6 +609,10 @@ export default function UberCaseStudyPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        Uber matches riders and drivers in under 5 seconds, across 72 countries. The geospatial and real-time challenges are fascinating.
+      </WhyCare>
+
       {/* 2 — Think First */}
       <AhaMoment
         question="Before reading: how would you find the nearest driver among 5 million active drivers in under 10ms?"
@@ -650,7 +658,7 @@ export default function UberCaseStudyPage() {
         <p className="text-sm text-muted-foreground">
           Every active driver sends a GPS ping every <strong>4 seconds</strong>. With 5 million
           active drivers, that is over <strong>1.25 million location updates per second</strong>.
-          The pipeline flows through Kafka to a Location Service that writes into a Redis
+          The pipeline flows through <GlossaryTerm term="message queue">Kafka</GlossaryTerm> to a Location Service that writes into a <GlossaryTerm term="redis">Redis</GlossaryTerm>
           geospatial index. The matching engine then queries Redis with a radius search.
         </p>
         <LocationTrackingSection />
@@ -738,12 +746,51 @@ export default function UberCaseStudyPage() {
       <ConversationalCallout type="warning">
         Exactly-once matching is a hard distributed systems problem. If a network partition causes
         two data centers to both believe they are primary, two drivers can be dispatched to the same
-        rider. Uber solves this with <strong>idempotency keys</strong>, <strong>Redis distributed
-        locks</strong> on driver IDs, and <strong>cell-based architecture</strong> where each city
+        rider. Uber solves this with <strong>idempotency keys</strong>, <strong><GlossaryTerm term="redis">Redis</GlossaryTerm> distributed
+        locks</strong> on driver IDs, and <strong>cell-based architecture</strong> (<GlossaryTerm term="fault tolerance">fault tolerance</GlossaryTerm>) where each city
         is an independent failure domain.
       </ConversationalCallout>
 
-      {/* 9 — Key Takeaways */}
+      {/* 9 — Quiz */}
+      <TopicQuiz
+        questions={[
+          {
+            question: "How does Uber find nearby drivers among 5 million active drivers in under 10ms?",
+            options: [
+              "Brute-force distance calculations against all drivers",
+              "Geohash indexing (S2/H3) divides Earth into cells -- finding nearby drivers becomes a cell lookup, not a full scan",
+              "Storing all drivers in a single sorted list by distance",
+              "Asking drivers to self-report their nearest riders"
+            ],
+            correctIndex: 1,
+            explanation: "S2/H3 geohash indexing turns a global search into a local index lookup. Each driver is stored under their cell ID. Finding nearby drivers becomes a lookup of a handful of adjacent cells -- O(1) instead of O(n)."
+          },
+          {
+            question: "Why does Uber use surge pricing with step functions rather than a linear formula?",
+            options: [
+              "Step functions are easier to calculate",
+              "Linear formulas are illegal in most countries",
+              "Drivers respond to thresholds -- a small fare bump rarely motivates, but hitting 2.0x often does",
+              "Step functions cost less to implement"
+            ],
+            correctIndex: 2,
+            explanation: "Step functions better model actual driver behavior. A small fare bump rarely gets someone to start driving, but hitting a significant threshold like 2.0x often does. The surge mechanism aims to restore supply-demand equilibrium."
+          },
+          {
+            question: "Why does Uber use Redis GEOADD/GEORADIUS for driver locations instead of a traditional database?",
+            options: [
+              "Redis is free and open source",
+              "A single GEORADIUS command replaces millions of haversine calculations, handling 1.25M location writes per second",
+              "Traditional databases cannot store coordinates",
+              "Redis has better SQL support for geospatial queries"
+            ],
+            correctIndex: 1,
+            explanation: "Redis GEOADD stores driver locations and GEORADIUS finds nearby drivers in a single O(N+log M) command, replacing millions of individual distance calculations. At 1.25M location updates per second, this in-memory approach is essential."
+          }
+        ]}
+      />
+
+      {/* 10 — Key Takeaways */}
       <KeyTakeaway
         points={[
           "S2/H3 geohash indexing turns 'find nearby drivers among 5M' from an O(n) scan into an O(1) cell lookup — the key insight behind Uber's matching speed.",

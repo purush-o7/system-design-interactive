@@ -11,6 +11,10 @@ import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // --- OSI layer data ---
 
@@ -276,6 +280,7 @@ function TCPvsUDPPlayground() {
       title="TCP vs UDP — Handshake Visualiser"
       simulation={sim}
       canvasHeight="min-h-[260px]"
+      hints={["Switch to UDP after watching TCP — notice how datagram 3 gets lost with no retransmit."]}
       canvas={
         <div className="h-full flex flex-col">
           <div className="flex gap-1 p-2 border-b border-violet-500/10">
@@ -506,6 +511,7 @@ function DNSResolutionFlow() {
       title="DNS Resolution — hostname to IP"
       simulation={sim}
       canvasHeight="min-h-[340px]"
+      hints={["After the first lookup, results are cached — subsequent requests skip steps 2-4."]}
       canvas={<FlowDiagram nodes={nodes} edges={edges} interactive={false} allowDrag={false} minHeight={330} />}
       explanation={
         <div className="space-y-3">
@@ -546,6 +552,10 @@ export default function NetworkingBasicsPage() {
         subtitle="Every distributed system is machines talking over a network. If you don't understand the network, you're building on a foundation you can't see."
         difficulty="beginner"
       />
+
+      <WhyCare>
+        When a video call drops or a website won&apos;t load, it&apos;s a networking problem. These are the building blocks everything else sits on.
+      </WhyCare>
 
       {/* OSI Layer Explorer */}
       <section className="space-y-3">
@@ -591,7 +601,7 @@ export default function NetworkingBasicsPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-foreground">TCP vs UDP — See the Difference</h2>
         <p className="text-sm text-muted-foreground">
-          Step through the handshake to feel why TCP takes more round trips but guarantees delivery.
+          Step through the handshake to feel why <GlossaryTerm term="tcp">TCP</GlossaryTerm> takes more round trips but guarantees delivery, while <GlossaryTerm term="udp">UDP</GlossaryTerm> trades reliability for speed.
         </p>
         <TCPvsUDPPlayground />
         <ConversationalCallout type="question">
@@ -621,7 +631,7 @@ export default function NetworkingBasicsPage() {
 
       {/* DNS Resolution */}
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-foreground">DNS Resolution — Hostname to IP</h2>
+        <h2 className="text-lg font-semibold text-foreground"><GlossaryTerm term="dns">DNS</GlossaryTerm> Resolution — Hostname to IP</h2>
         <DNSResolutionFlow />
         <ConversationalCallout type="warning">
           DNS failures are silent in many apps. A misconfigured DNS TTL that&apos;s too long means
@@ -633,7 +643,7 @@ export default function NetworkingBasicsPage() {
 
       {/* IP Address reference */}
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-foreground">IP Addresses — The Ones That Trip You Up</h2>
+        <h2 className="text-lg font-semibold text-foreground"><GlossaryTerm term="ip address">IP Addresses</GlossaryTerm> — The Ones That Trip You Up</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { ip: "127.0.0.1",             label: "Loopback (localhost)",   note: "Traffic never leaves the host. Bind here and nothing external can reach your service.",           cls: "bg-blue-500/5 border-blue-500/20",    text: "text-blue-400" },
@@ -682,6 +692,27 @@ export default function NetworkingBasicsPage() {
         could go wrong?&quot; or &quot;why is this slow?&quot; — most candidates can&apos;t name
         a layer below HTTP.
       </ConversationalCallout>
+
+      <TopicQuiz questions={[
+        {
+          question: "Which OSI layers are most important for system design interviews?",
+          options: ["Layer 1 (Physical) and Layer 2 (Data Link)", "Layer 4 (Transport) and Layer 7 (Application)", "Layer 3 (Network) and Layer 5 (Session)", "All 7 layers equally"],
+          correctIndex: 1,
+          explanation: "Layer 4 covers TCP vs UDP and port numbers. Layer 7 covers HTTP, DNS, gRPC, and WebSockets. These are where most system design decisions happen."
+        },
+        {
+          question: "Why can't two applications bind to the same TCP port on one machine?",
+          options: ["The OS runs out of memory", "The port number space is too small", "The OS uses the 4-tuple to route packets and binding the same port makes routing ambiguous", "TCP does not support multiple connections"],
+          correctIndex: 2,
+          explanation: "The OS routes packets using (src-IP, src-port, dst-IP, dst-port). Two processes on the same port would make routing ambiguous, so the OS refuses it."
+        },
+        {
+          question: "A failed ping does not necessarily mean the host is down. Why?",
+          options: ["Ping uses HTTP", "Many cloud firewalls block ICMP (ping) while allowing TCP traffic", "Ping only works on local networks", "Ping requires authentication"],
+          correctIndex: 1,
+          explanation: "Ping uses ICMP, not TCP. A firewall may block ICMP while allowing traffic on port 443. Always test the exact port and protocol your application uses."
+        },
+      ]} />
 
       <KeyTakeaway
         points={[

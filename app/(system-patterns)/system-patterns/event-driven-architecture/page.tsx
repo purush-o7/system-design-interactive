@@ -13,6 +13,10 @@ import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { Zap, Plus, Minus, Clock, ArrowRight, RotateCcw } from "lucide-react";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 type Subscriber = { id: string; label: string; speed: number; status: "healthy" | "warning" | "idle" };
 
@@ -173,6 +177,7 @@ function EventBusPlayground() {
       title="Event Bus Playground"
       canvasHeight="min-h-[340px]"
       controls={false}
+      hints={["Click 'Place Order' to publish an event, then try adding subscribers"]}
       canvas={
         <div className="p-2 h-full">
           <FlowDiagram
@@ -269,6 +274,7 @@ function SyncVsAsyncComparison() {
       title="Sync vs Async: Side by Side"
       simulation={sim}
       canvasHeight="min-h-[320px]"
+      hints={["Press play to watch sync vs async process the same order side by side"]}
       canvas={
         <div className="grid grid-cols-2 gap-4 p-4 h-full">
           {/* Sync side */}
@@ -455,6 +461,7 @@ function EventSourcingDemo() {
       title="Event Sourcing: Time Travel"
       controls={false}
       canvasHeight="min-h-[300px]"
+      hints={["Click 'Replay Events' to watch state rebuilt from the event log"]}
       canvas={
         <div className="p-4 h-full flex flex-col">
           <div className="flex items-center gap-2 mb-3">
@@ -574,6 +581,10 @@ export default function EventDrivenArchitecturePage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        When you place an order on Amazon, it triggers inventory updates, payment processing, shipping, and email — all without the checkout service knowing about any of them. That&apos;s <GlossaryTerm term="event-driven">event-driven architecture</GlossaryTerm> in action.
+      </WhyCare>
+
       {/* Section 1: The problem */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">The Coupling Problem</h2>
@@ -639,7 +650,7 @@ export default function EventDrivenArchitecturePage() {
         <h2 className="text-lg font-semibold">Event Bus in Action</h2>
         <p className="text-sm text-muted-foreground">
           Producers publish events describing what happened. The event bus (Kafka, RabbitMQ, SNS)
-          routes them to all interested subscribers. Each subscriber processes independently.
+          routes them to all interested subscribers. Each subscriber processes independently via a <GlossaryTerm term="message queue">message queue</GlossaryTerm>.
           Try adding and removing subscribers, then place an order to see fan-out in action.
         </p>
         <EventBusPlayground />
@@ -680,7 +691,7 @@ export default function EventDrivenArchitecturePage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Event Sourcing: The Immutable Log</h2>
         <p className="text-sm text-muted-foreground">
-          Instead of storing just the current state, event sourcing stores every change as an
+          Instead of storing just the current state, <GlossaryTerm term="event sourcing">event sourcing</GlossaryTerm> stores every change as an
           immutable event. The current state is a projection derived by replaying events.
           Click &quot;Replay Events&quot; to watch state being rebuilt, or click any event to time-travel.
         </p>
@@ -705,6 +716,44 @@ export default function EventDrivenArchitecturePage() {
             be flying blind.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What is the main benefit of event-driven architecture over direct service-to-service calls?",
+            options: [
+              "Lower latency for all requests",
+              "Producers and consumers are decoupled -- adding consumers requires no producer changes",
+              "Stronger data consistency guarantees",
+              "Simpler debugging with stack traces",
+            ],
+            correctIndex: 1,
+            explanation: "In event-driven architecture, the producer publishes an event without knowing who listens. New consumers can subscribe without touching the producer's code.",
+          },
+          {
+            question: "In event sourcing, how is the current state of an entity determined?",
+            options: [
+              "By reading the latest row in the database",
+              "By querying a cache layer",
+              "By replaying the sequence of immutable events from the event log",
+              "By asking the producer service directly",
+            ],
+            correctIndex: 2,
+            explanation: "Event sourcing stores every change as an immutable event. The current state is a projection derived by replaying all events in order -- just like a bank statement.",
+          },
+          {
+            question: "Why must event-driven consumers be idempotent?",
+            options: [
+              "Because events are always delivered exactly once",
+              "Because consumers may receive duplicate events due to at-least-once delivery",
+              "Because producers send each event to only one consumer",
+              "Because the event bus deletes events after delivery",
+            ],
+            correctIndex: 1,
+            explanation: "Most message systems guarantee at-least-once delivery. If a consumer crashes before acknowledging, the event is redelivered. Idempotent processing ensures duplicates produce the same result.",
+          },
+        ] satisfies QuizQuestion[]}
       />
 
       <KeyTakeaway

@@ -11,6 +11,9 @@ import { LiveChart } from "@/components/live-chart";
 import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 /* ------------------------------------------------------------------ */
 /*  Static class maps (no Tailwind dynamic interpolation)             */
@@ -127,6 +130,7 @@ function RedundancyPlayground() {
     <Playground
       title="Redundancy Playground"
       controls={false}
+      hints={["Try killing the Load Balancer to discover the Single Point of Failure"]}
       canvas={
         <div className="p-4 space-y-4">
           <FlowDiagram nodes={nodes} edges={edges} minHeight={340} interactive={false} allowDrag={false} />
@@ -230,6 +234,7 @@ function FailoverStrategies() {
     <Playground
       title="Failover Strategies"
       simulation={sim}
+      hints={["Toggle between Active-Passive and Active-Active, then press play to see the failure"]}
       canvas={
         <div className="p-4">
           <div className="flex gap-2 mb-4 justify-center">
@@ -352,6 +357,7 @@ function RetryPlayground() {
     <Playground
       title="Retry with Exponential Backoff"
       simulation={sim}
+      hints={["Compare 'No Retry' vs 'Exp. Backoff' to see why spacing out retries matters"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex flex-wrap gap-2 justify-center">
@@ -562,6 +568,10 @@ export default function FaultTolerancePage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        In 2017, an S3 outage took down half the internet. <GlossaryTerm term="fault tolerance">Fault-tolerant</GlossaryTerm> systems survive failures that would destroy others. This is how you build systems that don&apos;t go down.
+      </WhyCare>
+
       <ConversationalCallout type="question">
         What happens when a single server dies in your architecture? If the answer is &quot;everything
         goes down,&quot; you have a Single Point of Failure (SPOF). Fault tolerance means designing
@@ -573,7 +583,7 @@ export default function FaultTolerancePage() {
         <h2 className="text-xl font-bold">Redundancy</h2>
         <p className="text-sm text-muted-foreground">
           The core idea is simple: duplicate critical components so that when one fails, another takes
-          over. Click the buttons below to kill servers, databases, and the load balancer. Watch how
+          over via <GlossaryTerm term="failover">failover</GlossaryTerm>. Click the buttons below to kill servers, databases, and the <GlossaryTerm term="load balancer">load balancer</GlossaryTerm>. Watch how
           the system responds -- and notice what component, when killed, brings everything down.
         </p>
         <RedundancyPlayground />
@@ -594,7 +604,7 @@ export default function FaultTolerancePage() {
       <section className="space-y-3">
         <h2 className="text-xl font-bold">Failover Strategies</h2>
         <p className="text-sm text-muted-foreground">
-          Redundancy alone is not enough -- you need a strategy for how traffic moves when a node
+          <GlossaryTerm term="replication">Redundancy</GlossaryTerm> alone is not enough -- you need a <GlossaryTerm term="failover">failover</GlossaryTerm> strategy for how traffic moves when a node
           dies. Toggle between Active-Passive and Active-Active to see the tradeoffs in action.
         </p>
         <FailoverStrategies />
@@ -676,6 +686,44 @@ export default function FaultTolerancePage() {
         dies?&quot; Then discuss the cost-availability tradeoff: a 99.9% SLA (8.8 hours downtime per
         year) is perfectly fine for most applications. Do not over-engineer.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What is a Single Point of Failure (SPOF)?",
+            options: [
+              "A server that handles the most traffic",
+              "A component whose failure brings down the entire system",
+              "A backup server that is never used",
+              "A load balancer that distributes traffic evenly",
+            ],
+            correctIndex: 1,
+            explanation: "A SPOF is any component that, if it fails, causes the whole system to become unavailable. Eliminating SPOFs through redundancy is the foundation of fault tolerance.",
+          },
+          {
+            question: "Why is exponential backoff with jitter preferred over simple retries?",
+            options: [
+              "It makes requests faster",
+              "It uses less memory on the client",
+              "It prevents retry storms by spacing out and randomizing retry timing",
+              "It guarantees the request will eventually succeed",
+            ],
+            correctIndex: 2,
+            explanation: "Simple retries can overwhelm an already-struggling server (retry storm). Exponential backoff increases the delay between retries, and jitter randomizes it so thousands of clients don't all retry at the same instant.",
+          },
+          {
+            question: "If Service A has 99.9% availability and Service B has 99.9% availability, what is the combined availability when they are chained?",
+            options: [
+              "99.9%",
+              "99.8%",
+              "99.95%",
+              "99.99%",
+            ],
+            correctIndex: 1,
+            explanation: "Availabilities multiply in a dependency chain: 99.9% x 99.9% = 99.8%. Each additional dependency reduces overall availability, which is why microservices architectures need careful SLA planning.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

@@ -3,6 +3,9 @@
 import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { AhaMoment } from "@/components/aha-moment";
 import { Playground } from "@/components/playground";
@@ -94,6 +97,7 @@ function EstimationCalculator() {
       title="Estimation Calculator"
       controls={false}
       canvasHeight="min-h-0"
+      hints={["Drag the sliders to see how DAU, requests per user, and data size affect QPS, storage, and bandwidth in real time."]}
       canvas={
         <div className="p-4 space-y-5">
           {/* Sliders */}
@@ -202,7 +206,7 @@ function EstimationCalculator() {
           {/* Contextual warnings */}
           {yearlyStorageGB > 10000 && (
             <ConversationalCallout type="warning">
-              At {formatStorage(yearlyStorageGB)}/year, you need sharding. A single database
+              At {formatStorage(yearlyStorageGB)}/year, you need <GlossaryTerm term="sharding">sharding</GlossaryTerm>. A single database
               cannot hold this. With ~2 TB per shard, plan for{" "}
               {Math.ceil(yearlyStorageGB / 2000)} shards per year of data.
             </ConversationalCallout>
@@ -520,6 +524,10 @@ export default function EstimationPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Interviewers don&apos;t care about exact numbers — they care that you can reason about scale. Back-of-the-envelope math is the superpower you didn&apos;t know you needed.
+      </WhyCare>
+
       {/* Section 1: Interactive Calculator */}
       <section className="space-y-4">
         <h2 className="text-xl font-bold flex items-center gap-2">
@@ -529,7 +537,7 @@ export default function EstimationPage() {
         <p className="text-sm text-muted-foreground">
           Drag the sliders and watch every number update in real time. Notice how
           small changes in DAU produce massive changes in infrastructure needs.
-          The storage chart shows the compounding effect over years.
+          The storage chart shows the compounding effect over years — this is why <GlossaryTerm term="sharding">sharding</GlossaryTerm> and <GlossaryTerm term="horizontal scaling">horizontal scaling</GlossaryTerm> become necessary.
         </p>
         <EstimationCalculator />
       </section>
@@ -599,7 +607,7 @@ export default function EstimationPage() {
         <p className="text-sm text-muted-foreground">
           Real traffic is never flat. Toggle between daily and weekly views to see
           typical patterns. The red reference line shows where you should design your
-          capacity -- at the peak, not the average.
+          capacity -- at the peak, not the average. This is why <GlossaryTerm term="cache">caching</GlossaryTerm> and <GlossaryTerm term="cdn">CDNs</GlossaryTerm> are essential at scale.
         </p>
         <TrafficPatterns />
       </section>
@@ -628,6 +636,44 @@ export default function EstimationPage() {
             extreme spikes (ticket sales, flash sales, Super Bowl), use 10x or more.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "How many seconds are in a day (approximately, for estimation purposes)?",
+            options: [
+              "10,000",
+              "50,000",
+              "86,400 (round to 100,000)",
+              "1,000,000"
+            ],
+            correctIndex: 2,
+            explanation: "There are 86,400 seconds in a day (24 x 60 x 60). In interviews, round to 100,000 for easy mental math. This is the most important number for converting daily requests to QPS."
+          },
+          {
+            question: "Why do we multiply average QPS by 2-3x when designing systems?",
+            options: [
+              "To account for measurement errors",
+              "Because traffic peaks during certain hours and the system must handle the spike",
+              "To make the numbers look more impressive",
+              "Because servers only run at 50% efficiency"
+            ],
+            correctIndex: 1,
+            explanation: "Traffic is never uniform. Social media peaks at evening hours, e-commerce spikes during sales. If your system only handles average load, it crashes during peak. The 2-3x multiplier covers normal peak patterns."
+          },
+          {
+            question: "Which latency comparison is correct?",
+            options: [
+              "SSD is faster than RAM",
+              "Network RTT is faster than SSD reads",
+              "RAM access is about 1,000x faster than SSD reads",
+              "HDD and SSD have similar latency"
+            ],
+            correctIndex: 2,
+            explanation: "RAM access (~100ns) is about 1,000x faster than SSD reads (~100us). SSD is about 100x faster than HDD. Network adds milliseconds. These relative magnitudes drive caching and storage decisions."
+          }
+        ]}
       />
 
       <KeyTakeaway

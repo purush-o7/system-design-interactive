@@ -10,6 +10,10 @@ import { Playground } from "@/components/playground";
 import { LiveChart } from "@/components/live-chart";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+
 import { Clock, BarChart3, ListOrdered, ShoppingCart, Users, Tv } from "lucide-react";
 
 
@@ -370,6 +374,7 @@ function AccessPatternChallenge() {
       title="Access Pattern Challenge"
       simulation={sim}
       canvasHeight="min-h-[420px]"
+      hints={["Press play to race LRU, LFU, and FIFO through the same access sequence"]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Sequence progress */}
@@ -557,13 +562,17 @@ export default function EvictionPoliciesPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Your <GlossaryTerm term="cache">cache</GlossaryTerm> has limited memory. When it&apos;s full and new data arrives, which old data do you throw away? Pick wrong and your cache becomes useless &mdash; every request becomes a <GlossaryTerm term="cache miss">cache miss</GlossaryTerm> that slams your database.
+      </WhyCare>
+
       {/* Section: The Problem */}
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Why eviction policy matters</h2>
         <p className="text-sm text-muted-foreground">
-          Cache memory is finite. A 1 GB Redis instance might hold ~10 million small keys. When it
+          <GlossaryTerm term="cache">Cache</GlossaryTerm> memory is finite. A 1 GB <GlossaryTerm term="redis">Redis</GlossaryTerm> instance might hold ~10 million small keys. When it
           fills up, every new entry requires evicting an old one. A bad policy removes data that will
-          be requested again in milliseconds, causing a miss that slams the database. A good policy
+          be requested again in milliseconds, causing a <GlossaryTerm term="cache miss">miss</GlossaryTerm> that slams the database. A good policy
           keeps the &quot;working set&quot; -- the data actively being accessed -- in memory.
         </p>
         <BeforeAfter
@@ -675,11 +684,49 @@ export default function EvictionPoliciesPage() {
       </section>
 
       <ConversationalCallout type="question">
-        In a system design interview, mention that you would use LRU as a default and layer TTL on
+        In a system design interview, mention that you would use <GlossaryTerm term="lru">LRU</GlossaryTerm> as a default and layer <GlossaryTerm term="ttl">TTL</GlossaryTerm> on
         top for staleness control. If the interviewer pushes on specific workload patterns (CDN,
         leaderboard), suggest LFU. Knowing <em>when</em> to switch policies shows deeper
         understanding than just naming them.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "A social media platform needs to cache celebrity profile pages that are accessed millions of times per day. Which eviction policy is best?",
+            options: [
+              "FIFO -- evict the oldest entry",
+              "LRU -- evict the least recently used entry",
+              "LFU -- evict the least frequently used entry",
+              "Random -- evict a random entry",
+            ],
+            correctIndex: 2,
+            explanation: "LFU is ideal for stable popularity patterns like celebrity profiles. These pages have very high access frequency, and LFU protects them from eviction even during brief lulls in traffic.",
+          },
+          {
+            question: "Why does Redis use approximated LRU (sampling 5 random keys) instead of true LRU?",
+            options: [
+              "True LRU requires too much CPU time",
+              "True LRU requires tracking access order for every key, which uses too much memory",
+              "Approximated LRU has a higher hit rate",
+              "Redis does not support true LRU at all",
+            ],
+            correctIndex: 1,
+            explanation: "True LRU requires a doubly-linked list to track access order for every key, adding significant memory overhead. Redis samples 5 random keys and evicts the least recently used among them, which is nearly as effective at a fraction of the memory cost.",
+          },
+          {
+            question: "What is the main weakness of FIFO eviction?",
+            options: [
+              "It is too complex to implement",
+              "It requires too much memory for tracking",
+              "It ignores access patterns and may evict frequently-used items",
+              "It only works with string data types",
+            ],
+            correctIndex: 2,
+            explanation: "FIFO evicts the oldest-inserted item regardless of how often it is accessed. A key inserted early but accessed constantly will still be evicted first, leading to poor hit rates for workloads with temporal or frequency locality.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

@@ -12,6 +12,7 @@ import { GradientText } from "@/components/animate-ui/primitives/texts/gradient"
 import { StarsBackground } from "@/components/animate-ui/components/backgrounds/stars";
 import { sidebarGroups } from "@/lib/topics";
 import { getVisitedTopics } from "@/components/visit-tracker";
+import { LearningRoadmap } from "@/components/learning-roadmap";
 
 const totalTopics = sidebarGroups.flatMap((g) => g.categories).flatMap((c) => c.topics).length;
 const totalCategories = sidebarGroups.flatMap((g) => g.categories).length;
@@ -97,6 +98,10 @@ export default function HomePage() {
               </div>
             )}
           </div>
+        </Fade>
+
+        <Fade inView inViewMargin="-50px" delay={0.1}>
+          <LearningRoadmap />
         </Fade>
 
         {sidebarGroups.map((group, groupIndex) => (

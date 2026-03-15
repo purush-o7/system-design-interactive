@@ -12,6 +12,10 @@ import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // --- DNS Resolution Playground ---
 
@@ -76,6 +80,7 @@ function DnsPlayground() {
     <Playground
       title="DNS Resolution Playground"
       simulation={sim}
+      hints={["Try changing the domain to see how the resolver path stays the same regardless of the destination."]}
       canvas={
         <div className="flex flex-col h-full">
           <div className="px-4 pt-3 pb-1">
@@ -207,6 +212,7 @@ function TcpHandshakePlayground() {
     <Playground
       title="TCP Three-Way Handshake"
       simulation={sim}
+      hints={["Watch the sequence numbers in each packet — they prove both sides can send and receive."]}
       canvas={
         <FlowDiagram nodes={tcpNodes} edges={tcpEdges} fitView interactive={false} allowDrag={false} minHeight={260} />
       }
@@ -460,6 +466,10 @@ export default function HowTheInternetWorksPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Every time you type a URL, your browser makes dozens of behind-the-scenes calls just to find the right server. Understanding this chain is the first step to building fast, reliable web applications.
+      </WhyCare>
+
       <ConversationalCallout type="question">
         What actually happens in the 200 milliseconds between pressing Enter and seeing a webpage?
         There are at least 7 invisible steps, and each one can fail independently. Let&apos;s trace them
@@ -471,8 +481,8 @@ export default function HowTheInternetWorksPage() {
         <h2 className="text-xl font-bold tracking-tight">DNS Resolution — The Internet&apos;s Phone Book</h2>
         <p className="text-sm text-muted-foreground">
           Your browser doesn&apos;t know that <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">google.com</code> lives
-          at <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">142.250.80.46</code>. DNS is the globally distributed
-          system that maps human-friendly domain names to machine-readable IP addresses. Type a domain
+          at <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">142.250.80.46</code>. <GlossaryTerm term="dns">DNS</GlossaryTerm> is the globally distributed
+          system that maps human-friendly domain names to machine-readable <GlossaryTerm term="ip address">IP addresses</GlossaryTerm>. Type a domain
           below, hit play, and watch the lookup chain animate step by step.
         </p>
         <DnsPlayground />
@@ -497,7 +507,7 @@ export default function HowTheInternetWorksPage() {
         <h2 className="text-xl font-bold tracking-tight">TCP Three-Way Handshake</h2>
         <p className="text-sm text-muted-foreground">
           Before any data is exchanged, client and server need to agree they can communicate.
-          TCP establishes this trust with three messages — a polite introduction before the conversation.
+          <GlossaryTerm term="tcp">TCP</GlossaryTerm> establishes this trust with three messages — a polite introduction before the conversation.
           Step through the handshake below, then watch data transfer begin.
         </p>
         <TcpHandshakePlayground />
@@ -535,7 +545,7 @@ export default function HowTheInternetWorksPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-bold tracking-tight">UDP vs TCP — Reliability vs Speed</h2>
         <p className="text-sm text-muted-foreground">
-          Not all network traffic needs guaranteed delivery. Toggle between the two protocols
+          Not all network traffic needs guaranteed delivery. <GlossaryTerm term="udp">UDP</GlossaryTerm> sacrifices reliability for speed. Toggle between the two protocols
           to see how they handle packet loss differently.
         </p>
         <UdpVsTcpComparison />
@@ -584,6 +594,27 @@ export default function HowTheInternetWorksPage() {
           }}
         />
       </section>
+
+      <TopicQuiz questions={[
+        {
+          question: "What does DNS do?",
+          options: ["Encrypts web traffic", "Translates domain names to IP addresses", "Compresses web pages", "Filters malicious requests"],
+          correctIndex: 1,
+          explanation: "DNS (Domain Name System) converts human-readable names like google.com into IP addresses like 142.250.80.46 that computers use to find each other."
+        },
+        {
+          question: "What happens if a DNS resolver doesn't have the answer cached?",
+          options: ["The request fails", "It asks the root DNS server", "It guesses the IP address", "It redirects to a different domain"],
+          correctIndex: 1,
+          explanation: "The resolver follows the DNS hierarchy: root server, then TLD server, then authoritative server, each getting closer to the final answer."
+        },
+        {
+          question: "Why is DNS caching important?",
+          options: ["It makes websites more secure", "It reduces repeated lookups and speeds up page loads", "It prevents DDoS attacks", "It encrypts DNS responses"],
+          correctIndex: 1,
+          explanation: "Without caching, every single page visit would require a full DNS lookup chain, adding 50-200ms of latency each time."
+        },
+      ]} />
 
       <KeyTakeaway
         points={[

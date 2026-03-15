@@ -12,6 +12,10 @@ import { LiveChart } from "@/components/live-chart";
 import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // ─── Stateful Architecture Diagram ───────────────────────────────────────────
 
@@ -386,6 +390,10 @@ export default function StatelessVsStatefulPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Ever lost your shopping cart when a website crashed? That&apos;s a <GlossaryTerm term="stateful">stateful</GlossaryTerm> server failing. Understanding this difference is key to building apps that scale.
+      </WhyCare>
+
       <ConversationalCallout type="question">
         A user logs in and their cart fills up. They click checkout — and suddenly they are
         back at the login screen. Their cart is gone. What just happened? Their session was
@@ -397,6 +405,7 @@ export default function StatelessVsStatefulPage() {
         title="Server Failure Demo — Stateful vs Stateless"
         simulation={failureSim}
         canvasHeight="min-h-[480px]"
+        hints={["Watch what happens at tick 8 when Server A crashes — compare the two sides."]}
         canvas={
           <div className="p-4">
             <FailureDemoPlayground />
@@ -441,7 +450,7 @@ export default function StatelessVsStatefulPage() {
           title: "Stateful servers — in-memory sessions",
           content: (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Scaling is painful. Crashes lose user data.</p>
+              <p className="text-xs text-muted-foreground">Scaling is painful. Crashes lose user data. <GlossaryTerm term="stateless">Stateless</GlossaryTerm> servers solve this.</p>
               <ul className="text-[11px] text-muted-foreground space-y-1.5">
                 <li>✗ Load balancer must pin users to the same server (sticky sessions)</li>
                 <li>✗ Server crash = all sessions on that machine lost</li>
@@ -474,6 +483,7 @@ export default function StatelessVsStatefulPage() {
         title="State Externalization — Migration Walkthrough"
         simulation={externSim}
         canvasHeight="min-h-[320px]"
+        hints={["Watch each type of state move from server memory to a dedicated external store."]}
         canvas={
           <div className="p-4">
             <StateExternalizationPlayground />
@@ -526,7 +536,7 @@ export default function StatelessVsStatefulPage() {
         </div>
         <p className="text-xs text-muted-foreground">
           Stateless architectures scale linearly: double the servers, double the throughput.
-          Stateful architectures hit a ceiling fast — sticky-session routing becomes the bottleneck
+          Stateful architectures hit a ceiling fast — sticky-session routing with the <GlossaryTerm term="load balancer">load balancer</GlossaryTerm> becomes the bottleneck
           and servers sit unevenly loaded.
         </p>
         <LiveChart
@@ -571,7 +581,7 @@ export default function StatelessVsStatefulPage() {
           {[
             {
               title: "WebSocket connections",
-              desc: "Chat apps, live dashboards. The persistent connection is itself state. Sticky sessions or connection-aware routing required.",
+              desc: "Chat apps, live dashboards. The persistent WebSocket connection is itself state. Sticky sessions or connection-aware routing required.",
               icon: "WS",
             },
             {
@@ -612,6 +622,27 @@ export default function StatelessVsStatefulPage() {
           and careful rolling deployments. Make this choice deliberately — never by accident.
         </ConversationalCallout>
       </div>
+
+      <TopicQuiz questions={[
+        {
+          question: "What happens when a stateful server crashes?",
+          options: ["Nothing — data is replicated automatically", "All sessions stored in that server's memory are lost", "The load balancer restores the sessions", "Users are seamlessly redirected"],
+          correctIndex: 1,
+          explanation: "Stateful servers store session data in process memory. When the process dies, that data vanishes — every user on that server is logged out or loses their cart."
+        },
+        {
+          question: "Why are sticky sessions considered a band-aid, not a real fix?",
+          options: ["They are too expensive", "They make load uneven, break during deployments, and still lose sessions on crashes", "They require GraphQL", "They don't work with HTTPS"],
+          correctIndex: 1,
+          explanation: "Sticky sessions pin users to specific servers, causing uneven load. During deployments or crashes, pinned users still lose their sessions."
+        },
+        {
+          question: "How does externalizing state to Redis make servers stateless?",
+          options: ["Redis encrypts the session data", "Servers no longer hold any user data — any server can read from Redis to handle any request", "Redis is faster than server memory", "It eliminates the need for a load balancer"],
+          correctIndex: 1,
+          explanation: "With sessions in Redis, servers become pure compute nodes. Any server can serve any user by reading their session from the shared store, enabling true horizontal scaling."
+        },
+      ]} />
 
       <KeyTakeaway
         points={[

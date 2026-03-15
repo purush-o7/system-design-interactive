@@ -11,6 +11,9 @@ import { LiveChart } from "@/components/live-chart";
 import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { MarkerType } from "@xyflow/react";
 import {
   CheckCircle2,
@@ -213,6 +216,7 @@ function HealthCheckPlayground() {
     <Playground
       title="Health Check Simulator — click a server to toggle its health"
       canvasHeight="min-h-[340px]"
+      hints={["Toggle the 'Ready' button on a server to simulate a database disconnection"]}
       canvas={
         <div className="w-full h-full flex flex-col">
           <FlowDiagram
@@ -439,6 +443,7 @@ function ThunderingHerdDemo() {
       title="Liveness vs Readiness: The Thundering Herd Trap"
       simulation={sim}
       canvasHeight="min-h-[280px]"
+      hints={["Press play and compare the left (bad) vs right (good) approach when the DB fails"]}
       canvas={
         <div className="grid grid-cols-2 gap-3 p-4 h-full">
           {/* Bad approach */}
@@ -609,6 +614,10 @@ export default function HealthChecksPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Kubernetes decides whether to restart your service based on <GlossaryTerm term="health check">health checks</GlossaryTerm>. Get them wrong and your app either never restarts when it should, or restarts constantly.
+      </WhyCare>
+
       <ConversationalCallout type="question">
         If a server&apos;s process is running and its port is open, is it healthy? A database
         connection might be gone, the thread pool exhausted, or the app deadlocked — yet TCP says
@@ -619,7 +628,7 @@ export default function HealthChecksPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Interactive: Load Balancer Health Probes</h2>
         <p className="text-sm text-muted-foreground">
-          The load balancer continuously probes each server. Toggle <strong>Live</strong> to simulate
+          The <GlossaryTerm term="load balancer">load balancer</GlossaryTerm> continuously probes each server. Toggle <strong>Live</strong> to simulate
           a deadlock (process stays running but is stuck). Toggle <strong>Ready</strong> to simulate
           a dependency failure (e.g., DB disconnected). Watch how the LB responds differently to each.
         </p>
@@ -739,6 +748,44 @@ export default function HealthChecksPage() {
         before removal). Startup probe at <strong>failureThreshold: 30, periodSeconds: 10</strong> (5
         minutes for slow apps). Always set <strong>timeoutSeconds</strong> lower than your interval.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What happens when a Kubernetes liveness probe fails?",
+            options: [
+              "The pod is removed from the load balancer but keeps running",
+              "The pod is killed and restarted by the orchestrator",
+              "An alert is sent to the operations team",
+              "Traffic is gradually reduced to that pod",
+            ],
+            correctIndex: 1,
+            explanation: "A liveness probe failure tells Kubernetes the process is stuck (e.g., deadlocked). The orchestrator kills and restarts the pod, which is a much more aggressive action than a readiness failure.",
+          },
+          {
+            question: "Why should you NOT put database connectivity checks in a liveness probe?",
+            options: [
+              "Database checks are too slow to run frequently",
+              "It would cause all pods to restart simultaneously if the DB goes down, creating a thundering herd",
+              "Liveness probes cannot make network calls",
+              "Database health is not important for application health",
+            ],
+            correctIndex: 1,
+            explanation: "If a shared dependency like a database goes down, all pods fail their liveness probe simultaneously. The orchestrator restarts all pods at once, and they all try to reconnect at the same moment -- hammering the already-struggling database with a thundering herd of connections.",
+          },
+          {
+            question: "A server's process is running and its TCP port is open, but its database connection pool is exhausted. Which probe type should detect this?",
+            options: [
+              "Startup probe",
+              "Liveness probe",
+              "Readiness probe",
+              "No probe -- TCP check is sufficient",
+            ],
+            correctIndex: 2,
+            explanation: "The readiness probe should detect dependency issues like an exhausted connection pool. The pod stays alive (it's not deadlocked) but is removed from the load balancer rotation until it can serve requests again.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

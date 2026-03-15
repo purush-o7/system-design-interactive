@@ -11,6 +11,9 @@ import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -272,6 +275,7 @@ function PartitionPlayground() {
         title="Network Partition Simulator"
         simulation={sim}
         canvasHeight="min-h-[380px]"
+        hints={["Click Simulate Network Partition, then choose CP or AP to see the trade-off in action."]}
         canvas={
           <FlowDiagram
             nodes={nodes}
@@ -620,11 +624,15 @@ export default function CapTheoremPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        During a network outage, do you show users stale data or show them an error? Every distributed system must make this choice.
+      </WhyCare>
+
       {/* Core explanation */}
       <div className="rounded-xl border border-border/50 bg-muted/5 p-6 space-y-4">
         <h3 className="text-lg font-semibold">The impossible triangle</h3>
         <p className="text-sm text-muted-foreground">
-          The <strong className="text-foreground">CAP theorem</strong> (Brewer 2000, proved by Gilbert
+          The <strong className="text-foreground"><GlossaryTerm term="cap theorem">CAP theorem</GlossaryTerm></strong> (Brewer 2000, proved by Gilbert
           and Lynch 2002) states a distributed data store can guarantee at most two of three properties:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -643,7 +651,7 @@ export default function CapTheoremPage() {
         </div>
         <ConversationalCallout type="warning">
           Since network partitions are inevitable (cables get cut, switches fail, regions lose connectivity),
-          partition tolerance is not optional. The real choice is always <strong>CP vs AP</strong>.
+          partition tolerance is not optional. The real choice is always <strong>CP vs AP</strong>. This directly impacts your <GlossaryTerm term="replication">replication</GlossaryTerm> strategy.
         </ConversationalCallout>
       </div>
 
@@ -680,11 +688,49 @@ export default function CapTheoremPage() {
           <p>
             Partitions are rare — your system runs normally 99.99% of the time. PACELC covers that:
             &quot;Else, choose Latency or Consistency.&quot; Every single request pays the
-            latency-vs-consistency cost. DynamoDB is fast (PA/EL) because it chose low latency
+            latency-vs-consistency cost. DynamoDB is fast (PA/EL) because it chose low <GlossaryTerm term="latency">latency</GlossaryTerm>
             always. Spanner is correct (PC/EC) but pays 10-20ms per commit for TrueTime. PACELC
             explains real-world database behavior far better than CAP alone.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "During a network partition, your e-commerce system must decide how to handle inventory checks. What should a CP system do?",
+            options: [
+              "Return the cached inventory count even if it might be stale",
+              "Return an error or block the request rather than serve potentially incorrect data",
+              "Guess the inventory based on recent trends",
+              "Allow the sale and reconcile inventory later",
+            ],
+            correctIndex: 1,
+            explanation: "A CP system prioritizes consistency: it would rather reject requests (sacrificing availability) than serve stale inventory data that could lead to overselling.",
+          },
+          {
+            question: "Why is 'CA' (Consistent + Available without Partition Tolerance) not a practical choice for distributed systems?",
+            options: [
+              "CA databases are too expensive to operate",
+              "No database vendor offers CA as a configuration option",
+              "Network partitions are inevitable in distributed systems, so you cannot opt out of partition tolerance",
+              "CA systems are slower than CP or AP systems",
+            ],
+            correctIndex: 2,
+            explanation: "Network partitions happen due to cable cuts, switch failures, and region outages. Since you cannot prevent them, partition tolerance is mandatory. CA only applies to single-node systems that are not distributed.",
+          },
+          {
+            question: "Cassandra allows you to use QUORUM reads for payments and ONE reads for activity feeds. What does this demonstrate?",
+            options: [
+              "Cassandra violates the CAP theorem",
+              "The CAP trade-off can be made per-operation, not just per-system",
+              "Cassandra is always a CP system",
+              "QUORUM and ONE are the same consistency level",
+            ],
+            correctIndex: 1,
+            explanation: "Many modern databases let you tune consistency per operation. QUORUM gives CP-like behavior (strong consistency) while ONE gives AP-like behavior (low latency). The best architectures use different consistency models for different data.",
+          },
+        ]}
       />
 
       <KeyTakeaway

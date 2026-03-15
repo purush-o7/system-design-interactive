@@ -11,6 +11,10 @@ import { FlowDiagram } from "@/components/flow-diagram";
 import { LiveChart } from "@/components/live-chart";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 import {
   CheckCircle,
   XCircle,
@@ -680,17 +684,22 @@ export default function ApisAndRestPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        When you check the weather on your phone, your app is calling an API. When Stripe processes a payment, it&apos;s an API call. APIs are the glue of the internet.
+      </WhyCare>
+
       {/* Section 1: HTTP Method Playground */}
       <section className="space-y-4">
         <h2 className="text-xl font-bold">HTTP Methods — Click to Explore</h2>
         <p className="text-muted-foreground text-sm">
-          HTTP methods are not decorative labels. They carry precise semantics that caches, browsers, and proxies depend on. Select a method to see the full request/response flow, when each property matters, and what happens inside the server.
+          HTTP methods are not decorative labels. They carry precise semantics that caches, browsers, and proxies depend on. Select a method to see the full request/response flow, when each property matters, and what happens inside the server. Every <GlossaryTerm term="api">API</GlossaryTerm> you build or consume relies on these methods.
         </p>
         <Playground
           title="HTTP Method Playground"
           canvas={<div className="p-4"><HttpMethodPlayground /></div>}
           controls={false}
           canvasHeight="min-h-[480px]"
+          hints={["Click each HTTP method to compare which ones are safe to retry after a network failure."]}
           explanation={
             <div className="space-y-3">
               <p className="font-semibold text-foreground text-sm">Why semantics matter</p>
@@ -710,7 +719,7 @@ export default function ApisAndRestPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Resources, Not Actions</h2>
         <p className="text-muted-foreground text-sm">
-          REST uses URLs to identify <em>things</em> (nouns) and HTTP methods to describe what to do to them (verbs). When you put verbs in URLs, you lose all the infrastructure HTTP gives you for free.
+          <GlossaryTerm term="rest">REST</GlossaryTerm> uses URLs to identify <em>things</em> (nouns) and HTTP methods to describe what to do to them (verbs). When you put verbs in URLs, you lose all the infrastructure HTTP gives you for free.
         </p>
 
         <BeforeAfter
@@ -759,7 +768,7 @@ export default function ApisAndRestPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-bold">REST vs GraphQL vs gRPC</h2>
         <p className="text-muted-foreground text-sm">
-          REST is not the only way to build APIs. The right paradigm depends on who consumes your API and what performance tradeoffs you can accept. Press play to cycle through paradigms and compare latency.
+          REST is not the only way to build APIs. The right paradigm depends on who consumes your API and what performance tradeoffs you can accept. Press play to cycle through paradigms and compare <GlossaryTerm term="latency">latency</GlossaryTerm>.
         </p>
         <ParadigmComparison />
 
@@ -822,6 +831,27 @@ export default function ApisAndRestPage() {
           When should you break REST conventions? When operations don&apos;t map to CRUD. &quot;Send a password reset email&quot; or &quot;merge two accounts&quot; are actions, not resources. A POST to <code className="text-xs font-mono bg-muted px-1 rounded">/users/42/merge</code> or <code className="text-xs font-mono bg-muted px-1 rounded">/auth/password-reset</code> is entirely acceptable. REST is a guideline, not a religion.
         </ConversationalCallout>
       </section>
+
+      <TopicQuiz questions={[
+        {
+          question: "Why is it dangerous to use GET for operations that modify data?",
+          options: ["GET requests are slower", "Crawlers and prefetch can accidentally trigger mutations", "GET requests cannot include headers", "Browsers block GET requests to APIs"],
+          correctIndex: 1,
+          explanation: "Browsers and crawlers prefetch GET links automatically assuming they are safe. If a GET endpoint deletes data, a crawler could wipe your database just by following links."
+        },
+        {
+          question: "What makes an HTTP method idempotent?",
+          options: ["It always returns the same response code", "Calling it multiple times produces the same result as calling it once", "It does not require authentication", "It can be cached by CDNs"],
+          correctIndex: 1,
+          explanation: "PUT and DELETE are idempotent — repeating them doesn't change the outcome. POST is not: calling POST /users twice creates two users."
+        },
+        {
+          question: "What is the main advantage of GraphQL over REST?",
+          options: ["It is always faster", "The client requests exactly the fields it needs, avoiding over-fetching", "It uses binary encoding", "It works without HTTP"],
+          correctIndex: 1,
+          explanation: "REST returns fixed response shapes, often sending more data than needed. GraphQL lets the client specify exactly which fields to return, reducing bandwidth and round-trips."
+        },
+      ]} />
 
       <KeyTakeaway
         points={[

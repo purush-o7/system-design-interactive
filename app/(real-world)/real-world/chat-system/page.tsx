@@ -3,6 +3,9 @@
 import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -98,6 +101,7 @@ function WebSocketPlayground() {
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={220} />}
       canvasHeight="min-h-[220px]"
       controls={false}
+      hints={["Type a message and click Send to watch it flow through the WebSocket architecture in real time"]}
       explanation={
         <div className="space-y-4">
           <div>
@@ -242,6 +246,7 @@ function MessageFanoutDemo() {
       simulation={sim}
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={350} />}
       canvasHeight="min-h-[350px]"
+      hints={["Try different group sizes to see how write amplification grows with each member"]}
       explanation={
         <div className="space-y-4">
           <div>
@@ -377,6 +382,7 @@ function ArchitecturePlayground() {
       simulation={sim}
       canvas={<FlowDiagram nodes={nodes} edges={edges} minHeight={320} />}
       canvasHeight="min-h-[320px]"
+      hints={["Press play to follow a message from encryption through delivery to the read receipt"]}
       explanation={(state) => (
         <div className="space-y-3">
           <h4 className="text-xs font-semibold text-violet-400">Message Journey</h4>
@@ -553,6 +559,14 @@ export default function ChatSystemPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        WhatsApp delivers 100 billion messages daily with just 50 engineers. Understanding chat architecture reveals elegant solutions to real-time communication.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        A real-time chat system relies on <GlossaryTerm term="websocket">WebSockets</GlossaryTerm> for persistent bidirectional connections. Messages fan out through a <GlossaryTerm term="message queue">message queue</GlossaryTerm> like Kafka, with a <GlossaryTerm term="load balancer">load balancer</GlossaryTerm> distributing connections across gateway servers. Reducing <GlossaryTerm term="latency">latency</GlossaryTerm> to under 50ms requires smart routing via Redis session maps.
+      </p>
+
       {/* Section 1: WebSocket vs Polling */}
       <section className="space-y-4">
         <h2 className="text-lg font-bold flex items-center gap-2">
@@ -692,6 +706,44 @@ export default function ChatSystemPage() {
         For storage, Cassandra partitioned by conversation_id and clustered by timestamp gives
         O(1) seek for the last N messages. Full-text search needs a separate Elasticsearch index.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why do chat systems use WebSockets instead of HTTP polling?",
+            options: [
+              "WebSockets are more secure than HTTP",
+              "WebSockets maintain a persistent bidirectional connection, enabling instant message push",
+              "HTTP polling is not supported on mobile devices",
+              "WebSockets use less memory on the server"
+            ],
+            correctIndex: 1,
+            explanation: "WebSockets maintain a persistent, bidirectional connection so the server can push messages instantly without the client asking. HTTP polling wastes 95% of requests on empty responses and adds N/2 seconds of average latency."
+          },
+          {
+            question: "Why does WhatsApp cap group size at 256 members?",
+            options: [
+              "The app UI cannot display more than 256 members",
+              "256 is the maximum number of WebSocket connections per server",
+              "Fan-out-on-write becomes impractical with larger groups due to write amplification",
+              "WhatsApp's encryption protocol only supports 256 participants"
+            ],
+            correctIndex: 2,
+            explanation: "With fan-out-on-write, each message must be delivered to every group member individually. At 256 members, one message triggers 255 delivery operations. Larger groups like Discord's 500K+ member servers use fan-out-on-read instead."
+          },
+          {
+            question: "How does a chat system achieve effective exactly-once message delivery?",
+            options: [
+              "Using TCP, which guarantees exactly-once delivery",
+              "At-least-once delivery with client-side deduplication by message ID",
+              "At-most-once delivery with server-side retries",
+              "Sending each message through two separate channels"
+            ],
+            correctIndex: 1,
+            explanation: "True exactly-once delivery is extremely hard in distributed systems. WhatsApp uses at-least-once delivery (retries on failure) combined with client-side deduplication by message ID, achieving effective exactly-once semantics."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

@@ -12,6 +12,9 @@ import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
 import { LiveChart } from "@/components/live-chart";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -114,6 +117,7 @@ function ShardDistributionPlayground() {
       title="Shard Distribution Playground"
       controls={false}
       canvasHeight="min-h-[520px]"
+      hints={["Type a user name and click Add Key. Toggle between Hash-Based and Range-Based to see how distribution changes."]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Mode toggle and input */}
@@ -324,6 +328,7 @@ function ReshardingSimulation() {
       title="Resharding Simulation"
       controls={false}
       canvasHeight="min-h-[400px]"
+      hints={["Click Add Shard and Remove Shard while toggling between Modular and Consistent Hashing to compare data movement."]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Controls */}
@@ -537,6 +542,7 @@ function HotPartitionDemo() {
       title="Hot Partition Demo — Celebrity User Problem"
       simulation={sim}
       canvasHeight="min-h-[480px]"
+      hints={["Press Play to watch writes accumulate, then toggle the Fix to see how random suffixes spread the load."]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Fix toggle */}
@@ -625,12 +631,16 @@ export default function ShardingAndPartitioningPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        When your database has 10 billion rows and queries take minutes, you can&apos;t just add RAM. You need to split the data — but how?
+      </WhyCare>
+
       {/* Intro context */}
       <section className="space-y-4 max-w-3xl mx-auto px-4">
         <p className="text-sm text-muted-foreground">
-          <strong className="text-foreground">Partitioning</strong> splits a table into smaller pieces on the
+          <strong className="text-foreground"><GlossaryTerm term="partition">Partitioning</GlossaryTerm></strong> splits a table into smaller pieces on the
           <em> same server</em> (think PostgreSQL table partitions by date range).
-          <strong className="text-foreground"> Sharding</strong> splits data across
+          <strong className="text-foreground"> <GlossaryTerm term="sharding">Sharding</GlossaryTerm></strong> splits data across
           <em> multiple servers</em>, each holding a subset. Sharding is what you reach for when a single machine
           genuinely cannot handle your write volume or data size.
         </p>
@@ -693,7 +703,7 @@ export default function ShardingAndPartitioningPage() {
 
       <ConversationalCallout type="warning">
         <strong>Cross-shard queries are expensive.</strong> A scatter-gather query fans out to all shards,
-        waits for all responses, then merges. If you have 100 shards, that is 100 network round trips.
+        waits for all responses, then merges. If you have 100 shards, that is 100 network round trips with added <GlossaryTerm term="latency">latency</GlossaryTerm>.
         Design your data model so the most common queries hit a single shard. If you frequently JOIN
         across shard boundaries, your shard key is wrong.
       </ConversationalCallout>
@@ -751,6 +761,44 @@ export default function ShardingAndPartitioningPage() {
           </table>
         </div>
       </section>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "You are sharding a multi-tenant SaaS application. Which shard key is the best choice?",
+            options: [
+              "created_at (timestamp of row creation)",
+              "tenant_id (each customer's unique ID)",
+              "auto-incrementing row ID",
+              "country (geographic region of the customer)",
+            ],
+            correctIndex: 1,
+            explanation: "tenant_id keeps all of a tenant's data on one shard, so queries stay local. Timestamps create write hotspots on the latest shard, and country has low cardinality leading to uneven distribution.",
+          },
+          {
+            question: "When you add a new shard using modular hashing (hash % N), approximately what percentage of keys need to move?",
+            options: [
+              "About 1/N of keys (only the new shard's share)",
+              "About 25% of keys",
+              "About 50% of keys",
+              "Nearly all keys, because the modulo changes for almost every hash",
+            ],
+            correctIndex: 3,
+            explanation: "With modular hashing, changing N causes nearly every key to produce a different remainder. Going from 3 to 4 shards can move ~75% of data. Consistent hashing solves this by only moving ~1/N keys.",
+          },
+          {
+            question: "What is the 'celebrity problem' in sharding?",
+            options: [
+              "Celebrity users refuse to have their data sharded for privacy reasons",
+              "One key receives disproportionate traffic, overwhelming a single shard",
+              "Shards named after celebrities are harder to manage",
+              "Celebrity endorsements cause temporary traffic spikes across all shards",
+            ],
+            correctIndex: 1,
+            explanation: "When one key (like a celebrity's user ID) receives most of the writes, all that traffic hits a single shard. The fix is write sharding: append a random suffix to spread writes, then merge on read.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

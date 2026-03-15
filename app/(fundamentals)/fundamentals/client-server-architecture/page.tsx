@@ -16,6 +16,10 @@ import { BeforeAfter } from "@/components/before-after";
 import { MetricCounter } from "@/components/metric-counter";
 import { ScaleSimulator } from "@/components/scale-simulator";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 import {
   Monitor,
   Server,
@@ -643,6 +647,10 @@ export default function ClientServerArchitecturePage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Every app you use — from Instagram to your banking app — follows this pattern. Understanding client-server is understanding how the modern internet works.
+      </WhyCare>
+
       {/* ── 1. Failure Scenario ──────────────────────────────────────── */}
       <FailureScenario title="A peer-to-peer desktop app where everyone stores their own data">
         <p className="text-sm text-muted-foreground">
@@ -703,7 +711,7 @@ export default function ClientServerArchitecturePage() {
         <ConversationalCallout type="tip">
           &quot;Server&quot; does not mean one physical machine. It means any process that
           accepts and responds to requests &mdash; a single machine, ten machines behind a
-          load balancer, or a serverless function invoked on demand.
+          <GlossaryTerm term="load balancer">load balancer</GlossaryTerm>, or a serverless function invoked on demand.
         </ConversationalCallout>
       </ConceptVisualizer>
 
@@ -736,10 +744,10 @@ export default function ClientServerArchitecturePage() {
       {/* ── 6. Stateless Communication ───────────────────────────────── */}
       <ConceptVisualizer title="Stateless Communication">
         <p className="text-sm text-muted-foreground mb-4">
-          In HTTP, each request is independent. The server does not remember previous requests
+          In HTTP, each request is <GlossaryTerm term="stateless">stateless</GlossaryTerm>. The server does not remember previous requests
           from the same client. This means every request must carry all the context the server
           needs &mdash; authentication tokens, session identifiers, and any relevant state.
-          This is what makes horizontal scaling possible.
+          This is what makes <GlossaryTerm term="horizontal scaling">horizontal scaling</GlossaryTerm> possible.
         </p>
         <StatelessViz />
         <AhaMoment
@@ -774,7 +782,7 @@ export default function ClientServerArchitecturePage() {
       <ConceptVisualizer title="Scaling the Server">
         <p className="text-sm text-muted-foreground mb-4">
           When one server is not enough to handle the load, you have two options: make the
-          server bigger (vertical scaling) or add more servers (horizontal scaling). Toggle
+          server bigger (<GlossaryTerm term="vertical scaling">vertical scaling</GlossaryTerm>) or add more servers (horizontal scaling). Toggle
           between them to see the difference.
         </p>
         <ScalingComparisonViz />
@@ -1060,6 +1068,27 @@ export default function ClientServerArchitecturePage() {
         Without it, anyone with an HTTP client can read or modify your entire database.
         Always put a server between the client and the data store.
       </ConversationalCallout>
+
+      <TopicQuiz questions={[
+        {
+          question: "Why should validation always happen on the server, not just the client?",
+          options: ["Server-side code runs faster", "Client-side code can be inspected and bypassed by anyone", "Browsers don't support validation", "It reduces network traffic"],
+          correctIndex: 1,
+          explanation: "Anyone can open DevTools, modify JavaScript, or send raw HTTP requests. Client validation is for UX; server validation is for security."
+        },
+        {
+          question: "What is the main advantage of stateless communication in client-server architecture?",
+          options: ["It uses less bandwidth", "Any server can handle any request, enabling horizontal scaling", "It encrypts all traffic automatically", "It eliminates the need for databases"],
+          correctIndex: 1,
+          explanation: "When the server stores no client state, a load balancer can route any request to any available server. This is the foundation of horizontal scaling."
+        },
+        {
+          question: "In a 3-tier architecture, what are the three tiers?",
+          options: ["Frontend, middleware, firewall", "Presentation, application, data", "Client, CDN, server", "Browser, API gateway, message queue"],
+          correctIndex: 1,
+          explanation: "The presentation tier handles the UI, the application tier contains business logic, and the data tier manages storage. Each can scale independently."
+        },
+      ]} />
 
       {/* ── 16. Key Takeaway ─────────────────────────────────────────── */}
       <KeyTakeaway

@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
 import { Lock, Unlock, Key, Shield, CheckCircle2, XCircle, Fingerprint } from "lucide-react";
 import { MarkerType } from "@xyflow/react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 /* ── Static color maps (no dynamic Tailwind interpolation) ── */
 
@@ -165,6 +168,7 @@ function TlsPlayground() {
   return (
     <Playground
       title="TLS 1.3 Handshake — 1 Round Trip"
+      hints={["Press play to step through each message in the TLS 1.3 handshake"]}
       simulation={sim}
       canvasHeight="min-h-[320px]"
       canvas={
@@ -519,6 +523,7 @@ function AtRestInTransitPlayground() {
   return (
     <Playground
       title="In-Transit vs At-Rest Encryption"
+      hints={["Press play to see how data is protected at each stage"]}
       simulation={sim}
       canvasHeight="min-h-[280px]"
       canvas={
@@ -561,6 +566,10 @@ export default function EncryptionPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Every time you see the padlock in your browser, <GlossaryTerm term="tls">TLS</GlossaryTerm> is encrypting your data. Without it, anyone on the same WiFi could read your passwords.
+      </WhyCare>
+
       <ConversationalCallout type="warning">
         The most common mistake: using fast hashes (SHA-256) for passwords, or encryption for passwords when you only need hashing. Hash passwords. Encrypt data you need to read back. They solve different problems.
       </ConversationalCallout>
@@ -571,7 +580,7 @@ export default function EncryptionPage() {
         question="Why does TLS use both asymmetric AND symmetric encryption?"
         answer={
           <p>
-            Asymmetric (RSA / ECDH) solves the key exchange problem — you can agree on a shared secret over an insecure channel without ever transmitting the secret itself. But it is ~1000x slower than AES. So TLS uses asymmetric once during the handshake to establish a shared session key, then switches to fast AES-256-GCM for all actual data. Best of both worlds: secure key exchange + high-speed bulk encryption.
+            Asymmetric (RSA / ECDH) solves the key exchange problem — you can agree on a shared secret over an insecure channel without ever transmitting the secret itself. But it is ~1000x slower than AES. So <GlossaryTerm term="tls">TLS</GlossaryTerm> uses asymmetric once during the handshake to establish a shared session key, then switches to fast AES-256-GCM for all actual data. Best of both worlds: secure key exchange + high-speed bulk encryption.
           </p>
         }
       />
@@ -627,6 +636,44 @@ export default function EncryptionPage() {
       <ConversationalCallout type="question">
         Where do you store the encryption key? If the key lives alongside the encrypted data, it is like locking your door and leaving the key under the mat. Use a dedicated Key Management Service (AWS KMS, HashiCorp Vault, GCP Cloud KMS). With envelope encryption, KMS encrypts your data key — KMS never sees the actual data, only encrypts the small key that does.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why does TLS use both asymmetric and symmetric encryption instead of just one?",
+            options: [
+              "Asymmetric encryption is broken and needs symmetric as a backup",
+              "Asymmetric solves key exchange securely but is ~1000x slower than AES, so TLS switches to symmetric for bulk data",
+              "Symmetric encryption cannot work over the internet",
+              "It's a legacy requirement from TLS 1.0 that hasn't been removed",
+            ],
+            correctIndex: 1,
+            explanation: "Asymmetric crypto (ECDH) solves the key exchange problem over an insecure channel, but it's ~1000x slower than AES. TLS uses asymmetric once to establish a shared session key, then switches to fast symmetric AES for all data.",
+          },
+          {
+            question: "Why should you use bcrypt or argon2 instead of SHA-256 for hashing passwords?",
+            options: [
+              "SHA-256 produces shorter hashes that are easier to crack",
+              "bcrypt and argon2 are intentionally slow, making brute-force attacks take centuries instead of seconds",
+              "SHA-256 is a broken algorithm with known collisions",
+              "bcrypt and argon2 are reversible, which is required for password recovery",
+            ],
+            correctIndex: 1,
+            explanation: "Speed is the enemy for password hashing. SHA-256 runs at 250B hashes/sec on a GPU. bcrypt at cost 12 runs at ~4/sec. That gap is the difference between cracking passwords in seconds vs. centuries.",
+          },
+          {
+            question: "If HTTPS (TLS) encrypts data in transit, why do you also need encryption at rest?",
+            options: [
+              "TLS only encrypts the headers, not the body of requests",
+              "TLS protects data while moving, but a database breach, stolen backup, or rogue admin sees plaintext without at-rest encryption",
+              "At-rest encryption is optional and only needed for compliance",
+              "TLS encryption expires after 24 hours",
+            ],
+            correctIndex: 1,
+            explanation: "TLS only protects data while it's moving between two points. Once it arrives at your server, TLS is decrypted. At-rest encryption (AES-256) protects against database breaches, stolen backups, and insider threats.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

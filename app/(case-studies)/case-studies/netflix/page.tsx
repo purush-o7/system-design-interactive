@@ -3,6 +3,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -116,6 +119,7 @@ function OpenConnectPlayground() {
       title="Open Connect CDN Pre-Positioning"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Press play to watch OCAs pre-fill overnight. By peak hours, 97% of video bytes serve from the viewer's own ISP."]}
       canvas={
         <div className="p-4 space-y-4 h-full">
           <div className="text-xs font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded-md px-3 py-2">
@@ -209,6 +213,7 @@ function AbrPlayground() {
       title="Netflix Adaptive Bitrate Streaming"
       simulation={sim}
       canvasHeight="min-h-[360px]"
+      hints={["Watch bandwidth fluctuate and quality adapt automatically. AV1 achieves 4K at half the bandwidth of H.264."]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-6 flex-wrap">
@@ -350,6 +355,7 @@ function ChaosMonkeyPlayground() {
       title="Chaos Monkey — Resilience Testing in Production"
       simulation={sim}
       canvasHeight="min-h-[360px]"
+      hints={["Press play to see Chaos Monkey kill random services. Notice the system keeps serving -- that's the point."]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Status bar */}
@@ -434,6 +440,10 @@ export default function NetflixCaseStudyPage() {
         estimatedMinutes={25}
       />
 
+      <WhyCare>
+        Netflix streams to 230 million subscribers across 190 countries. One glitch during peak hours affects millions. This is engineering at planetary scale.
+      </WhyCare>
+
       <AhaMoment
         question="Before reading: design a video streaming service for 200 M users. What's your biggest architectural challenge?"
         answer={
@@ -454,7 +464,7 @@ export default function NetflixCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Full Architecture</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Netflix splits into two planes: the <strong>control plane</strong> on AWS (APIs, microservices, data) and the <strong>data plane</strong> on its own Open Connect CDN (actual video bytes). Drag nodes to explore.
+          Netflix splits into two planes: the <strong>control plane</strong> on AWS (APIs, <GlossaryTerm term="microservices">microservices</GlossaryTerm>, data) and the <strong>data plane</strong> on its own Open Connect <GlossaryTerm term="cdn">CDN</GlossaryTerm> (actual video bytes). Drag nodes to explore.
         </p>
         <div className="rounded-xl border border-border/40 overflow-hidden">
           <FlowDiagram
@@ -563,7 +573,7 @@ export default function NetflixCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Microservices + Circuit Breakers</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Netflix migrated from a monolith to <strong>700+ microservices</strong> after a database corruption event in 2008 killed DVD shipping for three days. Each service runs independently on AWS and communicates via REST or gRPC. <strong>Hystrix</strong> (now resilience4j) wraps every outbound call in a circuit breaker.
+          Netflix migrated from a monolith to <strong>700+ <GlossaryTerm term="microservices">microservices</GlossaryTerm></strong> after a database corruption event in 2008 killed DVD shipping for three days. Each service runs independently on AWS and communicates via REST or gRPC. <strong>Hystrix</strong> (now resilience4j) wraps every outbound call in a <GlossaryTerm term="circuit breaker">circuit breaker</GlossaryTerm>.
         </p>
         <BeforeAfter
           before={{
@@ -623,7 +633,7 @@ export default function NetflixCaseStudyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Real-Time Event Pipeline</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Netflix processes <strong>billions of events per day</strong> — every play, pause, seek, search, thumbs-up, and browse action. Apache Kafka ingests all events; Apache Flink processes them in real time to update recommendation models; long-term analytics land in S3 via Apache Spark.
+          Netflix processes <strong>billions of events per day</strong> — every play, pause, seek, search, thumbs-up, and browse action. Apache Kafka (<GlossaryTerm term="message queue">message queue</GlossaryTerm>) ingests all events; Apache Flink processes them in real time to update recommendation models; long-term analytics land in S3 via Apache Spark.
         </p>
         <div className="rounded-xl border border-border/40 overflow-hidden">
           <FlowDiagram
@@ -651,6 +661,44 @@ export default function NetflixCaseStudyPage() {
           Recommendation models update within minutes of user behavior — not overnight batches. This is why Netflix&apos;s home screen adapts to what you watched an hour ago.
         </p>
       </section>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why did Netflix build its own CDN (Open Connect) instead of using Akamai?",
+            options: [
+              "Akamai was too slow",
+              "It was cheaper and gave them control over pre-positioning content inside ISP networks for 97%+ edge hit rates",
+              "Akamai did not support video streaming",
+              "Netflix wanted to avoid using the internet entirely"
+            ],
+            correctIndex: 1,
+            explanation: "Netflix saves hundreds of millions annually with Open Connect. By placing OCA appliances directly inside ISPs and pre-filling them overnight, 97% of video bytes never leave the ISP's network -- reducing cost and latency dramatically."
+          },
+          {
+            question: "What is the purpose of Chaos Monkey in Netflix's architecture?",
+            options: [
+              "To test new features before release",
+              "To randomly kill production instances and prove the system can recover gracefully",
+              "To monitor server performance metrics",
+              "To optimize video encoding quality"
+            ],
+            correctIndex: 1,
+            explanation: "Chaos Monkey deliberately kills random EC2 instances in production every day. The philosophy: a failure you have tested is a failure you can recover from gracefully. Teams that never see failures in production build much more fragile systems."
+          },
+          {
+            question: "Why does Netflix use Cassandra for viewing history instead of a relational database?",
+            options: [
+              "Cassandra is cheaper to license",
+              "Viewing history is an append-only, write-heavy workload with massive fan-out -- exactly what Cassandra's log-structured storage excels at",
+              "Relational databases cannot store video data",
+              "Cassandra has better SQL support"
+            ],
+            correctIndex: 1,
+            explanation: "Viewing history is write-heavy (every play, pause, seek) and append-only. Cassandra's LSM tree storage and wide-row model handle billions of rows with horizontal scaling. A relational database would struggle with the write volume and fan-out at Netflix's scale."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

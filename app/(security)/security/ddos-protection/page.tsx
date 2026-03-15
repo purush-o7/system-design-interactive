@@ -16,6 +16,9 @@ import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
 import { cn } from "@/lib/utils";
 import { Shield, Zap, Globe, Server, AlertTriangle, CheckCircle2, XCircle, Activity } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 function AttackTrafficViz() {
   const [tick, setTick] = useState(0);
@@ -333,6 +336,10 @@ export default function DdosProtectionPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        GitHub survived the largest <GlossaryTerm term="ddos">DDoS</GlossaryTerm> attack in history — 1.35 Tbps — in 2018. They were back in 10 minutes because they had proper DDoS protection.
+      </WhyCare>
+
       <FailureScenario title="50 Gbps of bot traffic takes you completely offline">
         <p className="text-sm text-muted-foreground">
           Your site goes down because <strong>1 million bots hit your homepage simultaneously</strong>.
@@ -446,7 +453,7 @@ export default function DdosProtectionPage() {
             </p>
           </div>
           <div>
-            <h4 className="text-sm font-semibold">4. Rate Limiting + Challenge Pages</h4>
+            <h4 className="text-sm font-semibold">4. <GlossaryTerm term="rate limiting">Rate Limiting</GlossaryTerm> + Challenge Pages</h4>
             <p className="text-sm text-muted-foreground">
               Per-IP rate limits at the edge. Suspicious traffic gets JavaScript challenges (prove
               you&apos;re running a real browser) or CAPTCHA challenges. Cloudflare&apos;s &quot;Under
@@ -576,12 +583,50 @@ export default function DdosProtectionPage() {
       </ConversationalCallout>
 
       <ConversationalCallout type="tip">
-        In system design interviews, structure DDoS defense by layer: network (anycast, scrubbing centers),
-        transport (SYN cookies, connection limits), and application (WAF, rate limiting, JS challenges).
+        In system design interviews, structure <GlossaryTerm term="ddos">DDoS</GlossaryTerm> defense by layer: network (anycast, scrubbing centers),
+        transport (SYN cookies, connection limits), and application (WAF, <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm>, JS challenges).
         Show that you understand it&apos;s not a single solution but a layered architecture. Mention
         specific services (Cloudflare, AWS Shield) and their tradeoffs (cost, always-on vs on-demand,
         managed vs self-service).
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why can't you simply auto-scale your servers to handle a DDoS attack?",
+            options: [
+              "Auto-scaling is too slow to react",
+              "Cloud providers don't allow auto-scaling during attacks",
+              "Auto-scaling converts an availability problem into a billing problem (EDoS) — you pay for servers serving bot traffic",
+              "Auto-scaling only works for CPU, not network bandwidth",
+            ],
+            correctIndex: 2,
+            explanation: "Scaling up to match a DDoS means paying for thousands of servers to serve bot traffic. A sustained attack could run up a six-figure cloud bill. This is called Economic Denial of Sustainability (EDoS).",
+          },
+          {
+            question: "Why are Layer 7 (application) DDoS attacks harder to defend against than Layer 3/4 attacks?",
+            options: [
+              "L7 attacks use more bandwidth",
+              "L7 requests look like legitimate traffic, making them hard to distinguish from real users",
+              "L7 attacks can't be blocked by firewalls",
+              "L7 attacks only target databases",
+            ],
+            correctIndex: 1,
+            explanation: "L7 attacks use legitimate-looking HTTP requests (like GET /search?q=shoes). Each request looks identical to real user traffic — it's only malicious in aggregate. Defense requires understanding application behavior, not just packet headers.",
+          },
+          {
+            question: "What is the primary purpose of Anycast routing in DDoS protection?",
+            options: [
+              "To encrypt traffic between the client and the server",
+              "To spread incoming traffic across hundreds of global Points of Presence (PoPs) so no single location is overwhelmed",
+              "To block all traffic from known malicious IP addresses",
+              "To speed up DNS resolution for faster page loads",
+            ],
+            correctIndex: 1,
+            explanation: "Anycast routes traffic to the nearest PoP. A 100 Gbps attack targeting one IP gets split across 300+ PoPs — each handling a fraction of the traffic, which is easily managed.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

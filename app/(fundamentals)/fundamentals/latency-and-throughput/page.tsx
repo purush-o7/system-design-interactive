@@ -11,6 +11,10 @@ import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-dia
 import { LiveChart } from "@/components/live-chart";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // --- Latency Simulator ---
 
@@ -109,6 +113,7 @@ function LatencySimulator() {
       title="Latency Simulator"
       simulation={sim}
       canvasHeight="min-h-[420px]"
+      hints={["Send at least 20 requests to see P99 diverge from P50 — tail latency spikes are rare but impactful."]}
       canvas={
         <div className="p-4 space-y-4">
           <FlowDiagram nodes={nodes} edges={edges} minHeight={180} interactive={false} allowDrag={false} />
@@ -251,6 +256,7 @@ function ThroughputPlayground() {
       simulation={sim}
       controls={false}
       canvasHeight="min-h-[400px]"
+      hints={["Crank concurrency above the pipe width to see the bottleneck appear in red."]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-3">
@@ -554,6 +560,10 @@ export default function LatencyAndThroughputPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Amazon found that every 100ms of <GlossaryTerm term="latency">latency</GlossaryTerm> cost them 1% in sales. Understanding these numbers is how you keep users from leaving your site.
+      </WhyCare>
+
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">What is the difference?</h2>
         <BeforeAfter
@@ -599,7 +609,7 @@ export default function LatencyAndThroughputPage() {
         <h2 className="text-lg font-semibold">Latency Simulator</h2>
         <p className="text-sm text-muted-foreground">
           Fire requests at a server with adjustable delay. Watch percentiles diverge as
-          tail latency spikes hit. P99 tells a very different story than the average.
+          tail latency spikes hit. <GlossaryTerm term="p99">P99</GlossaryTerm> tells a very different story than the average.
         </p>
         <LatencySimulator />
         <LatencyHistogram />
@@ -620,8 +630,7 @@ export default function LatencyAndThroughputPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Throughput Pipeline</h2>
         <p className="text-sm text-muted-foreground">
-          Adjust the pipe width (bandwidth) and concurrent requests to see how throughput
-          scales linearly then plateaus. The bottleneck visualization shows exactly where
+          Adjust the pipe width (bandwidth) and concurrent requests to see how <GlossaryTerm term="throughput">throughput</GlossaryTerm> scales linearly then plateaus. The bottleneck visualization shows exactly where
           the constraint is.
         </p>
         <ThroughputPlayground />
@@ -654,7 +663,7 @@ export default function LatencyAndThroughputPage() {
         <h2 className="text-lg font-semibold">Real-World Latency Numbers</h2>
         <p className="text-sm text-muted-foreground">
           Click each bar to learn why it takes that long. These numbers shape every
-          architecture decision -- from whether you need a cache to where to deploy.
+          architecture decision -- from whether you need a <GlossaryTerm term="cache">cache</GlossaryTerm> to where to deploy.
         </p>
         <RealWorldLatency />
       </section>
@@ -677,6 +686,27 @@ export default function LatencyAndThroughputPage() {
         from caching strategy to server count. A real-time game has very different requirements
         than a batch analytics pipeline.
       </ConversationalCallout>
+
+      <TopicQuiz questions={[
+        {
+          question: "Why do engineers track P99 latency instead of averages?",
+          options: ["P99 is easier to calculate", "Averages hide the worst-case experience that 1 in 100 users sees", "P99 measures throughput", "Averages are not supported by monitoring tools"],
+          correctIndex: 1,
+          explanation: "If 99 requests take 20ms and one takes 5 seconds, the average looks fine at 70ms. But P99 reveals that 1 in 100 users waits 5 seconds — at scale, that is thousands of frustrated users."
+        },
+        {
+          question: "What happens to latency when a system runs above 80% utilization?",
+          options: ["Latency decreases because the system is fully utilized", "Latency stays flat", "Latency spikes exponentially due to queueing", "The system automatically adds more servers"],
+          correctIndex: 2,
+          explanation: "Queueing theory shows that as utilization approaches 100%, wait times approach infinity. This is the hockey stick curve — and why production systems should stay below 70-80% capacity."
+        },
+        {
+          question: "Adding more servers primarily improves which metric?",
+          options: ["Latency", "Throughput", "Both equally", "Neither"],
+          correctIndex: 1,
+          explanation: "More servers handle more concurrent requests (throughput), but each individual request still takes the same time. To reduce latency, optimize per-request work: caching, parallelization, or moving data closer."
+        },
+      ]} />
 
       <KeyTakeaway
         points={[

@@ -10,6 +10,9 @@ import { Playground } from "@/components/playground";
 import { LiveChart } from "@/components/live-chart";
 import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 // ─── Hash Functions ──────────────────────────────────────────────────────────
 
@@ -125,6 +128,7 @@ function BitArrayPlayground() {
     <Playground
       title="Bloom Filter — Interactive Bit Array"
       canvasHeight="min-h-[260px]"
+      hints={["Add a few words like 'apple' and 'banana', then query a word you never added to see a definite NO — or catch a false positive!"]}
       canvas={
         <div className="p-5 space-y-4">
           {/* Bit grid */}
@@ -384,6 +388,7 @@ function SystemFlowSection() {
     <Playground
       title="Where Bloom Filters Fit in a System"
       canvasHeight="min-h-[480px]"
+      hints={["Follow the arrows to see how a Bloom filter sits in front of Redis and the database, blocking unnecessary lookups."]}
       canvas={
         <div className="p-4 h-full">
           <FlowDiagram nodes={ARCH_NODES} edges={ARCH_EDGES} minHeight={460} interactive={false} fitView />
@@ -460,8 +465,12 @@ export default function BloomFiltersPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Google Chrome checks every URL you visit against a list of millions of known malicious sites — in microseconds. <GlossaryTerm term="bloom filter">Bloom filters</GlossaryTerm> make this possible.
+      </WhyCare>
+
       <ConversationalCallout type="question">
-        Your URL shortener serves 1 billion URLs. Before generating a new short code, you need to check whether it already exists. Checking the database every time costs 200 ms and causes 10,000 DB queries/second at scale. What if most of those could be eliminated before touching the database at all?
+        Your URL shortener serves 1 billion URLs. Before generating a new short code, you need to check whether it already exists. Checking the database every time costs 200 ms of <GlossaryTerm term="latency">latency</GlossaryTerm> and causes 10,000 DB queries/second at scale. What if most of those could be eliminated before touching the database at all?
       </ConversationalCallout>
 
       {/* Interactive Bit Array */}
@@ -510,7 +519,7 @@ export default function BloomFiltersPage() {
         <h2 className="text-lg font-semibold">Where It Fits in a System</h2>
         <p className="text-sm text-muted-foreground">
           Bloom filters live at the very front of the lookup chain — cheap enough to query in microseconds,
-          powerful enough to eliminate the majority of expensive I/O.
+          powerful enough to eliminate the majority of expensive I/O. They are often paired with a <GlossaryTerm term="cache">cache</GlossaryTerm> layer for maximum efficiency.
         </p>
         <SystemFlowSection />
       </section>
@@ -593,6 +602,44 @@ export default function BloomFiltersPage() {
           ))}
         </div>
       </section>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "A Bloom filter says an element is 'probably in the set.' What should your system do next?",
+            options: [
+              "Trust the result and treat the element as definitely present",
+              "Verify by checking the actual data source (cache or database)",
+              "Remove the element from the Bloom filter and re-check",
+              "Increase the number of hash functions and query again",
+            ],
+            correctIndex: 1,
+            explanation: "A 'probably yes' from a Bloom filter could be a false positive. You must verify against the actual data source. The filter's value is eliminating the definite NOs cheaply — the YES cases still need confirmation.",
+          },
+          {
+            question: "Why can't you delete an element from a standard Bloom filter?",
+            options: [
+              "Bloom filters are read-only data structures",
+              "The hash functions are one-way and cannot be reversed",
+              "Clearing a bit might remove evidence of other elements that share those bit positions",
+              "Deletion would make the filter larger than its allocated size",
+            ],
+            correctIndex: 2,
+            explanation: "Multiple elements can hash to the same bit positions. Clearing a bit to 'delete' one element could set a bit to 0 that another element also depends on, creating a false negative — which violates the core guarantee.",
+          },
+          {
+            question: "A Bloom filter with 1,000 bits holds 100 elements at a 1% false positive rate. What happens if you insert 1,000 more elements without resizing?",
+            options: [
+              "The filter automatically grows to accommodate the new elements",
+              "The false positive rate stays at 1% since the filter adapts",
+              "The false positive rate rises dramatically as more bits become saturated",
+              "The filter starts returning false negatives for old elements",
+            ],
+            correctIndex: 2,
+            explanation: "A Bloom filter has a fixed size. As you add more elements, more bits get set to 1, increasing the probability that a query finds all its hash positions already set. A fully saturated filter returns 'probably yes' for everything.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

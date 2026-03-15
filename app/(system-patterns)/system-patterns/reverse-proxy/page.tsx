@@ -13,6 +13,10 @@ import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { Lock, Zap, HardDrive, ShieldCheck, ArrowRight, Server } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // ─── Forward vs Reverse Proxy Toggle ───────────────────────────────────────
 
@@ -163,6 +167,7 @@ function FeaturePlayground() {
   return (
     <Playground
       title="Reverse Proxy Feature Playground"
+      hints={["Toggle SSL, Caching, Compression, and Auth to see their impact on latency"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-2 gap-2">
@@ -358,6 +363,7 @@ function SSLTerminationFlow() {
     <Playground
       title="SSL Termination Walkthrough"
       simulation={sim}
+      hints={["Press play to step through the SSL termination process"]}
       canvas={
         <div className="p-4 space-y-3">
           <FlowDiagram nodes={nodes} edges={edges} allowDrag={false} minHeight={260} />
@@ -419,11 +425,15 @@ export default function ReverseProxyPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Every time you visit a website behind Cloudflare or Nginx, you&apos;re using a <GlossaryTerm term="reverse proxy">reverse proxy</GlossaryTerm> — even if you don&apos;t know it.
+      </WhyCare>
+
       {/* Forward vs Reverse toggle */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Forward Proxy vs Reverse Proxy</h2>
         <p className="text-sm text-muted-foreground">
-          These two are constantly mixed up. The key distinction is <em>which side</em> the proxy protects. Toggle between the two diagrams to see the structural difference.
+          These two are constantly mixed up. The key distinction is <em>which side</em> the proxy protects. A <GlossaryTerm term="reverse proxy">reverse proxy</GlossaryTerm> protects the server; a forward proxy protects the client. Toggle between the two diagrams to see the structural difference.
         </p>
         <ProxyToggle />
       </section>
@@ -441,7 +451,7 @@ export default function ReverseProxyPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">What Can a Reverse Proxy Do?</h2>
         <p className="text-sm text-muted-foreground">
-          Toggle features on the reverse proxy node and see how each changes the architecture and latency. Each feature offloads work from your backends.
+          Toggle features on the reverse proxy node and see how each changes the architecture and <GlossaryTerm term="latency">latency</GlossaryTerm>. Each feature offloads work from your backends, including <GlossaryTerm term="cache">caching</GlossaryTerm> and <GlossaryTerm term="load balancer">load balancing</GlossaryTerm>.
         </p>
         <FeaturePlayground />
       </section>
@@ -531,6 +541,44 @@ export default function ReverseProxyPage() {
             </div>
           ),
         }}
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What is the key difference between a forward proxy and a reverse proxy?",
+            options: [
+              "A forward proxy is faster than a reverse proxy",
+              "A forward proxy protects the client; a reverse proxy protects the server",
+              "A forward proxy handles HTTPS; a reverse proxy handles HTTP only",
+              "There is no difference -- they are the same thing",
+            ],
+            correctIndex: 1,
+            explanation: "A forward proxy sits on the client side (hiding the client's IP from servers). A reverse proxy sits on the server side (hiding backend IPs from clients). They protect opposite sides.",
+          },
+          {
+            question: "What is SSL termination and why is it beneficial?",
+            options: [
+              "Removing SSL certificates from the entire system for speed",
+              "Decrypting HTTPS at the proxy so backends run plain HTTP, centralizing TLS overhead",
+              "Encrypting traffic between backend servers",
+              "Using self-signed certificates on all servers",
+            ],
+            correctIndex: 1,
+            explanation: "SSL termination decrypts HTTPS at the reverse proxy. Backends communicate over plain HTTP on the private network, eliminating per-server TLS overhead and simplifying certificate management to one point.",
+          },
+          {
+            question: "Which reverse proxy feature provides the biggest latency improvement?",
+            options: [
+              "Authentication",
+              "Compression",
+              "SSL termination",
+              "Caching -- cache hits skip the backend entirely, dropping latency to under 2ms",
+            ],
+            correctIndex: 3,
+            explanation: "Caching at the proxy creates a fast path where repeated requests are served directly from the proxy without contacting any backend. This can reduce latency from ~52ms to under 2ms.",
+          },
+        ] satisfies QuizQuestion[]}
       />
 
       <KeyTakeaway

@@ -11,6 +11,9 @@ import { LiveChart } from "@/components/live-chart";
 import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, Shield, Zap } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 // ─── Token Bucket Playground ──────────────────────────────────────────────────
 
@@ -323,8 +326,13 @@ export default function RateLimitingPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        In 2023, OpenAI rate-limits their API to protect their servers. Without <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm>, a single user could accidentally (or intentionally) take down your entire service.
+      </WhyCare>
+
       <Playground
         title="Token Bucket Playground"
+        hints={["Try sending a burst of 15 requests when the bucket has 10 tokens"]}
         canvas={<TokenBucketPlayground />}
         controls={false}
         explanation={
@@ -338,12 +346,13 @@ export default function RateLimitingPage() {
       />
 
       <ConversationalCallout type="tip">
-        The token bucket is the most popular algorithm in production — used by AWS, Stripe, Google Cloud, and most API gateways.
+        The <GlossaryTerm term="token bucket">token bucket</GlossaryTerm> is the most popular algorithm in production — used by AWS, Stripe, Google Cloud, and most <GlossaryTerm term="api gateway">API gateways</GlossaryTerm>.
         It balances short bursts with long-term rate enforcement.
       </ConversationalCallout>
 
       <Playground
         title="Algorithm Comparison"
+        hints={["Switch between algorithms to see how they handle the same bursty traffic"]}
         canvas={<AlgorithmComparison />}
         controls={false}
         explanation={
@@ -363,6 +372,7 @@ export default function RateLimitingPage() {
 
       <Playground
         title="DDoS Attack Simulation"
+        hints={["Click DDoS Attack to see rate limiting protect the server"]}
         canvas={<AttackSimulation />}
         controls={false}
         explanation={
@@ -407,8 +417,46 @@ export default function RateLimitingPage() {
       />
 
       <ConversationalCallout type="tip">
-        In system design interviews, mention rate limiting early when discussing any API. State the algorithm (token bucket for most cases), where to enforce it (edge + application), and how to coordinate across instances (Redis). Bonus: mention rate limit headers and exponential backoff with jitter.
+        In system design interviews, mention <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm> early when discussing any API. State the algorithm (<GlossaryTerm term="token bucket">token bucket</GlossaryTerm> for most cases), where to enforce it (edge + application), and how to coordinate across instances (<GlossaryTerm term="cache">Redis</GlossaryTerm>). Bonus: mention rate limit headers and exponential backoff with jitter.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Which rate limiting algorithm allows controlled bursts while enforcing a long-term rate?",
+            options: [
+              "Fixed Window",
+              "Leaky Bucket",
+              "Token Bucket",
+              "Sliding Window",
+            ],
+            correctIndex: 2,
+            explanation: "The Token Bucket algorithm allows bursts up to the bucket capacity while maintaining a steady refill rate, making it ideal for APIs that need burst tolerance.",
+          },
+          {
+            question: "What is the 'boundary burst' problem with Fixed Window rate limiting?",
+            options: [
+              "The window size is too small to be effective",
+              "A client can send up to 2x the limit by splitting requests across two adjacent windows",
+              "The algorithm uses too much memory",
+              "It cannot be implemented in a distributed system",
+            ],
+            correctIndex: 1,
+            explanation: "At the boundary between two fixed windows, a client can send the full limit at the end of one window and again at the start of the next, effectively doubling their allowed rate.",
+          },
+          {
+            question: "Why is a Lua script recommended for rate limiting with Redis instead of separate GET and SET commands?",
+            options: [
+              "Lua scripts run faster than Redis commands",
+              "Redis doesn't support GET and SET commands",
+              "Lua scripts execute atomically, preventing race conditions where two requests both pass the check simultaneously",
+              "Lua scripts use less memory than Redis commands",
+            ],
+            correctIndex: 2,
+            explanation: "Without atomic execution, two concurrent requests can both read the counter as under the limit and both proceed. A Lua script makes the check-and-increment operation atomic in a single round trip.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

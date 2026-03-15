@@ -3,6 +3,9 @@
 import { useState, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -116,6 +119,7 @@ function UploadPipelinePlayground() {
       title="Upload Pipeline"
       simulation={sim}
       canvasHeight="min-h-[420px]"
+      hints={["Press play to watch a video upload flow through transcoding, storage, and CDN distribution"]}
       canvas={
         <div className="p-4 space-y-4">
           <FlowDiagram
@@ -221,6 +225,7 @@ function AdaptiveBitrateDemo() {
       title="Adaptive Bitrate Streaming"
       simulation={sim}
       canvasHeight="min-h-[400px]"
+      hints={["Drag the bandwidth slider while playing to see the player automatically switch quality levels"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-4 flex-wrap">
@@ -401,6 +406,7 @@ function CdnEdgePlayground() {
       title="CDN Edge Architecture"
       simulation={sim}
       canvasHeight="min-h-[320px]"
+      hints={["Press play to see how CDN edge caching turns a cache MISS into a HIT for subsequent viewers"]}
       canvas={
         <FlowDiagram
           nodes={cdnNodes}
@@ -539,6 +545,14 @@ export default function VideoStreamingPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        Netflix accounts for 15% of global internet bandwidth. Adaptive bitrate streaming is why your video doesn&apos;t buffer (much).
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        Video streaming systems transcode uploads into multiple resolutions, segment them into chunks, and distribute them via a <GlossaryTerm term="cdn">CDN</GlossaryTerm>. Adaptive bitrate streaming adjusts quality based on <GlossaryTerm term="throughput">throughput</GlossaryTerm>, while <GlossaryTerm term="cache">caching</GlossaryTerm> at edge servers minimizes <GlossaryTerm term="latency">latency</GlossaryTerm>. An <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> routes creator uploads to the transcoding pipeline.
+      </p>
+
       <section className="space-y-4">
         <h2 className="text-xl font-bold">The Core Problem</h2>
         <p className="text-sm text-muted-foreground">
@@ -665,6 +679,44 @@ export default function VideoStreamingPage() {
         end-to-end latency. For sub-second latency (gaming, auctions), WebRTC is needed but
         sacrifices scalability.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why do streaming services pre-transcode videos into multiple resolutions instead of transcoding on-the-fly?",
+            options: [
+              "On-the-fly transcoding produces higher quality video",
+              "Pre-transcoding is simpler to implement",
+              "Transcoding is extremely CPU-intensive — a viral video would require thousands of simultaneous transcodes",
+              "On-the-fly transcoding is not supported by modern browsers"
+            ],
+            correctIndex: 2,
+            explanation: "Transcoding a 10-minute 1080p video takes minutes even on GPU hardware. Pre-transcoding once and caching forever is orders of magnitude cheaper than transcoding per request. Netflix spends about 200,000 CPU-hours per day on transcoding alone."
+          },
+          {
+            question: "How does adaptive bitrate streaming prevent video buffering?",
+            options: [
+              "It downloads the entire video before playback starts",
+              "It monitors bandwidth in real time and switches to lower quality segments when bandwidth drops",
+              "It compresses the video to a single low-quality stream",
+              "It uses a dedicated protocol that is faster than HTTP"
+            ],
+            correctIndex: 1,
+            explanation: "The player monitors download throughput and buffer fill level in real time. If bandwidth drops, it requests the next segment at a lower quality. If bandwidth improves, it steps up. This is the core innovation behind HLS and DASH."
+          },
+          {
+            question: "What percentage of video requests are typically served from CDN edge servers?",
+            options: [
+              "About 50%",
+              "About 75%",
+              "Over 98%",
+              "100% — the origin is never contacted"
+            ],
+            correctIndex: 2,
+            explanation: "Over 98% of requests are served from CDN edge servers. The origin only serves each segment once per edge location. For popular content, this reduces origin load by orders of magnitude while delivering sub-30ms latency to viewers."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

@@ -3,6 +3,9 @@
 import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { cn } from "@/lib/utils";
@@ -75,7 +78,7 @@ const TRADEOFFS: Tradeoff[] = [
     rightName: "Availability",
     leftIcon: <Database className="size-4" />,
     rightIcon: <Zap className="size-4" />,
-    description: "The CAP theorem forces a choice: when a network partition occurs, you can either refuse requests (stay consistent) or serve stale data (stay available). Most systems allow you to tune this per-operation.",
+    description: "The CAP theorem forces a choice: when a network partition occurs, you can either refuse requests (stay consistent) or serve stale data (stay available). Most systems allow you to tune this per-operation. Understanding this trade-off is fundamental to system design.",
     points: [
       {
         position: 5,
@@ -353,8 +356,12 @@ export default function TradeOffsPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        There&apos;s no perfect system design. Every choice has trade-offs. The best engineers don&apos;t find the &quot;right&quot; answer — they explain why their trade-offs make sense.
+      </WhyCare>
+
       <ConversationalCallout type="tip">
-        In interviews, trade-offs are the answer. When asked &quot;which database should I use?&quot;, the right answer is not a database name — it is a list of trade-offs and which constraints matter most for this problem.
+        In interviews, trade-offs are the answer. When asked &quot;which database should I use?&quot;, the right answer is not a database name — it is a list of trade-offs and which constraints matter most for this problem. Understanding the <GlossaryTerm term="cap theorem">CAP theorem</GlossaryTerm>, <GlossaryTerm term="latency">latency</GlossaryTerm> vs <GlossaryTerm term="throughput">throughput</GlossaryTerm>, and <GlossaryTerm term="horizontal scaling">horizontal</GlossaryTerm> vs <GlossaryTerm term="vertical scaling">vertical scaling</GlossaryTerm> is essential.
       </ConversationalCallout>
 
       {/* Trade-off Selector */}
@@ -600,6 +607,44 @@ export default function TradeOffsPage() {
       <ConversationalCallout type="question">
         How do you handle trade-offs when requirements conflict? For example, a feature needs both strong consistency (payment integrity) and low latency (user experience)? The answer is usually to decompose: use strong consistency for the critical path (charge the card), then use eventual consistency for the non-critical path (update the dashboard). You are not choosing one — you are choosing different consistency levels for different operations in the same system.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "According to the CAP theorem, what must a system choose between during a network partition?",
+            options: [
+              "Speed and security",
+              "Consistency and availability",
+              "Cost and performance",
+              "Read speed and write speed"
+            ],
+            correctIndex: 1,
+            explanation: "The CAP theorem proves that during a network partition, a distributed system must choose between consistency (refusing requests until the partition heals) and availability (serving potentially stale data). Most real systems tune this per-operation."
+          },
+          {
+            question: "When is eventual consistency the CORRECT choice (not a compromise)?",
+            options: [
+              "Never -- strong consistency is always better",
+              "Only for unimportant data",
+              "For workloads like social feeds and DNS where brief staleness is acceptable and the cost of downtime exceeds the cost of stale data",
+              "Only when you cannot afford better infrastructure"
+            ],
+            correctIndex: 2,
+            explanation: "For many workloads, eventual consistency is the right design choice. Social feeds, DNS, and CDN caches all benefit from high availability, and users tolerate brief staleness. Strong consistency would add latency and cost with zero user benefit in these cases."
+          },
+          {
+            question: "What is the biggest trade-off mistake most teams make?",
+            options: [
+              "Using SQL databases",
+              "Not using enough microservices",
+              "Optimizing prematurely before measuring actual bottlenecks",
+              "Choosing the cheapest hosting provider"
+            ],
+            correctIndex: 2,
+            explanation: "Premature optimization is the root of most over-engineered systems. Most startups do not need Cassandra or Kafka -- they need to ship. Start with PostgreSQL, measure your actual bottlenecks, then make conscious trade-offs driven by data, not speculation."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

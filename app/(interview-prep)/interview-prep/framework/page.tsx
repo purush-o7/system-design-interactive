@@ -7,6 +7,9 @@ import { WhyItBreaks } from "@/components/why-it-breaks";
 import { ConceptVisualizer } from "@/components/concept-visualizer";
 import { CorrectApproach } from "@/components/correct-approach";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AnimatedFlow } from "@/components/animated-flow";
 import { MetricCounter } from "@/components/metric-counter";
 import { InteractiveDemo } from "@/components/interactive-demo";
@@ -698,6 +701,10 @@ export default function FrameworkPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        System design interviews are the #1 reason senior engineers don&apos;t get hired. Having a structured framework turns a scary 45 minutes into a confident conversation.
+      </WhyCare>
+
       {/* --- MOTIVATING FRAME: Mid vs Senior (moved near top) --- */}
       <AhaMoment
         question="What separates a mid-level answer from a senior answer in the same 45-minute interview?"
@@ -750,7 +757,7 @@ export default function FrameworkPage() {
         <p className="text-sm text-muted-foreground">
           A URL shortener for 100 users looks nothing like one for 100 million users. A chat
           system with &quot;messages must arrive in order&quot; is fundamentally different from one
-          where &quot;best effort is fine.&quot; Requirements determine architecture. Skip them
+          where &quot;best effort is fine.&quot; Requirements determine architecture — choices like <GlossaryTerm term="sharding">sharding</GlossaryTerm>, <GlossaryTerm term="replication">replication</GlossaryTerm>, and <GlossaryTerm term="load balancer">load balancing</GlossaryTerm> all depend on your constraints. Skip them
           and you are designing in the dark.
         </p>
         <BeforeAfter
@@ -875,14 +882,14 @@ export default function FrameworkPage() {
             <p className="text-xs font-semibold mb-1">Think out loud</p>
             <p className="text-xs text-muted-foreground italic">
               &quot;I am considering two options here \u2014 a SQL database for strong consistency
-              or a NoSQL store for write throughput. Given our write-heavy workload, I am leaning
+              or a NoSQL store for write <GlossaryTerm term="throughput">throughput</GlossaryTerm>. Given our write-heavy workload, I am leaning
               toward NoSQL. Let me explain why...&quot;
             </p>
           </div>
           <div className="bg-muted/30 p-3 rounded-lg border-l-2 border-emerald-500">
             <p className="text-xs font-semibold mb-1">Check in with the interviewer</p>
             <p className="text-xs text-muted-foreground italic">
-              &quot;Before I go deeper into the caching layer, is there a specific area you would
+              &quot;Before I go deeper into the <GlossaryTerm term="cache">caching</GlossaryTerm> layer, is there a specific area you would
               like me to focus on?&quot;
             </p>
           </div>
@@ -938,6 +945,44 @@ export default function FrameworkPage() {
             failure modes and operational concerns. Read the room.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What should you always do FIRST in a system design interview?",
+            options: [
+              "Draw the database schema",
+              "Clarify requirements (functional and non-functional)",
+              "Estimate QPS and storage",
+              "Choose between SQL and NoSQL"
+            ],
+            correctIndex: 1,
+            explanation: "Requirements come first. Every architecture decision depends on constraints like scale, latency, and consistency. Jumping to solutions without understanding the problem is the #1 mistake candidates make."
+          },
+          {
+            question: "How should you budget 45 minutes in a system design interview?",
+            options: [
+              "45 min on high-level design",
+              "15 min requirements, 15 min design, 15 min coding",
+              "5 min requirements, 5 min estimation, 15 min high-level, 15 min deep dive, 5 min trade-offs",
+              "20 min estimation, 25 min deep dive"
+            ],
+            correctIndex: 2,
+            explanation: "The 5-5-15-15-5 split ensures you cover all phases. The deep dive is where you differentiate from mid-level to senior, so protect at least 15 minutes for it."
+          },
+          {
+            question: "What separates a senior-level answer from a mid-level answer?",
+            options: [
+              "Using more technologies and buzzwords",
+              "Drawing more detailed diagrams",
+              "Explaining WHY choices were made and what trade-offs were considered",
+              "Finishing the design faster"
+            ],
+            correctIndex: 2,
+            explanation: "Senior candidates explain their reasoning, discuss alternatives they rejected, and articulate trade-offs. The depth of reasoning at each step — not the breadth of technologies mentioned — signals seniority."
+          }
+        ]}
       />
 
       <KeyTakeaway

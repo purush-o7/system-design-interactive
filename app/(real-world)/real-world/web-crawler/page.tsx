@@ -3,6 +3,9 @@
 import { useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
@@ -190,6 +193,7 @@ function CrawlSimulation() {
         title="Crawl Pipeline — Live Architecture"
         simulation={sim}
         canvasHeight="min-h-[340px]"
+        hints={["Press play to watch URLs flow through the crawl pipeline — notice duplicates and spider traps getting blocked"]}
         canvas={
           <FlowDiagram
             nodes={nodes}
@@ -344,6 +348,7 @@ function PolitenessDemo() {
       title="Politeness — Per-Domain Crawl-Delay"
       simulation={sim}
       canvasHeight="min-h-[280px]"
+      hints={["Press play to see how the crawler fetches from multiple domains in parallel while respecting each domain's crawl delay"]}
       canvas={
         <div className="p-4 space-y-4">
           <p className="text-xs text-muted-foreground">
@@ -455,6 +460,7 @@ function SpiderTrapDemo() {
       title="Spider Trap Detection"
       simulation={sim}
       canvasHeight="min-h-[360px]"
+      hints={["Press play to see three types of spider traps get detected and blocked by the crawler"]}
       canvas={
         <div className="p-4 space-y-3">
           {traps.map((trap, ti) => {
@@ -565,6 +571,7 @@ function DistributedFlow() {
       title="Distributed Crawling — Consistent Hash Partitioning"
       simulation={sim}
       canvasHeight="min-h-[320px]"
+      hints={["Press play to watch domains get assigned to crawlers via consistent hashing"]}
       canvas={
         <FlowDiagram nodes={nodes} edges={edges} minHeight={320} allowDrag={false} />
       }
@@ -597,6 +604,14 @@ export default function WebCrawlerPage() {
         subtitle="Your crawler starts at one URL, follows every link, and visits the same page 50 times. It gets trapped in infinite calendars and IP-banned for ignoring robots.txt. After 24 hours: 10,000 pages. Google crawls 5 billion per day."
         difficulty="advanced"
       />
+
+      <WhyCare>
+        Google crawls billions of web pages to build its search index. How do you visit every page on the internet without getting banned or running out of memory?
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        A web crawler needs <GlossaryTerm term="consistent hashing">consistent hashing</GlossaryTerm> to partition domains across crawler nodes, a <GlossaryTerm term="message queue">message queue</GlossaryTerm> for the URL frontier, and <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm> per domain for politeness. <GlossaryTerm term="dns">DNS</GlossaryTerm> resolution becomes a bottleneck at scale, requiring local caching. <GlossaryTerm term="throughput">Throughput</GlossaryTerm> depends on parallel fetching across many domains simultaneously.
+      </p>
 
       <ConversationalCallout type="warning">
         A naive BFS crawler without deduplication, politeness, or trap detection will re-crawl the same pages endlessly, get IP-banned from every major site, and exhaust its entire budget on calendar URLs that stretch to infinity.
@@ -650,6 +665,44 @@ export default function WebCrawlerPage() {
       <ConversationalCallout type="question">
         Why Bloom filter instead of a hash set? At 10 billion URLs a hash set storing full URLs needs ~500 GB of RAM. A Bloom filter with 1% false positive rate needs only ~1.2 GB — a 400x reduction. The cost: occasionally re-crawling a page you already have. For a crawler, that trade-off is overwhelmingly worth it.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why does a web crawler use a Bloom filter instead of a hash set for URL deduplication?",
+            options: [
+              "Bloom filters are more accurate than hash sets",
+              "Bloom filters never have false positives",
+              "A Bloom filter uses ~1.2 GB for 10 billion URLs vs ~500 GB for a hash set — a 400x reduction",
+              "Hash sets cannot store URLs"
+            ],
+            correctIndex: 2,
+            explanation: "At 10 billion URLs, a hash set storing full URLs needs ~500 GB of RAM. A Bloom filter with 1% false positive rate needs only ~1.2 GB. The cost is occasionally re-crawling a page you already have — for a crawler, that tradeoff is overwhelmingly worth it."
+          },
+          {
+            question: "Why does the URL Frontier use a two-tier queue instead of a simple FIFO?",
+            options: [
+              "FIFO queues are too slow for web crawling",
+              "Front queues rank pages by importance; back queues enforce per-domain politeness — both are needed simultaneously",
+              "Two-tier queues use less memory",
+              "FIFO queues cannot handle duplicate URLs"
+            ],
+            correctIndex: 1,
+            explanation: "A single FIFO queue crawls in arbitrary order. Front queues (one per priority level) rank pages by PageRank so important pages are crawled first. Back queues (one per domain) enforce crawl-delay so you never hammer any single server."
+          },
+          {
+            question: "How does consistent hashing help with distributed crawling?",
+            options: [
+              "It makes each page load faster",
+              "It ensures each domain is owned by exactly one crawler, guaranteeing politeness and enabling horizontal scaling",
+              "It eliminates the need for a Bloom filter",
+              "It encrypts the communication between crawlers"
+            ],
+            correctIndex: 1,
+            explanation: "Consistent hashing maps each domain to one crawler node. This ensures politeness automatically (only one crawler touches a domain) and when a crawler fails, only its domains are redistributed — most crawlers keep their existing assignments."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -211,6 +214,7 @@ function LiveTrieViz() {
       canvas={canvas}
       explanation={explanation}
       canvasHeight="min-h-[440px]"
+      hints={["Switch between Build Trie and Search Prefix modes — in search mode, type a prefix to see the trie traversal highlighted"]}
     />
   );
 }
@@ -456,6 +460,7 @@ function ArchitectureFlow() {
     <Playground
       title="Request Flow: Client → API Gateway → Autocomplete Service → Trie Cache + DB"
       simulation={sim}
+      hints={["Press play to follow a prefix query through the multi-layer cache architecture"]}
       canvas={
         <FlowDiagram
           nodes={nodes}
@@ -591,6 +596,14 @@ export default function AutocompletePage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Google shows search suggestions in under 100ms as you type. Behind that speed is a trie data structure and clever debouncing.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        Autocomplete systems use a trie (prefix tree) for O(L) lookups, fronted by a <GlossaryTerm term="cache">cache</GlossaryTerm> layer. A <GlossaryTerm term="cdn">CDN</GlossaryTerm> serves popular 1-2 character prefix results at the edge, reducing <GlossaryTerm term="latency">latency</GlossaryTerm> to near zero. An <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> handles <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm>, and <GlossaryTerm term="sharding">sharding</GlossaryTerm> the trie by prefix range enables horizontal scaling.
+      </p>
+
       <ConversationalCallout type="question">
         What happens when every keystroke fires a SQL <code className="text-xs bg-muted px-1 py-0.5 rounded font-mono">LIKE &apos;sys%&apos;</code> query? At 100K users typing 5 characters each, that&apos;s 500K full-table scans per second. The DB melts. Suggestions arrive after the user already finished typing.
       </ConversationalCallout>
@@ -710,6 +723,44 @@ export default function AutocompletePage() {
         (a–d on cluster 1, e–j on cluster 2, etc.). A routing layer directs each query to the correct shard.
         Replicate each shard across data centers. Pre-cache 1–2 character prefixes at CDN edge nodes globally.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why is a trie lookup O(L) instead of O(N), where L is prefix length and N is dictionary size?",
+            options: [
+              "Tries compress the dictionary to be smaller",
+              "Each character in the prefix navigates one node — the number of words in the dictionary is irrelevant",
+              "Tries use binary search at each level",
+              "Tries only work with small dictionaries"
+            ],
+            correctIndex: 1,
+            explanation: "In a trie, looking up 'sys' traverses exactly 3 nodes regardless of whether the dictionary has 100 or 100 million words. The lookup time depends only on the prefix length, not the dataset size. This is why tries are ideal for autocomplete."
+          },
+          {
+            question: "How does debouncing reduce API calls when a user types 'system'?",
+            options: [
+              "It sends all 6 characters in a single request",
+              "It waits 300ms after the last keystroke before firing, so a fast typing burst sends 1 request instead of 6",
+              "It caches the results locally so no API call is needed",
+              "It compresses multiple keystrokes into fewer bytes"
+            ],
+            correctIndex: 1,
+            explanation: "Most typing bursts happen within 200ms between characters. A 300ms debounce window captures the full word, resetting the timer on each keystroke. The API call fires only after a 300ms pause, reducing 6 calls to 1 with no perceptible UX impact."
+          },
+          {
+            question: "Why does Google cache the top results for every single letter (26 entries) at CDN edge nodes?",
+            options: [
+              "There are only 26 possible search queries",
+              "Every search starts with one of 26 letters — these caches have near-100% hit rate and respond from the nearest edge",
+              "CDN edge nodes can only store 26 entries",
+              "Single-letter queries are the most computationally expensive"
+            ],
+            correctIndex: 1,
+            explanation: "Every search begins with a single character, so pre-caching top results for all 26 letters (plus 676 two-letter combos = 702 total entries) covers the vast majority of queries. The response is already waiting at the nearest CDN edge, making the first keystroke feel instant."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

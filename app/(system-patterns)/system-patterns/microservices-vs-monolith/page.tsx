@@ -10,6 +10,10 @@ import { LiveChart } from "@/components/live-chart";
 import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // ─── Playground 1: Architecture Comparison ──────────────────────────────────
 
@@ -212,6 +216,7 @@ function ArchitecturePlayground() {
         title={view === "monolith" ? "Monolith: Single Hop Request" : "Microservices: Multi-Hop Request"}
         simulation={sim}
         canvasHeight="min-h-[380px]"
+        hints={["Toggle between Monolith and Microservices, then press play to compare request flows"]}
         canvas={
           <FlowDiagram
             nodes={view === "monolith" ? monolithNodes : microNodes}
@@ -324,6 +329,7 @@ function FailureCascadePlayground() {
       title="Failure Blast Radius: Monolith vs Microservices"
       controls={false}
       canvasHeight="min-h-[360px]"
+      hints={["Click a 'Break' button to crash a service and compare the blast radius"]}
       canvas={
         <div className="flex flex-col lg:flex-row h-full">
           {/* Monolith side */}
@@ -471,6 +477,7 @@ function ScalingPlayground() {
       title="Scaling Efficiency: Scale Everything vs Scale What Matters"
       controls={false}
       canvasHeight="min-h-[520px]"
+      hints={["Drag the traffic slider to see how costs differ as load increases"]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Traffic slider */}
@@ -635,6 +642,10 @@ export default function MicroservicesVsMonolithPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Amazon moved from a <GlossaryTerm term="monolith">monolith</GlossaryTerm> to <GlossaryTerm term="microservices">microservices</GlossaryTerm> in 2002 — it&apos;s one of the most important architectural decisions in tech history. But Netflix started as a monolith too.
+      </WhyCare>
+
       <ConversationalCallout type="tip">
         In 2008, Netflix experienced a catastrophic database corruption that brought their entire
         monolithic DVD service down for three days. That outage triggered a seven-year migration to
@@ -648,8 +659,8 @@ export default function MicroservicesVsMonolithPage() {
         <h2 className="text-lg font-semibold mb-3">Architecture Comparison</h2>
         <p className="text-sm text-muted-foreground mb-4">
           Toggle between architectures and press play to watch a request flow through each.
-          Notice how the monolith handles it in a single hop, while microservices route through
-          a gateway to multiple independent services.
+          Notice how the <GlossaryTerm term="monolith">monolith</GlossaryTerm> handles it in a single hop, while <GlossaryTerm term="microservices">microservices</GlossaryTerm> route through
+          an <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> to multiple independent services.
         </p>
         <ArchitecturePlayground />
       </section>
@@ -682,8 +693,8 @@ export default function MicroservicesVsMonolithPage() {
       <section>
         <h2 className="text-lg font-semibold mb-3">Scaling Efficiency</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Drag the traffic slider to see how each architecture scales. The monolith must duplicate
-          everything, while microservices can scale only the hot service. Watch the cost chart
+          Drag the traffic slider to see how each architecture scales. The <GlossaryTerm term="monolith">monolith</GlossaryTerm> must duplicate
+          everything, while <GlossaryTerm term="microservices">microservices</GlossaryTerm> can scale only the hot service. Watch the cost chart
           to see where the monolith approach becomes wasteful.
         </p>
         <ScalingPlayground />
@@ -713,6 +724,44 @@ export default function MicroservicesVsMonolithPage() {
         the tradeoffs for the specific scenario. Mention Netflix as an example of when the migration
         was the right call, and Amazon Prime Video as when reverting was smart.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What is the main advantage of a monolith over microservices for a small team?",
+            options: [
+              "Better fault isolation",
+              "Simpler development, deployment, and debugging",
+              "Independent scaling of services",
+              "Higher throughput under load",
+            ],
+            correctIndex: 1,
+            explanation: "A monolith runs as a single process with one deployment pipeline. For small teams, this simplicity means faster iteration and easier debugging with a single stack trace.",
+          },
+          {
+            question: "What is a 'distributed monolith'?",
+            options: [
+              "A monolith deployed across multiple data centers",
+              "Microservices that are tightly coupled and must deploy together",
+              "A monolith that uses a distributed database",
+              "A microservices architecture with a shared API gateway",
+            ],
+            correctIndex: 1,
+            explanation: "A distributed monolith is the worst of both worlds: services that share databases, require coordinated deployments, or make long synchronous call chains. You get microservices complexity without the independence.",
+          },
+          {
+            question: "When should you consider migrating from a monolith to microservices?",
+            options: [
+              "As soon as you start a new project",
+              "When your team has fewer than 5 engineers",
+              "When blocked deployments and team coupling cause organizational pain",
+              "When you want to reduce infrastructure costs",
+            ],
+            correctIndex: 2,
+            explanation: "Microservices solve organizational scaling problems -- teams stepping on each other, blocked releases, and coupled codebases. The infrastructure cost is usually higher, not lower.",
+          },
+        ] satisfies QuizQuestion[]}
+      />
 
       <KeyTakeaway
         points={[

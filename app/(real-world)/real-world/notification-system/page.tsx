@@ -3,6 +3,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -178,6 +181,7 @@ function ChannelRoutingPlayground() {
       title="Channel Routing Playground"
       simulation={sim}
       canvasHeight="min-h-[400px]"
+      hints={["Choose a priority level, then click Send Notification to watch the event flow through all active channels"]}
       canvas={
         <FlowDiagram
           nodes={nodes}
@@ -330,6 +334,7 @@ function FanoutPlayground() {
       title="Fan-out Demo: 1 Event → N Users × M Channels"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Click Fire Event to see one notification fan out to 5 users across their preferred channels"]}
       canvas={
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -460,6 +465,7 @@ function RateLimitPlayground() {
       title="Rate Limiting + Deduplication"
       simulation={sim}
       canvasHeight="min-h-[340px]"
+      hints={["Press play to watch notifications get sent, throttled, or deduplicated based on per-channel rate limits"]}
       canvas={
         <div className="p-4 space-y-3">
           <div className="grid grid-cols-4 gap-2">
@@ -563,6 +569,14 @@ export default function NotificationSystemPage() {
         difficulty="advanced"
         estimatedMinutes={25}
       />
+
+      <WhyCare>
+        Your phone receives push notifications from dozens of apps. Behind each one is a system that must handle millions of deliveries per second with different priorities.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        A notification system routes events through a <GlossaryTerm term="message queue">message queue</GlossaryTerm> to channel-specific workers. <GlossaryTerm term="rate limiting">Rate limiting</GlossaryTerm> prevents user fatigue, while <GlossaryTerm term="idempotent">idempotent</GlossaryTerm> delivery via deduplication keys makes retries safe. An <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> handles auth and <GlossaryTerm term="back pressure">back pressure</GlossaryTerm> at the ingestion layer.
+      </p>
 
       <ConversationalCallout type="question">
         Breaking news drops. You need to reach <strong>100M users</strong> in under 5 minutes across push, SMS,
@@ -669,6 +683,44 @@ export default function NotificationSystemPage() {
           </div>
         </div>
       </section>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why is batching critical for push notification delivery at scale?",
+            options: [
+              "Batching reduces the total number of notifications sent",
+              "APNs/FCM enforce rate limits per sender certificate — batching 1,000 tokens into one call uses one rate-limit slot",
+              "Batching compresses notification payloads",
+              "Batching is required by Apple and Google's APIs"
+            ],
+            correctIndex: 1,
+            explanation: "APNs and FCM enforce rate limits per sender certificate, not per connection. Batching 1,000 tokens into a single HTTP/2 call uses one rate-limit slot but delivers 1,000 notifications. Parallelism multiplies worker count, but batching multiplies efficiency per worker."
+          },
+          {
+            question: "How does the notification system achieve safe retries without sending duplicates?",
+            options: [
+              "It uses exactly-once delivery semantics built into Kafka",
+              "It stores an idempotency key (notification_id) in Redis with a 24-hour TTL",
+              "It never retries failed notifications",
+              "It asks the user's device to reject duplicates"
+            ],
+            correctIndex: 1,
+            explanation: "Deduplication runs before the channel worker dispatches. A Redis SET with the notification_id and a 24h TTL ensures that retried notifications are dropped silently. This gives effective exactly-once delivery with at-least-once semantics."
+          },
+          {
+            question: "Why do notification systems degrade throttled notifications to an in-app inbox instead of dropping them?",
+            options: [
+              "In-app inbox notifications are free to send",
+              "Dropped notifications violate regulatory requirements",
+              "Users who disable push are lost forever — throttled items should still be accessible, just less intrusive",
+              "The in-app inbox has no rate limits"
+            ],
+            correctIndex: 2,
+            explanation: "Industry data shows fewer than 5% of users re-enable push after disabling it. Rate limiting and thoughtful degradation (to in-app inbox) directly protect long-term user retention. Dropping notifications loses the message entirely."
+          }
+        ]}
+      />
 
       <KeyTakeaway
         points={[

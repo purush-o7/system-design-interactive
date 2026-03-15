@@ -12,7 +12,13 @@ export function TopicNav() {
   if (!prev && !next) return null;
 
   return (
-    <nav aria-label="Topic pagination" className="flex items-center justify-between border-t pt-8 mt-12">
+    <nav aria-label="Topic pagination" className="flex flex-col items-center gap-4 border-t pt-8 mt-12">
+      <div className="flex items-center gap-3 text-[10px] text-muted-foreground/40">
+        <span><kbd className="rounded border bg-muted/50 px-1 py-0.5 font-mono text-[9px]">j</kbd> next</span>
+        <span><kbd className="rounded border bg-muted/50 px-1 py-0.5 font-mono text-[9px]">k</kbd> prev</span>
+        <span><kbd className="rounded border bg-muted/50 px-1 py-0.5 font-mono text-[9px]">Ctrl+K</kbd> search</span>
+      </div>
+      <div className="flex items-center justify-between w-full">
       {prev ? (
         <Link
           href={prev.href}
@@ -47,6 +53,7 @@ export function TopicNav() {
       ) : (
         <div />
       )}
+      </div>
     </nav>
   );
 }

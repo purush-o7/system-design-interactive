@@ -5,6 +5,9 @@ import { TopicHero } from "@/components/topic-hero";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { BeforeAfter } from "@/components/before-after";
 import { FlowDiagram } from "@/components/flow-diagram";
 import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
@@ -324,6 +327,7 @@ function MessageFanoutPlayground() {
       title="Message Fanout — press Play to send a message"
       simulation={sim}
       canvasHeight="min-h-[400px]"
+      hints={["Press play to watch a message fan out to all online members. Gray dots are offline users who get skipped."]}
       canvas={<FanoutCanvas tick={sim.tick} isPlaying={sim.isPlaying} />}
       explanation={
         <div className="space-y-3">
@@ -397,6 +401,7 @@ function PresenceSimulation() {
       title="Presence System — millions of heartbeats tracked in real-time"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Watch the dip every 5th interval -- it simulates a gateway node restart where clients momentarily disconnect."]}
       canvas={
         <div className="p-4 space-y-4 h-full">
           <div className="flex gap-4 flex-wrap">
@@ -470,6 +475,10 @@ export default function DiscordCaseStudyPage() {
         estimatedMinutes={12}
       />
 
+      <WhyCare>
+        Discord handles 4 million concurrent voice users and 150 million monthly active users — with remarkably low <GlossaryTerm term="latency">latency</GlossaryTerm>. Here&apos;s how they architected it.
+      </WhyCare>
+
       {/* ---- Overview ---- */}
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">The Scale Problem</h2>
@@ -500,7 +509,7 @@ export default function DiscordCaseStudyPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">WebSocket Gateway Architecture</h2>
         <p className="text-muted-foreground leading-relaxed">
-          Unlike HTTP, Discord clients hold a <strong>persistent WebSocket connection</strong> to a
+          Unlike HTTP, Discord clients hold a <strong>persistent <GlossaryTerm term="websocket">WebSocket</GlossaryTerm> connection</strong> to a
           Gateway node. The Gateway is written in <strong>Elixir / Phoenix</strong>, chosen because
           the BEAM VM handles millions of lightweight processes with near-zero per-process overhead
           — perfect for millions of concurrent long-lived connections.
@@ -522,7 +531,7 @@ export default function DiscordCaseStudyPage() {
         <h2 className="text-xl font-semibold">Message Fanout at Scale</h2>
         <p className="text-muted-foreground leading-relaxed">
           When you send a message to a Discord server, it must be delivered to every{" "}
-          <strong>online member watching that channel</strong>. This &quot;fanout&quot; is trivial
+          <strong>online member watching that channel</strong>. This &quot;<GlossaryTerm term="fan-out">fanout</GlossaryTerm>&quot; is trivial
           for small servers but becomes the dominant engineering challenge at scale.
         </p>
 
@@ -643,9 +652,9 @@ export default function DiscordCaseStudyPage() {
         />
 
         <ConversationalCallout type="question">
-          Why not just use Redis for all presence state? Redis is fast but single-threaded and not
+          Why not just use <GlossaryTerm term="redis">Redis</GlossaryTerm> for all presence state? Redis is fast but single-threaded and not
           easily partitioned across datacenters. Discord uses Redis as a{" "}
-          <strong>local cache layer</strong> in front of Cassandra, not as the source of truth.
+          <strong>local <GlossaryTerm term="cache">cache</GlossaryTerm> layer</strong> in front of Cassandra, not as the source of truth.
         </ConversationalCallout>
       </section>
 
@@ -736,6 +745,45 @@ export default function DiscordCaseStudyPage() {
           ))}
         </div>
       </section>
+
+      {/* ---- Quiz ---- */}
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why did Discord choose Elixir/Phoenix for their WebSocket Gateway?",
+            options: [
+              "Elixir is the fastest programming language",
+              "The BEAM VM's actor model handles millions of concurrent lightweight processes with near-zero per-process overhead",
+              "Elixir has built-in WebSocket support that other languages lack",
+              "It was the only language available when Discord was founded"
+            ],
+            correctIndex: 1,
+            explanation: "The BEAM VM maps each WebSocket connection to a lightweight process with its own mailbox. A single Gateway server can hold tens of thousands of connections, each isolated so one crash cannot cascade."
+          },
+          {
+            question: "Why did Discord migrate from Cassandra to ScyllaDB?",
+            options: [
+              "Cassandra was too expensive",
+              "ScyllaDB supports more query languages",
+              "Cassandra's JVM garbage collector caused unpredictable latency spikes; ScyllaDB (C++) has no GC pauses",
+              "ScyllaDB has better SQL support"
+            ],
+            correctIndex: 2,
+            explanation: "Cassandra's JVM-based garbage collector caused p99 latencies to spike to 125ms+ during compaction. ScyllaDB, a C++ reimplementation with the same CQL interface, reduced node count from 177 to 72 and cut p99 latency by 10x -- with zero application code changes."
+          },
+          {
+            question: "How does Discord handle message fanout for very large servers (500,000+ members)?",
+            options: [
+              "It sends messages to every member regardless of online status",
+              "It limits channels to 75,000 members and switches to pull-based pagination above that threshold",
+              "It uses email notifications instead",
+              "It batches messages and sends them once per minute"
+            ],
+            correctIndex: 1,
+            explanation: "Real-time push only fires for online members. Above ~75,000 members per channel, Discord switches to a pull-based pagination model to protect the fanout pipeline from being overwhelmed."
+          }
+        ]}
+      />
 
       {/* ---- Key Takeaways ---- */}
       <KeyTakeaway

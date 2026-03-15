@@ -12,6 +12,7 @@ import { TableOfContents } from "@/components/table-of-contents";
 import { KeyboardProvider } from "@/components/keyboard-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { VisitTracker } from "@/components/visit-tracker";
+import { KeyboardHints } from "@/components/keyboard-hints";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -88,6 +89,7 @@ export default function RootLayout({
                   </div>
                   <TableOfContents />
                 </div>
+                <KeyboardHints />
               </KeyboardProvider>
             </SidebarInset>
           </SidebarProvider>

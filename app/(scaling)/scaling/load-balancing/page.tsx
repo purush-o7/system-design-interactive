@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { KeyTakeaway } from "@/components/key-takeaway";
 import { AhaMoment } from "@/components/aha-moment";
 import { Playground } from "@/components/playground";
@@ -89,7 +92,7 @@ function SingleServerDemo() {
         <h3 className="text-base font-semibold">The Problem: One Server Gets Everything</h3>
       </div>
       <p className="text-sm text-muted-foreground px-4">
-        Three clients all pointing at one server. Hit <strong>Play</strong> and watch it melt.
+        Three clients all pointing at one server. Hit <strong>Play</strong> and watch the <GlossaryTerm term="latency">latency</GlossaryTerm> spike as it melts.
       </p>
       <div className="px-4">
         <FlowDiagram nodes={nodes} edges={edges} minHeight={280} interactive={false} allowDrag={false} />
@@ -97,7 +100,7 @@ function SingleServerDemo() {
       {crashed && (
         <div className="mx-4 rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-400 flex items-center gap-2">
           <ShieldAlert className="size-4 shrink-0" />
-          Server crashed at 100% load. Three other servers sit completely idle. All users see errors.
+          Server crashed at 100% load. With a <GlossaryTerm term="load balancer">load balancer</GlossaryTerm>, traffic would be distributed across all servers.
         </div>
       )}
       <div className="px-4 pb-4">
@@ -388,6 +391,7 @@ function LoadBalancerPlayground() {
         canvas={canvas}
         explanation={explanation}
         canvasHeight="min-h-[440px]"
+        hints={["Kill a server and watch traffic reroute automatically"]}
       />
 
       {/* Charts below the playground */}
@@ -579,6 +583,10 @@ export default function LoadBalancingPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Netflix handles 15,000+ requests per second per server. Without load balancing, a single server would crash in milliseconds during peak hours.
+      </WhyCare>
+
       {/* Act 1: The failure */}
       <section className="space-y-2">
         <SingleServerDemo />
@@ -613,7 +621,7 @@ export default function LoadBalancingPage() {
         question="Why not just use DNS round-robin instead of a dedicated load balancer?"
         answer={
           <span>
-            DNS round-robin has no health checks -- it keeps sending traffic to dead servers. Clients
+            <GlossaryTerm term="dns">DNS</GlossaryTerm> round-robin has no health checks -- it keeps sending traffic to dead servers. Clients
             cache DNS for minutes to hours, so distribution is wildly uneven. You cannot remove a failing
             server quickly. A real load balancer checks health every 5-10 seconds, removes unhealthy
             backends instantly, and can route based on content, headers, or cookies.
@@ -625,12 +633,50 @@ export default function LoadBalancingPage() {
         question="What happens to in-flight requests when a server goes down?"
         answer={
           <span>
-            With Layer 7 load balancing, the LB detects a failed connection and <strong>retries</strong> the
+            With Layer 7 load balancing, the LB (also called a <GlossaryTerm term="reverse proxy">reverse proxy</GlossaryTerm>) detects a failed connection and <strong>retries</strong> the
             request on a different backend -- the client never knows anything went wrong. This is called
             &quot;connection draining&quot; or &quot;retry on next upstream.&quot; NGINX does this
             automatically with <code className="text-xs bg-muted px-1 rounded font-mono">proxy_next_upstream</code>.
           </span>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What happens when a server behind a load balancer crashes?",
+            options: [
+              "All traffic is lost until the server restarts",
+              "The load balancer detects the failure and routes traffic to healthy servers",
+              "Users must manually switch to a different server",
+              "The load balancer crashes too",
+            ],
+            correctIndex: 1,
+            explanation: "Load balancers perform health checks every few seconds. When a server fails, it is automatically removed from the pool and traffic is redirected to healthy servers.",
+          },
+          {
+            question: "Which load balancing algorithm is best when requests have very different processing times?",
+            options: [
+              "Round Robin",
+              "IP Hash",
+              "Least Connections",
+              "Random",
+            ],
+            correctIndex: 2,
+            explanation: "Least Connections routes each new request to the server with the fewest active connections, which naturally adapts to servers handling slow vs fast requests.",
+          },
+          {
+            question: "What is the key difference between Layer 4 and Layer 7 load balancing?",
+            options: [
+              "Layer 4 is newer and always better",
+              "Layer 7 can inspect HTTP content (URLs, headers, cookies) while Layer 4 only sees IP and port",
+              "Layer 4 supports more servers than Layer 7",
+              "Layer 7 only works with HTTPS traffic",
+            ],
+            correctIndex: 1,
+            explanation: "Layer 4 operates at TCP level (fast but content-blind), while Layer 7 operates at HTTP level and can make routing decisions based on URL paths, headers, and cookies.",
+          },
+        ]}
       />
 
       <KeyTakeaway

@@ -12,6 +12,10 @@ import { FlowDiagram } from "@/components/flow-diagram";
 import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+
 
 // --- Consistent Hashing helpers ---
 
@@ -158,6 +162,7 @@ function ConsistentHashRingPlayground() {
       title="Consistent Hashing Ring"
       controls={false}
       canvasHeight="min-h-[420px]"
+      hints={["Type a key and click Hash, or add/remove servers to see how keys redistribute"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex flex-col lg:flex-row gap-6">
@@ -416,6 +421,7 @@ function RedisClusterPlayground() {
       title="Redis Cluster Failover"
       simulation={sim}
       canvasHeight="min-h-[460px]"
+      hints={["Press play to simulate a master node failure and automatic failover"]}
       canvas={
         <div className="p-2">
           <FlowDiagram nodes={flowNodes} edges={flowEdges} minHeight={340} interactive={false} allowDrag={false} />
@@ -514,6 +520,7 @@ function CacheCoherenceDemo() {
       title="Cache Coherence & Thundering Herd"
       simulation={sim}
       canvasHeight="min-h-[360px]"
+      hints={["Press play to see how stale data propagates and thundering herds form"]}
       canvas={
         <div className="p-6 flex flex-col items-center gap-6">
           {/* App servers with local caches */}
@@ -592,6 +599,10 @@ export default function DistributedCachingPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        A single <GlossaryTerm term="redis">Redis</GlossaryTerm> server can handle 100,000+ operations per second. But what happens when even that isn&apos;t enough? You need a cluster &mdash; and understanding how distributed caching works is what separates a good system from a great one.
+      </WhyCare>
+
       <ConversationalCallout type="warning">
         In-memory caches are tied to a single process. When that process dies -- deploy, crash,
         scaling event -- the cache dies with it. With multiple app servers, each maintains its own
@@ -603,7 +614,7 @@ export default function DistributedCachingPage() {
         <div className="space-y-2">
           <h2 className="text-xl font-bold">Consistent Hashing: The Key Distribution Problem</h2>
           <p className="text-sm text-muted-foreground">
-            How do you decide which cache server holds which key? Naive modular hashing
+            How do you decide which <GlossaryTerm term="cache">cache</GlossaryTerm> server holds which key? Naive modular hashing
             (<code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">hash(key) % N</code>) breaks
             when you add or remove a server -- almost <em>every</em> key remaps, causing a cache avalanche.
             Consistent hashing maps keys to a ring. When a server changes, only <strong>K/N</strong> keys
@@ -665,7 +676,7 @@ export default function DistributedCachingPage() {
       </section>
 
       <ConversationalCallout type="tip">
-        In system design interviews, after saying &quot;I would use Redis,&quot; follow up with specifics:
+        In system design interviews, after saying &quot;I would use <GlossaryTerm term="redis">Redis</GlossaryTerm>,&quot; follow up with specifics:
         &quot;Redis Cluster with 3 masters and 3 replicas, hash-slot sharding, automatic failover via
         gossip protocol, and cache-aside with the app falling back to the database on miss.&quot;
         That level of detail separates junior from senior answers.
@@ -722,6 +733,44 @@ export default function DistributedCachingPage() {
             </ul>
           ),
         }}
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "With 3 cache servers and modular hashing (hash % 3), you add a 4th server. Approximately what percentage of keys need to be remapped?",
+            options: [
+              "25% (only the new server's share)",
+              "33% (one-third of keys)",
+              "75% (nearly all keys)",
+              "100% (every single key)",
+            ],
+            correctIndex: 2,
+            explanation: "With modular hashing, changing N from 3 to 4 remaps approximately 75% of keys because hash % 3 and hash % 4 produce different results for most values. Consistent hashing reduces this to roughly K/N (~25%).",
+          },
+          {
+            question: "In a Redis Cluster, how is data distributed across master nodes?",
+            options: [
+              "Round-robin assignment of keys",
+              "Each master stores a range of the 16,384 hash slots (CRC16(key) % 16384)",
+              "Consistent hashing ring with virtual nodes",
+              "The client decides which master to write to",
+            ],
+            correctIndex: 1,
+            explanation: "Redis Cluster uses 16,384 hash slots. Each key is assigned to a slot via CRC16(key) % 16384, and each master is responsible for a range of slots. This is server-side sharding, not client-side.",
+          },
+          {
+            question: "What causes the 'thundering herd' problem in distributed caching?",
+            options: [
+              "Too many servers in the cluster",
+              "A master node failing over to a replica",
+              "All caches expiring simultaneously, causing many concurrent database queries",
+              "Consistent hashing placing too many keys on one server",
+            ],
+            correctIndex: 2,
+            explanation: "The thundering herd occurs when multiple cache entries expire at the same time (e.g., same TTL). All servers simultaneously discover cache misses and hit the database at once. Prevent this with staggered TTLs, cache locks, or stale-while-revalidate.",
+          },
+        ]}
       />
 
       <KeyTakeaway

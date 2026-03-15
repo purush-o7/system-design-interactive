@@ -2,6 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { KeyTakeaway } from "@/components/key-takeaway";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
@@ -584,23 +587,28 @@ export default function VerticalVsHorizontalPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        When your startup goes viral overnight and your server melts, you have two choices: get a bigger machine or get more machines. This decision shapes your entire architecture.
+      </WhyCare>
+
       {/* ── Scaling Simulator ── */}
       <Playground
         title="Scaling Simulator"
         canvas={<ScalingSimulator />}
         canvasHeight="min-h-[160px]"
         controls={false}
+        hints={["Drag both sliders to compare cost and capacity"]}
         explanation={
           <div className="space-y-3">
             <p className="font-medium text-foreground">How to read this</p>
             <p>
               The <span className="text-blue-400 font-medium">blue slider</span> upgrades
-              your single server to bigger instance types. Watch it grow — and the cost
+              your single server to bigger instance types — this is <GlossaryTerm term="vertical scaling">vertical scaling</GlossaryTerm>. Watch it grow — and the cost
               jump in non-linear leaps.
             </p>
             <p>
               The <span className="text-emerald-400 font-medium">green slider</span> adds
-              identical servers behind a load balancer. Each node costs the same fixed
+              identical servers behind a <GlossaryTerm term="load balancer">load balancer</GlossaryTerm> — this is <GlossaryTerm term="horizontal scaling">horizontal scaling</GlossaryTerm>. Each node costs the same fixed
               amount.
             </p>
             <p className="text-xs border-t border-border/30 pt-2 text-muted-foreground">
@@ -643,6 +651,7 @@ export default function VerticalVsHorizontalPage() {
         canvas={<FailureDemo />}
         canvasHeight="min-h-[160px]"
         controls={false}
+        hints={["Kill a server in each architecture to see the difference"]}
       />
 
       <ConversationalCallout type="warning">
@@ -668,10 +677,48 @@ export default function VerticalVsHorizontalPage() {
 
       <ConversationalCallout type="tip">
         In interviews, mention that horizontal scaling requires a <strong>load balancer</strong> and
-        a <strong>stateless application</strong> — no local sessions, no files on disk, no
+        a <strong><GlossaryTerm term="stateless">stateless</GlossaryTerm> application</strong> — no local sessions, no files on disk, no
         in-process caches that other instances can&apos;t see. Sessions go in Redis. Files go in S3.
         These prerequisites are exactly what interviewers listen for.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Your single server is at 90% CPU. What does vertical scaling mean in this context?",
+            options: [
+              "Adding more servers behind a load balancer",
+              "Upgrading to a bigger, more powerful server",
+              "Moving the database to a separate machine",
+              "Adding a CDN in front of the server",
+            ],
+            correctIndex: 1,
+            explanation: "Vertical scaling (scaling up) means upgrading your existing server to one with more CPU, RAM, or storage. It's the simplest approach but has a hardware ceiling.",
+          },
+          {
+            question: "What is the main advantage of horizontal scaling over vertical scaling at large scale?",
+            options: [
+              "It's always cheaper at any scale",
+              "It requires no code changes",
+              "It provides fault tolerance and near-infinite capacity",
+              "It eliminates the need for a database",
+            ],
+            correctIndex: 2,
+            explanation: "Horizontal scaling lets you add servers indefinitely and if one crashes, others absorb the load. Vertical scaling hits a hard hardware ceiling and has a single point of failure.",
+          },
+          {
+            question: "Why do most teams scale their database vertically before horizontally?",
+            options: [
+              "Databases cannot run on multiple servers",
+              "Vertical scaling is always faster for databases",
+              "Splitting data across machines introduces complex consistency challenges",
+              "Cloud providers don't support horizontal database scaling",
+            ],
+            correctIndex: 2,
+            explanation: "Databases hold state that must stay consistent. Sharding across machines introduces cross-shard joins, distributed transactions, and rebalancing complexity, so teams exhaust vertical options first.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

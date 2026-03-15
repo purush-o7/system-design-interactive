@@ -13,6 +13,9 @@ import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import type { FlowNode, FlowEdge } from "@/components/flow-diagram";
 import { Database, Table, FileJson, ArrowRightLeft, Server, HardDrive } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 
 // ─── Query Comparison Playground ───────────────────────────────────────────────
 type QueryMode = "join" | "denormalized";
@@ -183,6 +186,7 @@ function QueryPlayground() {
       canvas={canvas}
       explanation={explanation}
       canvasHeight="min-h-[420px]"
+      hints={["Toggle between SQL JOIN and NoSQL Denormalized modes, then press Play to watch each query strategy step by step."]}
     />
   );
 }
@@ -569,8 +573,12 @@ export default function SqlVsNosqlPage() {
         difficulty="beginner"
       />
 
+      <WhyCare>
+        Instagram started with PostgreSQL and scaled to billions of records. Choosing the right database is one of the most consequential decisions you&apos;ll make as an engineer.
+      </WhyCare>
+
       <ConversationalCallout type="question">
-        Should I use SQL or NoSQL? This is the wrong question. The right question is:
+        Should I use <GlossaryTerm term="sql">SQL</GlossaryTerm> or <GlossaryTerm term="nosql">NoSQL</GlossaryTerm>? This is the wrong question. The right question is:
         <strong> what are my access patterns, consistency requirements, and scaling needs?</strong> The
         answer determines your database, not industry hype or personal preference.
       </ConversationalCallout>
@@ -657,7 +665,7 @@ COMMIT;
       />
 
       <ConversationalCallout type="warning">
-        DynamoDB offers unlimited throughput but requires you to know your access patterns at design
+        DynamoDB offers unlimited <GlossaryTerm term="throughput">throughput</GlossaryTerm> but requires you to know your access patterns at design
         time. Unlike SQL or MongoDB, you cannot run ad-hoc queries, GROUP BY, or aggregations natively.
         If your queries change often or you need analytics, DynamoDB will fight you every step of the way.
       </ConversationalCallout>
@@ -680,10 +688,48 @@ COMMIT;
       <ConversationalCallout type="tip">
         Most production systems use <strong>polyglot persistence</strong> -- multiple database types
         for different workloads. PostgreSQL for financial transactions, MongoDB for product catalogs
-        with varying attributes, Redis for session caching, DynamoDB for high-throughput event streams.
+        with varying attributes, Redis for session <GlossaryTerm term="cache">caching</GlossaryTerm>, DynamoDB for high-throughput event streams.
         The question is not &quot;which database is best&quot; but &quot;which database is best
         for <em>this specific workload</em>.&quot;
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "A startup needs to store user profiles where each user type has very different fields (drivers have licenses, restaurants have menus, customers have payment methods). Which database type is the better fit?",
+            options: [
+              "SQL with a single users table and nullable columns for every possible field",
+              "SQL with many joined tables, one per user type",
+              "NoSQL document database where each document has its own shape",
+              "It doesn't matter — both handle this equally well",
+            ],
+            correctIndex: 2,
+            explanation: "NoSQL document databases naturally handle varying document shapes without schema migrations. SQL can work but requires either sparse columns or complex multi-table joins.",
+          },
+          {
+            question: "Why is MongoDB not ideal as the primary database for a banking system that transfers money between accounts?",
+            options: [
+              "MongoDB is too slow for financial workloads",
+              "MongoDB cannot store numerical values with precision",
+              "MongoDB's multi-document transactions have significant performance overhead and are not its design center",
+              "MongoDB does not support any form of transactions",
+            ],
+            correctIndex: 2,
+            explanation: "MongoDB added multi-document ACID transactions in v4.0, but they come with up to 50% slower writes and increased lock contention. If transactions are your primary access pattern, you are fighting the tool's architecture.",
+          },
+          {
+            question: "What does 'polyglot persistence' mean in practice?",
+            options: [
+              "Using a single database that supports multiple query languages",
+              "Writing database queries in multiple programming languages",
+              "Using different database types for different workloads within the same system",
+              "Replicating data across SQL and NoSQL databases for redundancy",
+            ],
+            correctIndex: 2,
+            explanation: "Polyglot persistence means choosing the best database type for each specific workload — e.g., PostgreSQL for transactions, Redis for caching, DynamoDB for high-throughput events — rather than forcing one database to handle everything.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

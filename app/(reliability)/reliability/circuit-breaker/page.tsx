@@ -9,6 +9,9 @@ import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-dia
 import { LiveChart } from "@/components/live-chart";
 import { Playground } from "@/components/playground";
 import { cn } from "@/lib/utils";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { MarkerType } from "@xyflow/react";
 import {
   ShieldCheck,
@@ -248,11 +251,16 @@ export default function CircuitBreakerPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        When one <GlossaryTerm term="microservices">microservice</GlossaryTerm> fails, it can cascade and take down your entire platform in seconds. The <GlossaryTerm term="circuit breaker">circuit breaker</GlossaryTerm> pattern stops this domino effect.
+      </WhyCare>
+
       {/* === Main Interactive Playground === */}
       <Playground
         title="Circuit Breaker Playground"
         controls={false}
         canvasHeight="min-h-[420px]"
+        hints={["Break Service B first, then send requests to see the circuit trip open"]}
         canvas={
           <div className="flex flex-col h-full">
             <FlowDiagram
@@ -371,8 +379,8 @@ export default function CircuitBreakerPage() {
       <div className="rounded-xl border border-border/40 bg-card/50 p-6 space-y-4">
         <h2 className="text-lg font-semibold">Latency & Error Rate Over Time</h2>
         <p className="text-sm text-muted-foreground">
-          Watch how latency spikes when Service B fails (3000ms timeouts), then drops to near-zero
-          when the circuit opens (2ms fast-fail). Recovery brings latency back to normal (50ms).
+          Watch how <GlossaryTerm term="latency">latency</GlossaryTerm> spikes when Service B fails (3000ms timeouts), then drops to near-zero
+          when the circuit opens (2ms fast-fail). Recovery brings <GlossaryTerm term="latency">latency</GlossaryTerm> back to normal (50ms).
         </p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
@@ -559,6 +567,44 @@ export default function CircuitBreakerPage() {
         the circuit opens: return cached data, a default response, or a meaningful error message. The
         fallback is where the real user experience work happens.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What happens when a circuit breaker is in the OPEN state?",
+            options: [
+              "All requests are sent to the failing service as normal",
+              "Requests are queued until the service recovers",
+              "Requests are rejected immediately (fast-fail) without contacting the failing service",
+              "The circuit breaker restarts the failing service automatically",
+            ],
+            correctIndex: 2,
+            explanation: "In the OPEN state, the circuit breaker rejects requests instantly (in milliseconds) without ever contacting the failing service. This protects your service's thread pool and gives the failing dependency time to recover.",
+          },
+          {
+            question: "What is the purpose of the HALF-OPEN state?",
+            options: [
+              "To handle exactly half the normal traffic",
+              "To allow a small number of probe requests through to test if the dependency has recovered",
+              "To gradually increase traffic over several minutes",
+              "To alert the operations team about the failure",
+            ],
+            correctIndex: 1,
+            explanation: "HALF-OPEN lets a small number of probe requests through to test whether the dependency has recovered. If the probes succeed, the circuit closes; if they fail, it opens again.",
+          },
+          {
+            question: "Why is a circuit breaker without a fallback strategy problematic?",
+            options: [
+              "It uses too much memory",
+              "It makes the code harder to test",
+              "It still shows users an error -- just a faster one",
+              "It prevents the service from ever recovering",
+            ],
+            correctIndex: 2,
+            explanation: "A circuit breaker without a fallback is just a fancier error. You need to define what happens when the circuit opens: return cached data, a default response, or a meaningful error message. The fallback is where the real user experience work happens.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

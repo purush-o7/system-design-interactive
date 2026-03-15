@@ -2,6 +2,9 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { TopicHero } from "@/components/topic-hero";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { KeyTakeaway } from "@/components/key-takeaway";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
@@ -120,6 +123,7 @@ function AutoScaleSimulator() {
       title="Auto-Scaling Simulator"
       simulation={sim}
       canvasHeight="min-h-[420px]"
+      hints={["Drag the CPU threshold slider while the simulation runs"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex items-center gap-4 flex-wrap">
@@ -247,6 +251,7 @@ function ScalingPolicyPlayground() {
       title="Scaling Policy Comparison"
       simulation={sim}
       canvasHeight="min-h-[350px]"
+      hints={["Switch policies while running to compare reactions"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex gap-2 flex-wrap">
@@ -349,6 +354,7 @@ function CostOptimizationPlayground() {
       title="Cost Optimization Explorer"
       controls={false}
       canvasHeight="min-h-[380px]"
+      hints={["Adjust min/max instances to find the cost sweet spot"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-3 gap-4 text-xs">
@@ -479,6 +485,7 @@ function CooldownDemo() {
       title="Cooldown Period Demo"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Watch how 'No Cooldown' oscillates wildly vs stable cooldown"]}
       canvas={
         <div className="p-4 space-y-4">
           <LiveChart
@@ -526,20 +533,24 @@ export default function AutoScalingPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Black Friday traffic can spike 10x in minutes. Companies that auto-scale handle it seamlessly — those that don&apos;t lose millions in failed transactions.
+      </WhyCare>
+
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Watch Auto-Scaling in Action</h2>
         <p className="text-sm text-muted-foreground">
           Hit play and drag the CPU threshold slider. When traffic pushes CPU above
-          your threshold, new servers appear in the diagram. When traffic drops, excess
+          your threshold, <GlossaryTerm term="auto-scaling">auto-scaling</GlossaryTerm> adds new servers to the diagram. When traffic drops, excess
           servers are removed after a cooldown period. Watch the scaling lag -- servers
-          take time to spin up while traffic spikes ahead of capacity.
+          take time to spin up while <GlossaryTerm term="throughput">throughput</GlossaryTerm> demands spike ahead of capacity.
         </p>
         <AutoScaleSimulator />
       </section>
 
       <ConversationalCallout type="tip">
         In system design interviews, always mention three things about auto-scaling:
-        (1) the <strong>metric</strong> that triggers scaling, (2) the <strong>policy type</strong> you
+        (1) the <strong>metric</strong> that triggers scaling (like <GlossaryTerm term="latency">latency</GlossaryTerm> or CPU), (2) the <strong>policy type</strong> you
         would use (target tracking for most cases), and (3) that servers must be <strong>stateless</strong> with
         externalized state in Redis, S3, or a database.
       </ConversationalCallout>
@@ -618,7 +629,7 @@ export default function AutoScalingPage() {
       </section>
 
       <ConversationalCallout type="warning">
-        Auto-scaling requires <strong>stateless servers</strong>. A new instance must handle requests
+        Auto-scaling requires <strong><GlossaryTerm term="stateless">stateless</GlossaryTerm> servers</strong>. A new instance must handle requests
         immediately without state from other servers. Sessions go in Redis or DynamoDB. Files go in S3.
         Config goes in Parameter Store. If your servers are stateful, auto-scaling causes data loss.
       </ConversationalCallout>
@@ -641,6 +652,44 @@ export default function AutoScalingPage() {
         Most teams start with target tracking at 60-70% CPU because it is the simplest to reason about
         and works well for steady-state workloads.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why do auto-scaling groups use cooldown periods?",
+            options: [
+              "To save money on server launches",
+              "To prevent rapid add/remove oscillation (thrashing) after each scaling event",
+              "To give developers time to review changes",
+              "Because cloud providers require a minimum wait time",
+            ],
+            correctIndex: 1,
+            explanation: "Without cooldowns, the auto-scaler reacts to every metric fluctuation, causing expensive and destabilizing oscillation. Cooldowns let new capacity stabilize before re-evaluating.",
+          },
+          {
+            question: "A Super Bowl ad will air in 2 hours and you expect 50x normal traffic. What scaling strategy is best?",
+            options: [
+              "Rely on target tracking to react to the spike",
+              "Use scheduled scaling to pre-warm instances before the spike",
+              "Increase the CPU threshold so fewer servers are needed",
+              "Disable cooldown periods for faster reaction",
+            ],
+            correctIndex: 1,
+            explanation: "Reactive auto-scaling takes 60-90 seconds per instance to launch. For known mega-events, scheduled scaling pre-warms capacity ahead of time so it is ready when traffic hits.",
+          },
+          {
+            question: "What must be true about your servers for auto-scaling to work correctly?",
+            options: [
+              "They must all run the same operating system",
+              "They must be in the same data center",
+              "They must be stateless with externalized state (Redis, S3)",
+              "They must have identical hardware specifications",
+            ],
+            correctIndex: 2,
+            explanation: "Auto-scaling adds and removes servers dynamically. If a server stores state locally (sessions, files), that state is lost when the instance is terminated. State must live in external stores.",
+          },
+        ]}
+      />
 
       <KeyTakeaway
         points={[

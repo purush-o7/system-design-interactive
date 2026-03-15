@@ -14,6 +14,10 @@ import {
   PenLine, Search, Database, RotateCcw, Clock,
   ShoppingCart, Package, Minus, Plus, CreditCard,
 } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,6 +171,7 @@ function CqrsArchitecturePlayground() {
       title="CQRS Architecture Playground"
       simulation={sim}
       canvasHeight="min-h-[420px]"
+      hints={["Click 'Place Order' or 'Get Orders' to trace the write vs read path"]}
       canvas={
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-center gap-3 px-4 py-3 border-b border-violet-500/10">
@@ -356,6 +361,7 @@ function EventStorePlayground() {
       title="Event Store -- Time Travel for Data"
       controls={false}
       canvasHeight="min-h-[360px]"
+      hints={["Add items to the cart, then drag the time-travel slider to see past states"]}
       canvas={
         <div className="p-4 space-y-4">
           {/* Action buttons */}
@@ -533,6 +539,7 @@ function ConsistencyPlayground() {
       title="Eventual Consistency Challenge"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Press play to watch the write DB pull ahead of the read DB"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-3 gap-3">
@@ -609,11 +616,15 @@ export default function CqrsEventSourcingPage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        Your bank doesn&apos;t just store your balance — it stores every transaction. That&apos;s <GlossaryTerm term="event sourcing">event sourcing</GlossaryTerm>, and it&apos;s how financial systems maintain perfect audit trails.
+      </WhyCare>
+
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Why Separate Reads from Writes?</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
           A single database model forces you to choose: optimize for fast writes (normalized, few indexes)
-          or fast reads (denormalized, many indexes). You cannot have both. CQRS eliminates this
+          or fast reads (denormalized, many indexes). You cannot have both. <GlossaryTerm term="cqrs">CQRS</GlossaryTerm> eliminates this
           trade-off by giving each side its own model, its own database, and its own scaling strategy.
         </p>
         <ConversationalCallout type="question">
@@ -641,7 +652,7 @@ export default function CqrsEventSourcingPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Event Sourcing: Store What Happened</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Instead of storing the current state of an entity (UPDATE balance = 950), event sourcing
+          Instead of storing the current state of an entity (UPDATE balance = 950), <GlossaryTerm term="event sourcing">event sourcing</GlossaryTerm>
           stores the <strong>sequence of events</strong> that produced it. The current state is
           derived by replaying the event log. This is how banking has worked for centuries: your
           bank statement is a log of transactions, not just a balance. Try it below -- add items
@@ -676,6 +687,44 @@ export default function CqrsEventSourcingPage() {
         genuinely different enough to justify the overhead. For simple CRUD apps, a single model
         is the correct choice.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What does CQRS stand for and what problem does it solve?",
+            options: [
+              "Command Query Response Segregation -- it splits APIs into public and private",
+              "Command Query Responsibility Segregation -- it separates read and write models to optimize each independently",
+              "Concurrent Query Replication System -- it replicates databases for redundancy",
+              "Command Queue Routing Service -- it routes commands to the right service",
+            ],
+            correctIndex: 1,
+            explanation: "CQRS separates the write side (commands) from the read side (queries), allowing each to use different data models, databases, and scaling strategies.",
+          },
+          {
+            question: "What is a key trade-off of using CQRS?",
+            options: [
+              "The write side becomes slower",
+              "You can only use SQL databases",
+              "The read side is eventually consistent -- there is a brief delay before writes appear in read views",
+              "You cannot use event sourcing with CQRS",
+            ],
+            correctIndex: 2,
+            explanation: "Because the read model is updated asynchronously via events, there is a small window where the write has committed but the read model has not caught up. For most use cases, this delay is invisible to users.",
+          },
+          {
+            question: "How does event sourcing differ from traditional database updates?",
+            options: [
+              "It uses NoSQL instead of SQL databases",
+              "It stores every state change as an immutable event instead of overwriting current state",
+              "It only stores the latest state for faster reads",
+              "It requires a message queue to function",
+            ],
+            correctIndex: 1,
+            explanation: "Traditional databases overwrite state (UPDATE balance = 950). Event sourcing appends immutable events (Deposited $50). Current state is derived by replaying the log, enabling full audit trails and time travel.",
+          },
+        ] satisfies QuizQuestion[]}
+      />
 
       <KeyTakeaway
         points={[

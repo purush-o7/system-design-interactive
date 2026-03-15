@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { BeforeAfter } from "@/components/before-after";
@@ -113,6 +116,7 @@ function ChunkedUploadPlayground() {
       title="Chunked Upload Simulator"
       simulation={sim}
       canvasHeight="min-h-[320px]"
+      hints={["Press play to watch chunks upload — toggle between Sequential and Parallel modes to see the speed difference"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between">
@@ -247,6 +251,7 @@ function ArchitecturePlayground() {
       title="File Storage Architecture"
       simulation={sim}
       canvasHeight="min-h-[300px]"
+      hints={["Switch between Upload, Download, and Dedup flows to see how each path differs"]}
       canvas={<FlowDiagram nodes={baseNodes} edges={edges} fitView minHeight={280} />}
       explanation={
         <div className="space-y-3">
@@ -317,6 +322,7 @@ function FileSyncPlayground() {
       title="File Sync Engine"
       simulation={sim}
       canvasHeight="min-h-[340px]"
+      hints={["Press play to watch two devices edit the same file offline — see how a sync conflict arises"]}
       canvas={
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-3 gap-3">
@@ -520,6 +526,14 @@ export default function FileStoragePage() {
         difficulty="advanced"
       />
 
+      <WhyCare>
+        Dropbox syncs 1.2 billion files daily. How do you handle a 10GB upload over a flaky connection? Chunking and deduplication.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        File storage systems split files into chunks for resumable uploads, store them in object storage with metadata in a separate database. <GlossaryTerm term="replication">Replication</GlossaryTerm> ensures durability, while a <GlossaryTerm term="cdn">CDN</GlossaryTerm> accelerates downloads. <GlossaryTerm term="consistent hashing">Consistent hashing</GlossaryTerm> distributes chunks across storage nodes, and <GlossaryTerm term="cache">caching</GlossaryTerm> at multiple layers reduces <GlossaryTerm term="latency">latency</GlossaryTerm>.
+      </p>
+
       {/* Intro context */}
       <ConversationalCallout type="question">
         What happens when a 2GB upload fails at 95%? With a naive single-POST design, the user
@@ -631,6 +645,44 @@ export default function FileStoragePage() {
             a fraction of the raw bytes uploaded.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why do file storage systems chunk files before uploading instead of sending the whole file?",
+            options: [
+              "Chunks are easier to compress",
+              "If the connection drops, only the failed chunk needs to be retried — not the entire file",
+              "Chunks reduce the total file size",
+              "The server cannot process files larger than 4MB"
+            ],
+            correctIndex: 1,
+            explanation: "Chunking enables resumable uploads. If a 2GB upload fails at 95%, you only retry the failed 4MB chunk instead of starting over. Parallel uploads of multiple chunks also cut transfer time dramatically."
+          },
+          {
+            question: "How does content-addressable deduplication save storage?",
+            options: [
+              "It compresses files to smaller sizes",
+              "It stores each unique chunk once using its SHA-256 hash as the key, so identical chunks share storage",
+              "It deletes old files automatically",
+              "It moves duplicate files to cheaper storage tiers"
+            ],
+            correctIndex: 1,
+            explanation: "Each chunk is identified by its SHA-256 hash. If 500 users upload the same video, the system stores the chunks once and creates 500 references to them. Dropbox saves 60%+ of raw storage this way."
+          },
+          {
+            question: "What conflict resolution strategy does Dropbox use when two devices edit the same file offline?",
+            options: [
+              "Last-write-wins — the most recent edit replaces the other",
+              "Operational Transformation (OT) to merge changes automatically",
+              "Conflicted copies — both versions are saved and the user merges manually",
+              "The server rejects the second upload"
+            ],
+            correctIndex: 2,
+            explanation: "Dropbox creates a 'conflicted copy' so no data is lost. The user sees both versions and decides how to merge them. This is safer than last-write-wins (which silently loses data) and simpler than OT/CRDTs."
+          }
+        ]}
       />
 
       <KeyTakeaway

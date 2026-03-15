@@ -11,6 +11,10 @@ import { Playground } from "@/components/playground";
 import { useSimulation } from "@/hooks/use-simulation";
 import { cn } from "@/lib/utils";
 import { Plus, Minus, Send, Skull } from "lucide-react";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
+import type { QuizQuestion } from "@/components/topic-quiz";
 
 // ─── Playground 1: Interactive Message Queue ──────────────────────────────────
 
@@ -277,6 +281,7 @@ function QueuePlayground() {
       canvas={canvas}
       explanation={explanation}
       canvasHeight="min-h-[350px]"
+      hints={["Click 'Send 1' or 'Flood 20' to push messages, then adjust consumers and speed"]}
     />
   );
 }
@@ -525,6 +530,7 @@ function BrokerComparisonPlayground() {
       canvas={canvas}
       explanation={explanation}
       canvasHeight="min-h-[300px]"
+      hints={["Press play to watch messages flow through both Kafka and RabbitMQ simultaneously"]}
     />
   );
 }
@@ -540,6 +546,10 @@ export default function MessageQueuesPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        Slack processes billions of messages daily. Without <GlossaryTerm term="message queue">message queues</GlossaryTerm>, a single slow operation would freeze the entire platform.
+      </WhyCare>
+
       {/* Context setter */}
       <div className="rounded-lg border border-border/30 bg-muted/10 p-5 space-y-3">
         <h3 className="text-base font-semibold">Why Message Queues Exist</h3>
@@ -550,9 +560,9 @@ export default function MessageQueuesPage() {
           customers get charged without confirmation.
         </p>
         <p className="text-sm text-muted-foreground">
-          A message queue sits between them. The Order service writes to the queue and
+          A <GlossaryTerm term="message queue">message queue</GlossaryTerm> sits between them. The Order service writes to the queue and
           responds instantly. The Payment service pulls at its own pace. No orders lost,
-          no duplicate charges. The queue absorbs the shock.
+          no duplicate charges. The queue absorbs the shock, improving <GlossaryTerm term="throughput">throughput</GlossaryTerm> and reducing <GlossaryTerm term="latency">latency</GlossaryTerm> spikes.
         </p>
       </div>
 
@@ -630,6 +640,44 @@ export default function MessageQueuesPage() {
         (rate limiting to bank APIs), image processing (CPU-heavy work offloaded).
         When you hear &quot;the producer is faster than the consumer,&quot; reach for a queue.
       </ConversationalCallout>
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "What happens when a consumer crashes before acknowledging a message?",
+            options: [
+              "The message is permanently lost",
+              "The message is moved to the dead-letter queue immediately",
+              "The message is redelivered to another consumer",
+              "The producer is notified to resend it",
+            ],
+            correctIndex: 2,
+            explanation: "With at-least-once delivery, unacknowledged messages are redelivered. This is why consumers must be idempotent -- they may process the same message more than once.",
+          },
+          {
+            question: "What is the purpose of a dead-letter queue (DLQ)?",
+            options: [
+              "To store messages that have been successfully processed",
+              "To hold messages that repeatedly fail processing after max retries",
+              "To prioritize high-importance messages",
+              "To replicate messages across data centers",
+            ],
+            correctIndex: 1,
+            explanation: "Poison-pill messages that fail every time are moved to the DLQ after max retries (usually 3), preventing them from blocking healthy messages in the main queue.",
+          },
+          {
+            question: "What is the key architectural difference between Kafka and RabbitMQ?",
+            options: [
+              "Kafka supports multiple consumers, RabbitMQ does not",
+              "RabbitMQ is faster than Kafka in all scenarios",
+              "Kafka is a distributed log that retains messages; RabbitMQ is a broker that deletes messages after acknowledgment",
+              "Kafka only supports point-to-point messaging",
+            ],
+            correctIndex: 2,
+            explanation: "Kafka retains messages on disk like a commit log -- you can replay them. RabbitMQ removes messages once acknowledged. Think security camera vs. ticket dispenser.",
+          },
+        ] satisfies QuizQuestion[]}
+      />
 
       <KeyTakeaway
         points={[

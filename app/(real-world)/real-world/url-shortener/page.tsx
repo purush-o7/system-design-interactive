@@ -3,6 +3,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { TopicHero } from "@/components/topic-hero";
 import { KeyTakeaway } from "@/components/key-takeaway";
+import { WhyCare } from "@/components/why-care";
+import { GlossaryTerm } from "@/components/glossary-term";
+import { TopicQuiz } from "@/components/topic-quiz";
 import { AhaMoment } from "@/components/aha-moment";
 import { ConversationalCallout } from "@/components/conversational-callout";
 import { FlowDiagram, type FlowNode, type FlowEdge } from "@/components/flow-diagram";
@@ -182,6 +185,7 @@ function ArchitecturePlayground() {
       title="URL Shortener — Full Request Flow"
       simulation={sim}
       canvasHeight="min-h-[380px]"
+      hints={["Type a URL and click Shorten to watch the full request lifecycle through the architecture"]}
       canvas={
         <div className="h-full flex flex-col">
           {/* URL input bar */}
@@ -272,6 +276,7 @@ function Base62Playground() {
       title="Base62 Encoding — How Short URLs Are Born"
       controls={false}
       canvasHeight="min-h-[280px]"
+      hints={["Drag the slider to see how numeric IDs map to short codes via repeated division by 62"]}
       canvas={
         <div className="p-5 space-y-4 h-full">
           {/* Slider + input */}
@@ -528,6 +533,7 @@ function ScalePlayground() {
       title="Scale Playground — Watch the Architecture Evolve"
       controls={false}
       canvasHeight="min-h-[360px]"
+      hints={["Click the scale buttons to see how the architecture changes from 1K to 10M URLs per day"]}
       canvas={
         <div className="h-full flex flex-col">
           {/* Scale selector */}
@@ -732,6 +738,14 @@ export default function UrlShortenerPage() {
         difficulty="intermediate"
       />
 
+      <WhyCare>
+        bit.ly handles 600 million clicks per month. Behind that simple redirect is a fascinating system design problem.
+      </WhyCare>
+
+      <p className="text-sm text-muted-foreground">
+        A URL shortener converts a long URL into a short alias like <code className="text-xs bg-muted px-1 rounded font-mono">sho.rt/x7Kq2</code>. The core challenge is generating a unique short code using <GlossaryTerm term="base62">Base62 encoding</GlossaryTerm>, storing the mapping in a database fronted by a <GlossaryTerm term="cache">cache</GlossaryTerm>, and handling the massive read traffic behind a <GlossaryTerm term="load balancer">load balancer</GlossaryTerm>. ID generation at scale often uses <GlossaryTerm term="snowflake">Snowflake IDs</GlossaryTerm> to avoid collisions without coordination. An <GlossaryTerm term="api gateway">API gateway</GlossaryTerm> handles <GlossaryTerm term="rate limiting">rate limiting</GlossaryTerm> at the edge.
+      </p>
+
       {/* Main Architecture Playground */}
       <ArchitecturePlayground />
 
@@ -791,6 +805,44 @@ export default function UrlShortenerPage() {
             Reserve a separate namespace (8+ chars for vanity vs 7 for auto-generated) to avoid collisions.
           </p>
         }
+      />
+
+      <TopicQuiz
+        questions={[
+          {
+            question: "Why do URL shorteners use Base62 encoding instead of Base16 (hex)?",
+            options: [
+              "Base62 is faster to compute",
+              "Base62 produces shorter strings because it uses more characters per digit",
+              "Base16 is not URL-safe",
+              "Base62 prevents collisions"
+            ],
+            correctIndex: 1,
+            explanation: "Base62 uses 62 URL-safe characters (a-z, A-Z, 0-9), so each character encodes more information than hex (16 chars). A 7-character Base62 string can represent 3.5 trillion unique URLs."
+          },
+          {
+            question: "What is the main advantage of using a 302 redirect instead of a 301 for short URLs?",
+            options: [
+              "302 is faster for the end user",
+              "302 uses less bandwidth",
+              "302 lets you track click analytics because each click hits your server",
+              "302 is more compatible with mobile browsers"
+            ],
+            correctIndex: 2,
+            explanation: "A 301 (permanent) redirect is cached by the browser, so repeat visits bypass your server entirely. A 302 (temporary) redirect forces every click through your server, enabling full analytics (clicks, geo, referrers). Bitly uses 302 for this reason."
+          },
+          {
+            question: "At Bitly-scale (10M URLs/day), why is a Redis cache critical?",
+            options: [
+              "Redis is the only database that supports Base62 encoding",
+              "Redis handles 95% of reads so the database only sees 5% of traffic",
+              "Redis automatically generates short URLs",
+              "Redis is required for 301 redirects"
+            ],
+            correctIndex: 1,
+            explanation: "URL shorteners are extremely read-heavy (100:1 read-to-write ratio). A Redis cache with a 95% hit rate means the database only handles 5% of read traffic, making the system manageable even at massive scale."
+          }
+        ]}
       />
 
       <KeyTakeaway
