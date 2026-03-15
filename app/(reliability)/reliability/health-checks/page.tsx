@@ -139,9 +139,11 @@ function HealthCheckPlayground() {
   const [pingTarget, setPingTarget] = useState<string | null>(null);
   const [latencyData, setLatencyData] = useState<{ t: string; latency: number }[]>([]);
   const tickRef = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Cycle ping target to simulate continuous probing
   useEffect(() => {
+    if (!isPlaying) return;
     let i = 0;
     const interval = setInterval(() => {
       const target = INITIAL_SERVERS[i % INITIAL_SERVERS.length].id;
@@ -162,7 +164,7 @@ function HealthCheckPlayground() {
     }, 1500);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [servers]);
+  }, [isPlaying, servers]);
 
   const toggleReadiness = useCallback((id: string) => {
     setServers((prev) =>
@@ -253,6 +255,12 @@ function HealthCheckPlayground() {
                 </div>
               </div>
             ))}
+            <button
+              onClick={() => setIsPlaying((p) => !p)}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors"
+            >
+              {isPlaying ? "⏸ Pause" : "▶ Start"}
+            </button>
             <button
               onClick={resetAll}
               className="ml-auto self-end text-[9px] px-2 py-1 rounded border border-border/30 text-muted-foreground hover:bg-muted/30 transition-colors"
@@ -543,8 +551,10 @@ function ThunderingHerdDemo() {
 
 function HealthCheckLatencyChart() {
   const [data, setData] = useState<{ t: string; shallow: number; deep: number }[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
+    if (!isPlaying) return;
     let i = 0;
     const interval = setInterval(() => {
       setData((prev) => {
@@ -561,22 +571,30 @@ function HealthCheckLatencyChart() {
       });
     }, 800);
     return () => clearInterval(interval);
-  }, []);
+  }, [isPlaying]);
 
   return (
-    <LiveChart
-      type="latency"
-      data={data}
-      dataKeys={{
-        x: "t",
-        y: ["shallow", "deep"],
-        label: ["Shallow /healthz", "Deep /ready"],
-      }}
-      height={200}
-      unit="ms"
-      referenceLines={[{ y: 50, label: "Timeout threshold", color: "#ef4444" }]}
-      showLegend
-    />
+    <div className="space-y-2">
+      <button
+        onClick={() => setIsPlaying((p) => !p)}
+        className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors"
+      >
+        {isPlaying ? "⏸ Pause" : "▶ Start"}
+      </button>
+      <LiveChart
+        type="latency"
+        data={data}
+        dataKeys={{
+          x: "t",
+          y: ["shallow", "deep"],
+          label: ["Shallow /healthz", "Deep /ready"],
+        }}
+        height={200}
+        unit="ms"
+        referenceLines={[{ y: 50, label: "Timeout threshold", color: "#ef4444" }]}
+        showLegend
+      />
+    </div>
   );
 }
 

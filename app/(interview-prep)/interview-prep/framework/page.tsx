@@ -512,10 +512,12 @@ function EstimationPractice({ tick }: { tick: number }) {
 // ---------------------------------------------------------------------------
 function FrameworkStepper() {
   const [activeStep, setActiveStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setActiveStep((s) => (s + 1) % 5), 5000);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const steps = [
     {
@@ -616,7 +618,7 @@ function FrameworkStepper() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5 items-center">
         {steps.map((s, i) => (
           <button
             key={s.title}
@@ -631,6 +633,10 @@ function FrameworkStepper() {
             Step {i + 1}
           </button>
         ))}
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors ml-auto">
+          {isPlaying ? "⏸ Pause" : "▶ Auto-advance"}
+        </button>
       </div>
 
       <div className={cn(

@@ -17,11 +17,13 @@ import { InteractiveDemo } from "@/components/interactive-demo";
 import { cn } from "@/lib/utils";
 
 function StaleDataTimeline() {
+  const [isPlaying, setIsPlaying] = useState(false);
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setTick((s) => (s + 1) % 60), 150);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const ttl = 30;
   const dataChangeAt = 12;
@@ -30,6 +32,16 @@ function StaleDataTimeline() {
 
   return (
     <div className="space-y-3">
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+        <button onClick={() => { setIsPlaying(false); setTick(0); }}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted/50 text-muted-foreground hover:bg-muted transition-colors">
+          ↺ Reset
+        </button>
+      </div>
       <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
         <span>0s</span>
         <span>TTL = {ttl}s</span>
@@ -97,11 +109,13 @@ function StaleDataTimeline() {
 }
 
 function TTLCountdown() {
+  const [isPlaying, setIsPlaying] = useState(false);
   const [seconds, setSeconds] = useState(30);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setSeconds((s) => (s <= 0 ? 30 : s - 1)), 200);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const pct = (seconds / 30) * 100;
   const isLow = seconds <= 5;
@@ -109,6 +123,16 @@ function TTLCountdown() {
 
   return (
     <div className="space-y-2">
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+        <button onClick={() => { setIsPlaying(false); setSeconds(30); }}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted/50 text-muted-foreground hover:bg-muted transition-colors">
+          ↺ Reset
+        </button>
+      </div>
       <div className="flex items-center gap-3">
         <div className="flex-1 h-6 rounded-md bg-muted/30 border overflow-hidden relative">
           <div
@@ -143,11 +167,13 @@ function TTLCountdown() {
 }
 
 function CacheStampede() {
+  const [isPlaying, setIsPlaying] = useState(false);
   const [tick, setTick] = useState(0);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setTick((s) => (s + 1) % 40), 200);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const cacheExpired = tick >= 5;
   const requestsHitDb = cacheExpired && tick < 20;
@@ -157,6 +183,16 @@ function CacheStampede() {
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+        <button onClick={() => { setIsPlaying(false); setTick(0); }}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted/50 text-muted-foreground hover:bg-muted transition-colors">
+          ↺ Reset
+        </button>
+      </div>
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="text-center space-y-1.5">
           <div className="flex flex-wrap gap-1 max-w-[120px] justify-center">
@@ -220,11 +256,13 @@ function CacheStampede() {
 }
 
 function EventInvalidationFlow() {
+  const [isPlaying, setIsPlaying] = useState(false);
   const [step, setStep] = useState(0);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setStep((s) => (s + 1) % 8), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const stages = [
     { label: "App writes to DB", icon: "pencil" },
@@ -239,6 +277,16 @@ function EventInvalidationFlow() {
 
   return (
     <div className="space-y-2">
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+        <button onClick={() => { setIsPlaying(false); setStep(0); }}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted/50 text-muted-foreground hover:bg-muted transition-colors">
+          ↺ Reset
+        </button>
+      </div>
       {stages.map((s, i) => (
         <div key={s.label} className="flex items-center gap-3">
           <span className="text-[10px] font-mono text-muted-foreground/50 w-4 text-right shrink-0">{i + 1}</span>
@@ -267,11 +315,13 @@ function EventInvalidationFlow() {
 }
 
 function VersionTaggedKeys() {
+  const [isPlaying, setIsPlaying] = useState(false);
   const [version, setVersion] = useState(1);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setVersion((v) => (v >= 4 ? 1 : v + 1)), 2500);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const keys = [
     { key: `product:42:v${version}`, status: "active" as const },
@@ -281,6 +331,16 @@ function VersionTaggedKeys() {
 
   return (
     <div className="space-y-2">
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+        <button onClick={() => { setIsPlaying(false); setVersion(1); }}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted/50 text-muted-foreground hover:bg-muted transition-colors">
+          ↺ Reset
+        </button>
+      </div>
       {keys.map((k) => (
         <div
           key={k.key}

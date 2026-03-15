@@ -261,10 +261,12 @@ function TweetFlowSim() {
 /* ------------------------------------------------------------------ */
 function TrendingPlayground() {
   const [tick, setTick] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setTick((s) => s + 1), 900);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const topics = [
     { tag: "#WorldCup", base: 12000, growth: 4500 },
@@ -287,9 +289,15 @@ function TrendingPlayground() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-        <Clock className="size-3.5 shrink-0" />
-        <span className="font-mono">Elapsed: {Math.min(tick * 5, 70)}min — Kafka stream: {(tick * 12000).toLocaleString()} tweets ingested</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <Clock className="size-3.5 shrink-0" />
+          <span className="font-mono">Elapsed: {Math.min(tick * 5, 70)}min — Kafka stream: {(tick * 12000).toLocaleString()} tweets ingested</span>
+        </div>
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
       </div>
       <div className="space-y-2">
         {sorted.map((topic, rank) => {

@@ -208,11 +208,13 @@ const LOCATION_FLOW_EDGES: FlowEdge[] = [
 
 function LocationTrackingSection() {
   const [pingCount, setPingCount] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setPingCount((c) => c + 1), 400);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   return (
     <div className="space-y-4">
@@ -221,6 +223,10 @@ function LocationTrackingSection() {
           <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
           Live — {pingCount.toLocaleString()} location updates processed
         </span>
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
         <span className="ml-auto font-mono text-emerald-400">~1.25M pings/sec at peak</span>
       </div>
       <FlowDiagram
@@ -530,6 +536,7 @@ function SurgePricingSimulator() {
 /* ------------------------------------------------------------------ */
 function RidesPerSecondChart() {
   const MAX_POINTS = 20;
+  const [isPlaying, setIsPlaying] = useState(false);
   const [data, setData] = useState(() =>
     Array.from({ length: MAX_POINTS }, (_, i) => ({
       t: `T-${MAX_POINTS - i}`,
@@ -539,6 +546,7 @@ function RidesPerSecondChart() {
   );
 
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => {
       setData((prev) => {
         const last = prev[prev.length - 1].rides;
@@ -549,7 +557,7 @@ function RidesPerSecondChart() {
       });
     }, 800);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   return (
     <div className="space-y-3">
@@ -558,6 +566,10 @@ function RidesPerSecondChart() {
           <Zap className="size-3.5 text-amber-400" />
           Real-time rides per second — global aggregate
         </span>
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
         <span className="font-mono text-amber-400">
           {data[data.length - 1]?.rides ?? 0} rides/sec
         </span>

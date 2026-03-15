@@ -20,9 +20,11 @@ function LeaderFollowerPlayground() {
   const [promoted, setPromoted] = useState(false);
   const [writes, setWrites] = useState<Array<{ id: number; synced: boolean[]; confirmed: boolean }>>([]);
   const [followerLag, setFollowerLag] = useState([0, 0, 0]);
+  const [isPlaying, setIsPlaying] = useState(false);
   const wc = useRef(0);
 
   useEffect(() => {
+    if (!isPlaying) return;
     const id = setInterval(() => {
       setFollowerLag((prev) => prev.map((l) => Math.max(0, l - 15 + Math.random() * 5)));
       setWrites((prev) => prev.map((w) => {
@@ -31,7 +33,7 @@ function LeaderFollowerPlayground() {
       }));
     }, 800);
     return () => clearInterval(id);
-  }, [mode]);
+  }, [isPlaying, mode]);
 
   const handleWrite = useCallback(() => {
     if (!leaderAlive && !promoted) return;
@@ -93,6 +95,10 @@ function LeaderFollowerPlayground() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button onClick={() => setIsPlaying(p => !p)}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+              {isPlaying ? "⏸ Pause" : "▶ Start"}
+            </button>
             <button onClick={handleWrite} disabled={!leaderAlive && !promoted}
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 border border-blue-500/30 text-blue-400 hover:bg-blue-500/25 transition-colors disabled:opacity-30">
               Write Data</button>
@@ -135,8 +141,10 @@ function LeaderFollowerPlayground() {
 // ─── Replication Lag Chart ──────────────────────────────────────────────────
 
 function ReplicationLagMonitor() {
+  const [isPlaying, setIsPlaying] = useState(false);
   const [data, setData] = useState<Array<{ t: string; f1: number; f2: number; f3: number }>>([]);
   useEffect(() => {
+    if (!isPlaying) return;
     let tick = 0;
     const base = [5, 12, 30];
     const id = setInterval(() => {
@@ -150,10 +158,16 @@ function ReplicationLagMonitor() {
       }]);
     }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [isPlaying]);
 
   return (
     <div className="space-y-3">
+      <div className="flex justify-start">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+      </div>
       <p className="text-sm text-muted-foreground">
         Replication lag fluctuates with write volume and network conditions. Spikes are normal,
         but sustained high lag means followers serve stale data.
@@ -357,6 +371,7 @@ function ConsistencyComparison() {
 function ReadYourWritesDemo() {
   const [step, setStep] = useState(0);
   const [pinToLeader, setPinToLeader] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const phases = [
     { label: "User updates profile", desc: "Write goes to Leader", stale: false },
@@ -365,14 +380,21 @@ function ReadYourWritesDemo() {
   ];
 
   useEffect(() => {
+    if (!isPlaying) return;
     const id = setInterval(() => setStep((s) => (s + 1) % 4), 1500);
     return () => clearInterval(id);
-  }, []);
+  }, [isPlaying]);
 
   const active = Math.min(step, 2);
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-start">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+      </div>
       <label className="text-xs text-muted-foreground flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={pinToLeader} onChange={(e) => setPinToLeader(e.target.checked)} className="accent-violet-500" />
         Enable read-after-write routing (pin to leader)

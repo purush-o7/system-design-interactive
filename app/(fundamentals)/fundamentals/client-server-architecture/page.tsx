@@ -28,20 +28,24 @@ import {
   Wifi,
   MessageSquare,
   Zap,
+  Play,
+  Pause,
 } from "lucide-react";
 
 // ── Custom Viz: Animated Client-Server Request-Response Cycle ──────────────
 function ClientServerViz() {
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const stepRef = useRef(step);
   stepRef.current = step;
 
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => {
       setStep((s) => (s + 1) % 8);
     }, 1200);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const clients = [
     { label: "Mobile", icon: <Monitor className="size-3.5" /> },
@@ -63,6 +67,15 @@ function ClientServerViz() {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-center">
+        <button
+          onClick={() => setIsPlaying((p) => !p)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all"
+        >
+          {isPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}
+          {isPlaying ? "Pause" : "Start"}
+        </button>
+      </div>
       <div className="flex flex-col items-center gap-3">
         {/* Clients row */}
         <div className="flex items-center justify-center gap-6">
@@ -174,10 +187,12 @@ function ClientServerViz() {
 // ── Custom Viz: Request-Response Waterfall ──────────────────────────────────
 function RequestResponseViz() {
   const [tick, setTick] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setTick((s) => (s + 1) % 8), 900);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const stages = [
     { name: "DNS Lookup", duration: 20, color: "bg-purple-500", textColor: "text-purple-400" },
@@ -194,6 +209,15 @@ function RequestResponseViz() {
 
   return (
     <div className="space-y-1.5">
+      <div className="flex justify-center mb-2">
+        <button
+          onClick={() => setIsPlaying((p) => !p)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all"
+        >
+          {isPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}
+          {isPlaying ? "Pause" : "Start"}
+        </button>
+      </div>
       {stages.map((stage, i) => {
         const offset = cumulativeOffset;
         cumulativeOffset += stage.duration;
@@ -329,10 +353,12 @@ function ThinVsThickViz() {
 // ── Custom Viz: Multi-Tier Architecture ─────────────────────────────────────
 function MultiTierViz() {
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setStep((s) => (s + 1) % 7), 1100);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const tiers = [
     {
@@ -381,6 +407,15 @@ function MultiTierViz() {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-center">
+        <button
+          onClick={() => setIsPlaying((p) => !p)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all"
+        >
+          {isPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}
+          {isPlaying ? "Pause" : "Start"}
+        </button>
+      </div>
       <div className="space-y-2">
         {tiers.map((tier, i) => {
           const c = colorMap[tier.color];
@@ -438,10 +473,12 @@ function MultiTierViz() {
 // ── Custom Viz: Stateless Communication ─────────────────────────────────────
 function StatelessViz() {
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setStep((s) => (s + 1) % 4), 2000);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const requests = [
     {
@@ -460,6 +497,15 @@ function StatelessViz() {
 
   return (
     <div className="space-y-3">
+      <div className="flex justify-center">
+        <button
+          onClick={() => setIsPlaying((p) => !p)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-violet-500/30 bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all"
+        >
+          {isPlaying ? <Pause className="size-3" /> : <Play className="size-3" />}
+          {isPlaying ? "Pause" : "Start"}
+        </button>
+      </div>
       {requests.map((req, i) => {
         const isActive = step >= i * 2 + 1;
         const showResponse = step >= i * 2 + 2 || (i === 1 && step === 0);

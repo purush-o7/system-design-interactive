@@ -19,10 +19,12 @@ import { Shield, Zap, Globe, Server, AlertTriangle, CheckCircle2, XCircle, Activ
 
 function AttackTrafficViz() {
   const [tick, setTick] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setTick((s) => (s + 1) % 40), 200);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const isAttacking = tick >= 10 && tick < 30;
   const normalRate = 5;
@@ -49,9 +51,15 @@ function AttackTrafficViz() {
           <Activity className="size-3.5" />
           {isAttacking ? "DDoS Attack in Progress" : "Normal Traffic"}
         </span>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {attackRate} Gbps{isAttacking ? " (50 Gbps attack)" : ""}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-muted-foreground">
+            {attackRate} Gbps{isAttacking ? " (50 Gbps attack)" : ""}
+          </span>
+          <button onClick={() => setIsPlaying(p => !p)}
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+            {isPlaying ? "⏸ Pause" : "▶ Start"}
+          </button>
+        </div>
       </div>
 
       <div className="flex items-end gap-0.5 h-24 px-1">
@@ -105,10 +113,12 @@ const attackBarStyles: Record<string, string> = {
 function LayerAttackViz() {
   const [layer, setLayer] = useState<"l3" | "l4" | "l7">("l3");
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setStep((s) => (s + 1) % 5), 1100);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const attacks = {
     l3: {
@@ -150,21 +160,27 @@ function LayerAttackViz() {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-1.5">
-        {(Object.keys(attacks) as Array<keyof typeof attacks>).map((key) => (
-          <button
-            key={key}
-            onClick={() => { setLayer(key); setStep(0); }}
-            className={cn(
-              "text-[10px] font-semibold py-2 rounded-md border transition-all uppercase",
-              layer === key
-                ? attackActiveStyles[attacks[key].color]
-                : "bg-muted/20 border-border/50 text-muted-foreground/50"
-            )}
-          >
-            {attacks[key].name}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-2">
+        <div className="grid grid-cols-3 gap-1.5 flex-1">
+          {(Object.keys(attacks) as Array<keyof typeof attacks>).map((key) => (
+            <button
+              key={key}
+              onClick={() => { setLayer(key); setStep(0); }}
+              className={cn(
+                "text-[10px] font-semibold py-2 rounded-md border transition-all uppercase",
+                layer === key
+                  ? attackActiveStyles[attacks[key].color]
+                  : "bg-muted/20 border-border/50 text-muted-foreground/50"
+              )}
+            >
+              {attacks[key].name}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors shrink-0">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
       </div>
 
       <div className="space-y-1.5">
@@ -210,10 +226,12 @@ function LayerAttackViz() {
 
 function DefenseLayerViz() {
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setStep((s) => (s + 1) % 7), 1500);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const layers = [
     {
@@ -259,7 +277,14 @@ function DefenseLayerViz() {
   ];
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
+      </div>
+      <div className="space-y-1.5">
       {layers.map((l, i) => (
         <div
           key={l.name}
@@ -294,6 +319,7 @@ function DefenseLayerViz() {
           )}
         </div>
       ))}
+      </div>
     </div>
   );
 }

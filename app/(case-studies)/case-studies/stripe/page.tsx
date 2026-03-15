@@ -265,10 +265,12 @@ const TOTAL_MS = 250;
 
 function RequestTracingViz() {
   const [activeIdx, setActiveIdx] = useState(-1);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setActiveIdx((s) => (s >= traceSpans.length - 1 ? 0 : s + 1)), 550);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   const chartData = traceSpans.map((s) => ({
     span: s.name.split(" ")[0],
@@ -277,10 +279,16 @@ function RequestTracingViz() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground/50">
-        <span>0 ms</span>
-        <span className="text-muted-foreground/80">Total: ~250ms</span>
-        <span>250 ms</span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-4 text-[10px] font-mono text-muted-foreground/50">
+          <span>0 ms</span>
+          <span className="text-muted-foreground/80">Total: ~250ms</span>
+          <span>250 ms</span>
+        </div>
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
       </div>
       <div className="space-y-1.5">
         {traceSpans.map((span, i) => {
@@ -426,19 +434,27 @@ const zoneLabels = {
 
 function TokenizationViz() {
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
+    if (!isPlaying) return;
     const t = setInterval(() => setStep((s) => (s + 1) % (tokenSteps.length + 2)), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [isPlaying]);
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 flex-wrap text-[10px]">
-        {(["browser", "stripe", "merchant"] as const).map((zone) => (
-          <span key={zone} className={cn("px-2 py-0.5 rounded border font-mono", zoneColors[zone])}>
-            {zoneLabels[zone]}
-          </span>
-        ))}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-2 flex-wrap text-[10px]">
+          {(["browser", "stripe", "merchant"] as const).map((zone) => (
+            <span key={zone} className={cn("px-2 py-0.5 rounded border font-mono", zoneColors[zone])}>
+              {zoneLabels[zone]}
+            </span>
+          ))}
+        </div>
+        <button onClick={() => setIsPlaying(p => !p)}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+          {isPlaying ? "⏸ Pause" : "▶ Start"}
+        </button>
       </div>
       <div className="space-y-1.5">
         {tokenSteps.map((ts, i) => {

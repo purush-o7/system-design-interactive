@@ -20,20 +20,23 @@ function TokenBucketPlayground() {
   const [tokens, setTokens] = useState(10);
   const [log, setLog] = useState<Array<{ t: number; allowed: number; rejected: number }>>([]);
   const [flash429, setFlash429] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => { setTokens((p) => Math.min(p, capacity)); }, [capacity]);
 
   useEffect(() => {
+    if (!isPlaying) return;
     const id = setInterval(() => setTokens((p) => Math.min(capacity, p + refillRate)), 1000);
     return () => clearInterval(id);
-  }, [capacity, refillRate]);
+  }, [isPlaying, capacity, refillRate]);
 
   useEffect(() => {
+    if (!isPlaying) return;
     const id = setInterval(() => {
       setLog((prev) => [...prev, { t: prev.length, allowed: 0, rejected: 0 }].slice(-20));
     }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [isPlaying]);
 
   const sendRequest = useCallback((count: number) => {
     setTokens((prev) => {
@@ -93,6 +96,10 @@ function TokenBucketPlayground() {
             <input type="range" min={1} max={8} value={refillRate} onChange={(e) => setRefillRate(Number(e.target.value))} className="w-full h-1.5 rounded-full accent-violet-500 cursor-pointer mt-1" />
           </div>
           <div className="flex flex-wrap gap-2">
+            <button onClick={() => setIsPlaying(p => !p)}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+              {isPlaying ? "⏸ Pause" : "▶ Start"}
+            </button>
             {[
               { label: "Send 1", count: 1, cls: "bg-blue-500/10 border-blue-500/20 text-blue-400 hover:bg-blue-500/20" },
               { label: "Send 5", count: 5, cls: "bg-violet-500/10 border-violet-500/20 text-violet-400 hover:bg-violet-500/20" },
@@ -100,7 +107,7 @@ function TokenBucketPlayground() {
             ].map((b) => (
               <button key={b.label} onClick={() => sendRequest(b.count)} className={cn("px-3 py-1.5 rounded-md text-xs font-medium border transition-all", b.cls)}>{b.label}</button>
             ))}
-            <button onClick={() => { setTokens(capacity); setLog([]); }} className="px-3 py-1.5 rounded-md text-xs font-medium bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50 transition-all">Reset</button>
+            <button onClick={() => { setTokens(capacity); setLog([]); setIsPlaying(false); }} className="px-3 py-1.5 rounded-md text-xs font-medium bg-muted/30 border border-border/50 text-muted-foreground hover:bg-muted/50 transition-all">Reset</button>
           </div>
         </div>
       </div>
@@ -145,11 +152,13 @@ const TAB_STYLES: Record<AlgoKey, string> = {
 function AlgorithmComparison() {
   const [algo, setAlgo] = useState<AlgoKey>("token");
   const [step, setStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
+    if (!isPlaying) return;
     const id = setInterval(() => setStep((s) => (s + 1) % TRAFFIC.length), 800);
     return () => clearInterval(id);
-  }, []);
+  }, [isPlaying]);
 
   const output = useMemo(() => computeAlgo(algo), [algo]);
   const meta = ALGO_META[algo];
@@ -160,13 +169,21 @@ function AlgorithmComparison() {
 
   return (
     <div className="space-y-4 p-4">
-      <div className="grid grid-cols-4 gap-1.5">
-        {(Object.keys(ALGO_META) as AlgoKey[]).map((key) => (
-          <button key={key} onClick={() => { setAlgo(key); setStep(0); }}
-            className={cn("text-[10px] sm:text-xs font-semibold py-2 rounded-md border transition-all", algo === key ? TAB_STYLES[key] : "bg-muted/20 border-border/50 text-muted-foreground/50")}>
-            {ALGO_META[key].name}
+      <div className="space-y-2">
+        <div className="grid grid-cols-4 gap-1.5">
+          {(Object.keys(ALGO_META) as AlgoKey[]).map((key) => (
+            <button key={key} onClick={() => { setAlgo(key); setStep(0); }}
+              className={cn("text-[10px] sm:text-xs font-semibold py-2 rounded-md border transition-all", algo === key ? TAB_STYLES[key] : "bg-muted/20 border-border/50 text-muted-foreground/50")}>
+              {ALGO_META[key].name}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <button onClick={() => setIsPlaying(p => !p)}
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 border border-violet-500/20 transition-colors">
+            {isPlaying ? "⏸ Pause" : "▶ Start"}
           </button>
-        ))}
+        </div>
       </div>
 
       {/* Animated bars showing traffic flow */}
