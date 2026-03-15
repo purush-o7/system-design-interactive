@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import Providers from "./providers";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -13,6 +14,9 @@ import { KeyboardProvider } from "@/components/keyboard-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { VisitTracker } from "@/components/visit-tracker";
 import { KeyboardHints } from "@/components/keyboard-hints";
+import { PageTransition } from "@/components/page-transition";
+import { JsonLd } from "@/lib/structured-data";
+import { Github } from "lucide-react";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,11 +37,35 @@ export const metadata: Metadata = {
   },
   description:
     "Interactive learning platform for system design concepts — scaling, databases, caching, reliability, and real-world architectures with visual animations.",
+  keywords: [
+    "system design",
+    "distributed systems",
+    "load balancing",
+    "caching",
+    "database sharding",
+    "microservices",
+    "CAP theorem",
+    "scalability",
+    "reliability",
+    "interview prep",
+    "interactive guide",
+    "tutorial",
+  ],
+  authors: [{ name: "Purushottam Reddy" }],
+  creator: "Purushottam Reddy",
   openGraph: {
+    type: "website",
+    siteName: "System Design — Interactive Guide",
+    locale: "en_US",
     title: "System Design — Interactive Guide",
     description:
-      "Interactive learning platform for system design concepts — scaling, databases, caching, reliability, and real-world architectures with visual animations.",
-    type: "website",
+      "Learn system design through failure-first, interactive examples. Scaling, databases, caching, reliability, and real-world architectures.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "System Design — Interactive Guide",
+    description:
+      "Learn system design through failure-first, interactive examples. Scaling, databases, caching, reliability, and real-world architectures.",
   },
   icons: {
     icon: "/favicon.ico",
@@ -45,6 +73,10 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
   },
 };
 
@@ -55,9 +87,35 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-8BGX6XYTRC"
+        strategy="afterInteractive"
+      />
+      <Script id="google-analytics" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-8BGX6XYTRC');
+        `}
+      </Script>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <JsonLd
+          data={{
+            "@type": "WebSite",
+            name: "System Design — Interactive Guide",
+            url: "https://systemdesign.dev",
+            description:
+              "Interactive learning platform for system design concepts with visual animations",
+            inLanguage: "en",
+            publisher: {
+              "@type": "Person",
+              name: "Purushottam Reddy",
+            },
+          }}
+        />
         <Providers>
           <TooltipProvider>
           <a
@@ -76,6 +134,15 @@ export default function RootLayout({
                   <BreadcrumbNav />
                   <div className="ml-auto flex items-center gap-2">
                     <CommandPalette />
+                    <a
+                      href="https://github.com/purush-o7/system-design-interactive"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground h-7 w-7"
+                    >
+                      <Github className="size-4" />
+                      <span className="sr-only">GitHub</span>
+                    </a>
                     <ThemeToggle />
                   </div>
                 </header>
@@ -83,7 +150,9 @@ export default function RootLayout({
                   <div id="main-content" data-scroll-container className="flex-1 overflow-y-auto p-6 lg:p-10 min-w-0">
                     <div className="max-w-4xl mx-auto">
                       <VisitTracker />
-                      {children}
+                      <PageTransition>
+                        {children}
+                      </PageTransition>
                       <TopicNav />
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { GraduationCap, CheckCircle, XCircle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Fade } from "@/components/animate-ui/primitives/effects/fade";
+import { trackEvent } from "@/lib/analytics";
 
 export type QuizQuestion = {
   question: string;
@@ -32,6 +33,10 @@ export function TopicQuiz({ questions }: TopicQuizProps) {
 
   const select = (qi: number, oi: number) => {
     if (revealed[qi]) return;
+    trackEvent("quiz_option_selected", {
+      question: questions[qi].question,
+      option: questions[qi].options[oi],
+    });
     setAnswers((prev) => {
       const next = [...prev];
       next[qi] = oi;
@@ -41,6 +46,11 @@ export function TopicQuiz({ questions }: TopicQuizProps) {
 
   const reveal = (qi: number) => {
     if (answers[qi] === null) return;
+    const isCorrect = answers[qi] === questions[qi].correctIndex;
+    trackEvent("quiz_answer_revealed", {
+      question: questions[qi].question,
+      correct: isCorrect,
+    });
     setRevealed((prev) => {
       const next = [...prev];
       next[qi] = true;

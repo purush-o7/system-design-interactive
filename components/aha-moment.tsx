@@ -3,6 +3,7 @@
 import { useState, useId } from "react";
 import { Lightbulb, ChevronDown } from "lucide-react";
 import { Fade } from "@/components/animate-ui/primitives/effects/fade";
+import { trackEvent } from "@/lib/analytics";
 
 interface AhaMomentProps {
   question: string;
@@ -21,7 +22,10 @@ export function AhaMoment({ question, answer }: AhaMomentProps) {
           aria-expanded={revealed}
           aria-controls={answerId}
           className="w-full text-left flex items-start gap-3 px-5 py-4"
-          onClick={() => setRevealed(!revealed)}
+          onClick={() => {
+            if (!revealed) trackEvent("aha_moment_revealed", { question });
+            setRevealed(!revealed);
+          }}
         >
           <Lightbulb className="size-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">

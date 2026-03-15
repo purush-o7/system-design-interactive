@@ -26,6 +26,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { sidebarGroups, type Category } from "@/lib/topics";
+import { SiteCredits } from "@/components/site-credits";
 
 function CategoryItem({
   category,
@@ -159,10 +160,10 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="p-4">
-        <p className="text-xs text-muted-foreground text-center">
-          {sidebarGroups.flatMap((g) => g.categories).flatMap((c) => c.topics).length} topics across{" "}
-          {sidebarGroups.flatMap((g) => g.categories).length} categories
+      <SidebarFooter className="p-4 space-y-3">
+        <SiteCredits />
+        <p className="text-[10px] text-muted-foreground/50 text-center">
+          {sidebarGroups.flatMap((g) => g.categories).flatMap((c) => c.topics).length} topics · {sidebarGroups.flatMap((g) => g.categories).length} categories
         </p>
       </SidebarFooter>
     </Sidebar>
